@@ -106,8 +106,7 @@ pub fn compute() -> u64 {
     // through the registry: fold in each hive's last-write time.
     #[cfg(windows)]
     {
-        use winreg::enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, KEY_READ};
-        use winreg::RegKey;
+        use winreg::enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE};
         const KEYS: &[(isize, &str)] = &[
             (
                 HKEY_LOCAL_MACHINE,
@@ -123,31 +122,47 @@ pub fn compute() -> u64 {
             ),
         ];
         for (hive, path) in KEYS {
-            let root = RegKey::predef(*hive);
-            match root
-                .open_subkey_with_flags(path, KEY_READ)
-                .and_then(|k| k.query_info())
-            {
-                Ok(info) => {
-                    // `FileTime`'s inner value is private, so go through the
-                    // SYSTEMTIME accessor winreg exposes.
-                    let t = info.get_last_write_time_system();
-                    for part in [
-                        t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond,
-                        t.wMilliseconds,
-                    ] {
-                        mix(&mut hash, &part.to_le_bytes());
-                    }
-                    mix(&mut hash, &(info.sub_keys as u64).to_le_bytes());
-                }
-                // Unreadable hive → treat as volatile so we never skip a scan
-                // because of a permissions hiccup.
-                Err(_) => mix(&mut hash, &crate::fingerprint::volatile().to_le_bytes()),
-            }
+            mix_reg_key(&mut hash, *hive, path);
         }
     }
 
     hash
+}
+
+/// Fold a registry key's last-write time and subkey count into the hash.
+///
+/// A key that does not exist is a stable state, exactly like a missing folder
+/// in [`mix_path`]: `HKCU\...\Uninstall` is only created once a per-user
+/// installer has run, so a fresh profile (or a CI runner) simply has none.
+/// Treating that as volatile made every call disagree with the previous one,
+/// which forced a full rescan on every 15-minute tick and failed
+/// `fingerprint_is_stable_between_calls` on GitHub's runners. Only an error
+/// that hides real state — access denied, a transient registry failure —
+/// stays volatile, so a permissions hiccup can never suppress a scan.
+#[cfg(windows)]
+fn mix_reg_key(hash: &mut u64, hive: isize, path: &str) {
+    use std::io::ErrorKind;
+    use winreg::enums::KEY_READ;
+    use winreg::RegKey;
+
+    match RegKey::predef(hive)
+        .open_subkey_with_flags(path, KEY_READ)
+        .and_then(|k| k.query_info())
+    {
+        Ok(info) => {
+            // `FileTime`'s inner value is private, so go through the
+            // SYSTEMTIME accessor winreg exposes.
+            let t = info.get_last_write_time_system();
+            for part in [
+                t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond, t.wMilliseconds,
+            ] {
+                mix(hash, &part.to_le_bytes());
+            }
+            mix(hash, &(info.sub_keys as u64).to_le_bytes());
+        }
+        Err(e) if e.kind() == ErrorKind::NotFound => mix(hash, b"missing"),
+        Err(_) => mix(hash, &volatile().to_le_bytes()),
+    }
 }
 
 /// A value that differs on every call, used to force "changed" when a source
@@ -177,5 +192,25 @@ mod tests {
         mix_path(&mut a, Path::new("Z:\\meteor-does-not-exist"));
         mix_path(&mut b, &std::env::temp_dir());
         assert_ne!(a, b);
+    }
+
+    /// Regression: a registry key that does not exist (`HKCU\...\Uninstall` on
+    /// a fresh profile or a CI runner) must fold in a *stable* marker, not a
+    /// timestamp — otherwise the fingerprint changes on every call and the
+    /// "skip the scan when nothing changed" optimisation never fires.
+    #[cfg(windows)]
+    #[test]
+    fn a_missing_registry_key_is_a_stable_state() {
+        use winreg::enums::HKEY_CURRENT_USER;
+        const MISSING: &str = r"SOFTWARE\Meteor\fingerprint-test\does-not-exist";
+        let mut a: u64 = 0;
+        let mut b: u64 = 0;
+        mix_reg_key(&mut a, HKEY_CURRENT_USER, MISSING);
+        mix_reg_key(&mut b, HKEY_CURRENT_USER, MISSING);
+        assert_eq!(a, b);
+
+        let mut present: u64 = 0;
+        mix_reg_key(&mut present, HKEY_CURRENT_USER, r"SOFTWARE\Microsoft");
+        assert_ne!(a, present, "missing and present keys must not collide");
     }
 }

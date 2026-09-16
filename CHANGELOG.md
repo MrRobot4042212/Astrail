@@ -19,6 +19,18 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
   último es la red contra mergear sin subir la versión: republicar la misma
   versión no llega a nadie, porque el actualizador nunca va hacia atrás.
 
+### Corregido
+- **La detección de cambios en la biblioteca no funcionaba en perfiles sin
+  instalaciones por usuario.** La huella que decide si hace falta un rescaneo
+  trataba una clave de registro *inexistente* (`HKCU\...\Uninstall`, que sólo
+  aparece tras instalar algo por usuario) como si fuera ilegible y metía la hora
+  actual en el hash, así que nunca coincidía consigo misma y Meteor rescaneaba
+  las ocho tiendas cada 15 minutos aunque no hubiera cambiado nada. Ahora una
+  clave ausente es un estado estable, igual que una carpeta ausente; sólo un
+  error real de permisos sigue forzando el rescaneo. Fue lo que hizo fallar
+  `fingerprint_is_stable_between_calls` en los runners de GitHub y bloqueó la
+  publicación.
+
 ---
 
 ## [0.1.2] — 2026-09-09
