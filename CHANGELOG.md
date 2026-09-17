@@ -82,6 +82,9 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
 - **Actualizar dejaba el driver de temperatura y la sesión ETW de PresentMon
   cargados.** El instalador cierra Meteor sin pasar por el apagado normal; ahora
   ambos sidecars se detienen antes de instalar (y vuelven si la instalación falla).
+- **Se podían abrir dos Meteor a la vez**, duplicando icono de bandeja, atajos y
+  vigilancia de juegos, y el segundo cortaba el FPS del primero. Ahora abrir
+  Meteor otra vez trae al frente la ventana existente.
 
 ---
 

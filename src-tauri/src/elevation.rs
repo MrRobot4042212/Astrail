@@ -40,13 +40,16 @@ pub fn relaunch_elevated() -> Result<(), String> {
 
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
     let exe_w = HSTRING::from(exe.as_os_str());
+    // The single-instance guard would make the elevated copy hand off to this one
+    // and exit while this one is about to exit too; it waits for us instead.
+    let params = HSTRING::from(format!("{AWAIT_EXIT_ARG}{}", std::process::id()));
 
     let result = unsafe {
         ShellExecuteW(
             None,
             w!("runas"),
             PCWSTR(exe_w.as_ptr()),
-            PCWSTR::null(),
+            PCWSTR(params.as_ptr()),
             PCWSTR::null(),
             SW_SHOWNORMAL,
         )
@@ -56,6 +59,37 @@ pub fn relaunch_elevated() -> Result<(), String> {
         Ok(())
     } else {
         Err("No se pudo reiniciar como administrador (UAC cancelado).".into())
+    }
+}
+
+/// Argument an elevated relaunch carries: `--await-exit=<pid of the old instance>`.
+const AWAIT_EXIT_ARG: &str = "--await-exit=";
+
+/// How long a relaunched instance waits for the old one before starting anyway.
+const AWAIT_EXIT_TIMEOUT_MS: u32 = 10_000;
+
+/// The pid an elevated relaunch was asked to wait for, if any.
+fn await_exit_pid<I: IntoIterator<Item = String>>(args: I) -> Option<u32> {
+    args.into_iter()
+        .find_map(|a| a.strip_prefix(AWAIT_EXIT_ARG).and_then(|p| p.parse().ok()))
+        .filter(|pid| *pid != 0)
+}
+
+/// Called first thing in `run()`: if this process is the elevated copy started by
+/// `relaunch_elevated`, block until the old instance has exited, so the
+/// single-instance guard does not see it and forward to a process about to quit.
+/// Bounded, and best-effort: if the pid cannot be opened it is already gone.
+pub fn await_previous_instance() {
+    use windows::Win32::System::Threading::{OpenProcess, WaitForSingleObject, PROCESS_SYNCHRONIZE};
+
+    let Some(pid) = await_exit_pid(std::env::args()) else { return };
+    // SAFETY: OpenProcess has no preconditions; the returned handle is owned here,
+    // waited on, and closed exactly once.
+    unsafe {
+        if let Ok(handle) = OpenProcess(PROCESS_SYNCHRONIZE, false, pid) {
+            let _ = WaitForSingleObject(handle, AWAIT_EXIT_TIMEOUT_MS);
+            let _ = CloseHandle(handle);
+        }
     }
 }
 
@@ -144,5 +178,25 @@ pub fn delete_logon_task() -> Result<(), String> {
         Ok(())
     } else {
         Err("No se pudo borrar la tarea de inicio automático (schtasks).".into())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn args(v: &[&str]) -> Vec<String> {
+        v.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn an_elevated_relaunch_waits_for_the_instance_that_started_it() {
+        // Regression (W2): with the single-instance guard, the elevated copy found
+        // the old instance still alive, handed off to it and exited, and the old one
+        // then quit as planned, leaving no Meteor running.
+        assert_eq!(await_exit_pid(args(&["meteor.exe", "--await-exit=4242"])), Some(4242));
+        assert_eq!(await_exit_pid(args(&["meteor.exe"])), None);
+        assert_eq!(await_exit_pid(args(&["meteor.exe", "--await-exit=0"])), None);
+        assert_eq!(await_exit_pid(args(&["meteor.exe", "--await-exit=abc"])), None);
     }
 }

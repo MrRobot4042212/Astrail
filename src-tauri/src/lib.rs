@@ -1035,7 +1035,16 @@ fn launch_game(app: AppHandle, id: String) -> Result<(), String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    #[cfg(windows)]
+    elevation::await_previous_instance();
+
     tauri::Builder::default()
+        // First, so a second launch exits before it registers a tray icon or global
+        // hotkeys, or starts a PresentMon whose `--stop_existing_session` would end
+        // this instance's ETW session. The second launch just surfaces this window.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            show_main(app);
+        }))
         .plugin(tauri_plugin_dialog::init())
         // Launch on login (Windows registry Run key). The MacosLauncher arg is
         // ignored on Windows; no launch args needed.
