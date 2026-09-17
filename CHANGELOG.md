@@ -37,6 +37,9 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
   desaparecen**, y los favoritos, categorías, carátulas y tipo asignados a una
   copia duplicada (por ejemplo la del registro) se conservan cuando la copia de
   la tienda pasa a ser la mostrada.
+- **Con Meteor abierto como administrador, "Abrir carpeta" y los enlaces externos
+  ya no heredan los privilegios**: se abren a través del Explorador del
+  escritorio, igual que los juegos.
 
 ## [0.1.3] — 2026-09-17
 

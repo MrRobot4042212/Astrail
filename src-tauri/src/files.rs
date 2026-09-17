@@ -92,15 +92,52 @@ pub fn dir_size(path: &Path) -> u64 {
     total
 }
 
+/// How a shell-out from Meteor reaches the desktop.
+#[derive(Debug, PartialEq, Eq)]
+pub enum OpenRoute {
+    /// Meteor runs with the user's own token: spawn/`ShellExecuteW` directly.
+    Direct,
+    /// Meteor is elevated: hand the request to the desktop Explorer so the
+    /// child (Explorer window, browser) gets the user's medium token instead of
+    /// inheriting administrator (see `launcher::desktop_shell`).
+    DesktopShell,
+}
+
+/// Route for anything opened from the detail page. Same rule as game launches:
+/// an elevated Meteor never spawns a shell-out itself.
+pub fn open_route(elevated: bool) -> OpenRoute {
+    if elevated {
+        OpenRoute::DesktopShell
+    } else {
+        OpenRoute::Direct
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn elevated() -> bool {
+    crate::elevation::is_elevated()
+}
+
 /// Open a validated directory in the OS file manager.
 pub fn open_folder(dir: &Path) -> Result<(), String> {
     let path = strip_verbatim(dir);
     #[cfg(target_os = "windows")]
     {
-        Command::new(system_exe("explorer.exe"))
-            .arg(&path)
-            .spawn()
-            .map_err(|e| format!("No se pudo abrir «{}»: {e}", path.display()))?;
+        match open_route(elevated()) {
+            OpenRoute::DesktopShell => {
+                // Explorer opens a folder path with its default verb, so no
+                // `explorer.exe` argument is needed — and the window belongs to
+                // the unelevated shell process.
+                let target = path.to_string_lossy();
+                crate::launcher::desktop_shell::open(&target, None, None)?;
+            }
+            OpenRoute::Direct => {
+                Command::new(system_exe("explorer.exe"))
+                    .arg(&path)
+                    .spawn()
+                    .map_err(|e| format!("No se pudo abrir «{}»: {e}", path.display()))?;
+            }
+        }
     }
     #[cfg(not(target_os = "windows"))]
     {
@@ -169,6 +206,12 @@ pub fn open_external(url: &str) -> Result<(), String> {
         use windows::Win32::UI::Shell::ShellExecuteW;
         use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
 
+        // An elevated Meteor must not start the browser itself: the browser
+        // would inherit the administrator token for the rest of its session.
+        if open_route(elevated()) == OpenRoute::DesktopShell {
+            return crate::launcher::desktop_shell::open(url, None, None);
+        }
+
         let target = HSTRING::from(url);
         // SAFETY: the string outlives the call; the URL was allowlisted above.
         let result = unsafe {
@@ -210,6 +253,15 @@ mod tests {
         assert!(!is_allowed_external("https://notyoutube.com/"));
         assert!(!is_allowed_external("javascript:alert(1)"));
         assert!(!is_allowed_external("https://youtube.com/\u{0}"));
+    }
+
+    #[test]
+    fn an_elevated_meteor_never_opens_folders_or_links_itself() {
+        // Regression (A2/W1 residual): `open_game_folder` and the community
+        // links spawned Explorer / the browser directly, so from an elevated
+        // Meteor they inherited the administrator token.
+        assert_eq!(open_route(true), OpenRoute::DesktopShell);
+        assert_eq!(open_route(false), OpenRoute::Direct);
     }
 
     #[test]

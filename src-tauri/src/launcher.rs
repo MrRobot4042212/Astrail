@@ -283,7 +283,7 @@ fn exe_route(path: &Path, elevated: bool) -> ExeRoute {
 /// `ShellWindows` -> desktop window -> top-level browser -> active view -> its
 /// `Application` object.
 #[cfg(target_os = "windows")]
-mod desktop_shell {
+pub(crate) mod desktop_shell {
     use std::path::Path;
     use windows::core::{Interface, BSTR};
     use windows::Win32::System::Com::{
@@ -338,7 +338,7 @@ mod desktop_shell {
 
     /// Open `file` (an exe, a shortcut or a protocol URI) with optional arguments
     /// and working directory, unelevated.
-    pub(super) fn open(file: &str, args: Option<&str>, dir: Option<&Path>) -> Result<(), String> {
+    pub(crate) fn open(file: &str, args: Option<&str>, dir: Option<&Path>) -> Result<(), String> {
         let _com = ComScope::enter();
         let shell = dispatch().map_err(|e| {
             format!(
