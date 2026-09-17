@@ -66,7 +66,7 @@ export function OverlaySettingsScreen({ onClose }: { onClose: () => void }) {
   if (!overlay) return null;
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-void/60 backdrop-blur-md">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-void/70">
       <div className="relative w-full max-w-[600px] border border-line bg-surface p-7 shadow-card">
         <button
           onClick={onClose}

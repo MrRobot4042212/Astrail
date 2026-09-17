@@ -412,7 +412,7 @@ pub struct MonitorGeometry {
 /// `rcMonitor.left/top` the corner math placed the HUD on the primary monitor while
 /// sizing it for the game's.
 #[cfg(windows)]
-fn monitor_geometry(hwnd: isize) -> MonitorGeometry {
+pub fn monitor_geometry(hwnd: isize) -> MonitorGeometry {
     use windows::Win32::Foundation::HWND;
     use windows::Win32::Graphics::Gdi::{
         GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTOPRIMARY,

@@ -807,39 +807,16 @@ fn register_shortcuts(app: &AppHandle, shortcuts: &crate::models::ShortcutsSetti
     }
 }
 
-/// Size & place the overlay window. While only the HUD is showing (`fullscreen`
-/// = false) it's a small box hugging the chosen corner; while its settings screen
-/// is open (`fullscreen` = true) it covers the monitor.
+/// Cover the monitor the game is on with the in-game settings window.
 ///
-/// Why not always full-screen: a full-screen transparent top-most window stops
-/// DWM from leaving the game on independent-flip / MPO, so the game gets
-/// composited and picks up ~1-2 frames of presentation latency — high FPS but
-/// laggy input. A small corner window lets the compositor keep the game on its
-/// fast path (and can be promoted to its own hardware overlay plane).
-fn layout_overlay(w: &tauri::WebviewWindow, corner: &str, fullscreen: bool) {
+/// The foreground window is still the game when the hotkey fires (the settings
+/// window is created unfocused). It used to take `primary_monitor()`, so on a
+/// multi-monitor setup the settings screen opened on another display than the game.
+fn cover_game_monitor(w: &tauri::WebviewWindow) {
     use tauri::{PhysicalPosition, PhysicalSize};
-    let Ok(Some(mon)) = w.primary_monitor() else { return };
-    let ms = mon.size();
-    if fullscreen {
-        let _ = w.set_size(PhysicalSize::new(ms.width, ms.height));
-        let _ = w.set_position(PhysicalPosition::new(0, 0));
-        return;
-    }
-    // Logical box big enough for the header + every metric row at the largest
-    // font size; the HUD inside is CSS-anchored to the same corner.
-    let scale = mon.scale_factor();
-    let bw = ((340.0 * scale).round() as u32).min(ms.width);
-    let bh = ((400.0 * scale).round() as u32).min(ms.height);
-    let right = (ms.width - bw) as i32;
-    let bottom = (ms.height - bh) as i32;
-    let (x, y) = match corner {
-        "top-right" => (right, 0),
-        "bottom-left" => (0, bottom),
-        "bottom-right" => (right, bottom),
-        _ => (0, 0), // top-left (default)
-    };
-    let _ = w.set_size(PhysicalSize::new(bw, bh));
-    let _ = w.set_position(PhysicalPosition::new(x, y));
+    let mon = metrics::monitor_geometry(overlay::foreground());
+    let _ = w.set_size(PhysicalSize::new(mon.width.max(1) as u32, mon.height.max(1) as u32));
+    let _ = w.set_position(PhysicalPosition::new(mon.left, mon.top));
 }
 
 /// Apply the overlay config live: update the sampler and snapshot the full config
@@ -921,14 +898,10 @@ fn set_overlay_interactive(app: AppHandle, interactive: bool) -> Result<(), Stri
     metrics::set_settings_open(interactive);
     if interactive {
         let Some(w) = ensure_overlay_window(&app) else {
-            return Err("no se pudo crear la ventana de overlay".into());
+            return Err("Could not create the overlay window".into());
         };
         w.set_ignore_cursor_events(false).map_err(|e| e.to_string())?;
-        let corner = app
-            .try_state::<std::sync::Mutex<AppSettings>>()
-            .map(|s| s.lock().unwrap().overlay.position.clone())
-            .unwrap_or_else(|| "top-left".into());
-        layout_overlay(&w, &corner, true);
+        cover_game_monitor(&w);
         let _ = w.show();
         let _ = w.set_focus();
     } else if let Some(w) = app.get_webview_window("overlay") {
