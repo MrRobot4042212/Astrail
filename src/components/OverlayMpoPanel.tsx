@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { listen } from '@tauri-apps/api/event';
 import { overlayMpoDiagnostics } from '@/lib/tauri';
@@ -27,26 +27,33 @@ export function OverlayMpoPanel({
   const [diag, setDiag] = useState<MpoDiagnostics | null>(null);
   const [health, setHealth] = useState<OverlayHealth>(0);
 
-  // Initial diagnostics + live health updates from the sampler.
+  // Live health updates from the sampler.
   useEffect(() => {
-    let un: (() => void) | undefined;
+    const un = listen<OverlayHealth>('overlay-health', (e) => setHealth(e.payload));
+    un.catch(() => {});
+    return () => {
+      un.then((f) => f()).catch(() => {});
+    };
+  }, []);
+
+  // Pull the diagnostics on open and whenever health flips (picks up monitor
+  // changes). `pulledFor` stops the health taken from a pull from triggering a
+  // second, identical pull.
+  const pulledFor = useRef<OverlayHealth | null>(null);
+  useEffect(() => {
+    if (pulledFor.current === health) return;
+    let cancelled = false;
     overlayMpoDiagnostics()
       .then((d) => {
+        if (cancelled) return;
+        pulledFor.current = d.health;
         setDiag(d);
         setHealth(d.health);
       })
       .catch(() => {});
-    listen<OverlayHealth>('overlay-health', (e) => setHealth(e.payload))
-      .then((f) => {
-        un = f;
-      })
-      .catch(() => {});
-    return () => un?.();
-  }, []);
-
-  // Re-pull the config levers whenever health flips (cheap; picks up monitor changes).
-  useEffect(() => {
-    overlayMpoDiagnostics().then(setDiag).catch(() => {});
+    return () => {
+      cancelled = true;
+    };
   }, [health]);
 
   const healthLabel =
