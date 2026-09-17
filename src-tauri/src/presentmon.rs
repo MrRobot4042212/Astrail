@@ -81,6 +81,9 @@ fn find_binary(app: &AppHandle) -> Option<PathBuf> {
 
 /// Spawn PresentMon for a PID, with a reader thread parsing its stdout CSV.
 fn spawn(bin: &Path, pid: u32) -> std::io::Result<Child> {
+    use crate::sidecar_integrity::{open_verified, PRESENTMON_SHA256};
+    // Held until the process exists: see `sidecar_integrity`.
+    let _pinned = open_verified(bin, PRESENTMON_SHA256)?;
     // PresentMon 2.x uses GNU-style `--` flags. `--v1_metrics` keeps the stable
     // `msBetweenPresents` column (frametime) the parser looks for.
     let mut cmd = Command::new(bin);

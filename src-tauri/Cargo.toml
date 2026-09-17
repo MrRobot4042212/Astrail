@@ -19,6 +19,8 @@ tauri-build = { version = "2", features = [] }
 # Compiles the C++ ADLX shim (AMD GPU telemetry) on Windows. See build.rs.
 [target.'cfg(windows)'.build-dependencies]
 cc = "1"
+# Embeds the SHA-256 of the bundled sidecars (see build.rs, sidecar_integrity.rs).
+sha2 = "0.10"
 
 [dependencies]
 # No `image-png`/`image-ico`: tauri-codegen decodes `icons/icon.ico` to raw RGBA
@@ -26,6 +28,9 @@ cc = "1"
 # image at runtime. The feature pulled in the `image` crate plus a second copy of
 # `png` for no reason.
 tauri = { version = "2", features = ["protocol-asset", "tray-icon"] }
+# Verifies the elevated sidecars before they are started (sidecar_integrity.rs).
+# Already in the dependency graph through tauri.
+sha2 = "0.10"
 tauri-plugin-dialog = "2"
 tauri-plugin-global-shortcut = "2"
 # Launch Meteor on Windows login so the playtime/Discord watcher runs in the

@@ -2187,6 +2187,7 @@ dependencies = [
  "pelite",
  "serde",
  "serde_json",
+ "sha2",
  "steamlocate",
  "tauri",
  "tauri-build",

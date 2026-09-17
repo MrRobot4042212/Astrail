@@ -51,8 +51,34 @@ fn load_dotenv() {
     }
 }
 
+/// Embed the SHA-256 of the sidecars that get bundled, so the app refuses to
+/// start a different binary elevated (see `src/sidecar_integrity.rs`).
+#[cfg(windows)]
+fn embed_sidecar_hashes() {
+    use sha2::{Digest, Sha256};
+
+    for (file, key) in [
+        ("PresentMon.exe", "METEOR_PRESENTMON_SHA256"),
+        ("cputemp.exe", "METEOR_CPUTEMP_SHA256"),
+    ] {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("binaries")
+            .join(file);
+        // A missing binary already fails the build in tauri-build (it is a
+        // declared resource); without a hash the app refuses to start it.
+        let Ok(bytes) = std::fs::read(&path) else {
+            continue;
+        };
+        println!("cargo:rerun-if-changed={}", path.display());
+        let hex: String = Sha256::digest(&bytes).iter().map(|b| format!("{b:02x}")).collect();
+        println!("cargo:rustc-env={key}={hex}");
+    }
+}
+
 fn main() {
     load_dotenv();
+    #[cfg(windows)]
+    embed_sidecar_hashes();
 
     // AMD GPU telemetry for the metrics overlay: compile the C++ ADLX shim and
     // AMD's vendored SDK helper into a static lib linked into the binary. ADLX

@@ -87,6 +87,9 @@ fn find_binary(app: &AppHandle) -> Option<PathBuf> {
 
 /// Spawn the sidecar with a reader thread parsing its stdout (one °C int per line).
 fn spawn(bin: &PathBuf) -> std::io::Result<Child> {
+    use crate::sidecar_integrity::{open_verified, CPUTEMP_SHA256};
+    // Held until the process exists: see `sidecar_integrity`.
+    let _pinned = open_verified(bin, CPUTEMP_SHA256)?;
     let mut cmd = Command::new(bin);
     // stdin is piped and kept open on purpose: closing it is the sidecar's shutdown
     // signal, and the only way it ever unloads its kernel driver (see `stop`).

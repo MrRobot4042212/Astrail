@@ -25,6 +25,10 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
   se elimina la próxima vez que Meteor se abra como administrador.
 - **La publicación se niega a salir sin las credenciales de IGDB.** Antes una
   release sin esos secretos se publicaba igual, con las carátulas desactivadas.
+- **Los sidecars elevados se verifican antes de arrancar.** `PresentMon.exe` y
+  `cputemp.exe` viven en una carpeta escribible por el usuario; ahora se comprueba
+  su SHA-256 contra el de la compilación y el fichero queda bloqueado hasta que el
+  proceso existe. Un binario distinto no se ejecuta.
 
 ### Corregido
 - **La detección de cambios en la biblioteca no funcionaba en perfiles sin
