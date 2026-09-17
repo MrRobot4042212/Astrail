@@ -46,6 +46,14 @@ if (-not $SkipPresentMon) {
         throw "PresentMon SHA-256 mismatch. Expected $PresentMonSha256, got $actual. Refusing to bundle it."
     }
     Write-Host "    SHA-256 verified: $actual"
+    # The hash pins the bytes; the signature says who produced them, so a pin
+    # bumped to a tampered upstream asset is still refused.
+    $signature = Get-AuthenticodeSignature -FilePath $target
+    if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch '^CN=Intel Corporation,') {
+        Remove-Item $target -Force
+        throw "PresentMon is not validly signed by Intel ($($signature.Status), $($signature.SignerCertificate.Subject)). Refusing to bundle it."
+    }
+    Write-Host "    Authenticode verified: $($signature.SignerCertificate.Subject)"
 }
 
 if (-not $SkipSidecar) {

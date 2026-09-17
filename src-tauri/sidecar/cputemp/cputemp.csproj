@@ -49,9 +49,12 @@
 
   <!-- Lock transitive NuGet versions: this process loads a kernel driver, so its
        dependency set must be reproducible and reviewable, not resolved afresh on
-       every build. Refresh with: dotnet restore /p:RestoreForceEvaluate=true -->
+       every build. Locked mode makes a restore that disagrees with the lock file
+       fail instead of silently rewriting it. Refresh with:
+       dotnet restore /p:RestoreForceEvaluate=true /p:RestoreLockedMode=false -->
   <PropertyGroup>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <RestoreLockedMode>true</RestoreLockedMode>
   </PropertyGroup>
 
   <ItemGroup>

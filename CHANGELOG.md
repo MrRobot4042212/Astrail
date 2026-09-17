@@ -28,7 +28,9 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
 - **Los sidecars elevados se verifican antes de arrancar.** `PresentMon.exe` y
   `cputemp.exe` viven en una carpeta escribible por el usuario; ahora se comprueba
   su SHA-256 contra el de la compilación y el fichero queda bloqueado hasta que el
-  proceso existe. Un binario distinto no se ejecuta.
+  proceso existe. Un binario distinto no se ejecuta. Además PresentMon debe estar
+  firmado por Intel al empaquetarlo y la restauración NuGet del sidecar de
+  temperatura falla si no coincide con el fichero de bloqueo.
 
 ### Corregido
 - **La detección de cambios en la biblioteca no funcionaba en perfiles sin
