@@ -11,13 +11,18 @@
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Manager};
 
 /// Latest CPU temperature in °C (0 = no data).
 static CPU_TEMP_C: AtomicU32 = AtomicU32::new(0);
+/// `metrics::clock_ms()` of the last reading (0 = never).
+static LAST_UPDATE_MS: AtomicU64 = AtomicU64::new(0);
+
+/// The sidecar prints once a second; three missed lines mean it is wedged.
+const MAX_AGE_MS: u64 = 3000;
 
 /// The running sidecar, shared with `shutdown()` so a clean app exit can release
 /// the kernel driver before the Job Object resorts to terminating the process.
@@ -32,8 +37,12 @@ fn child_lock() -> MutexGuard<'static, Option<Child>> {
     CHILD.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
-/// Current CPU temperature, if the sidecar is producing data.
+/// Current CPU temperature, if the sidecar produced it recently.
 pub fn current() -> Option<u32> {
+    let stamp = LAST_UPDATE_MS.load(Ordering::Relaxed);
+    if !crate::metrics::is_fresh(stamp, crate::metrics::clock_ms(), MAX_AGE_MS) {
+        return None;
+    }
     match CPU_TEMP_C.load(Ordering::Relaxed) {
         0 => None,
         v => Some(v),
@@ -42,6 +51,12 @@ pub fn current() -> Option<u32> {
 
 fn reset() {
     CPU_TEMP_C.store(0, Ordering::Relaxed);
+    LAST_UPDATE_MS.store(0, Ordering::Relaxed);
+}
+
+/// Parse one sidecar line: an integer °C, rejecting obviously bogus values.
+fn parse_temp(line: &str) -> Option<u32> {
+    line.trim().parse::<u32>().ok().filter(|v| *v > 0 && *v < 200)
 }
 
 /// Locate the sidecar: bundled resource, next to our exe, or the dev `binaries/`.
@@ -84,11 +99,9 @@ fn spawn(bin: &PathBuf) -> std::io::Result<Child> {
             let reader = BufReader::new(out);
             for line in reader.lines() {
                 let Ok(line) = line else { break };
-                if let Ok(v) = line.trim().parse::<u32>() {
-                    // Guard against obviously bogus values.
-                    if v > 0 && v < 200 {
-                        CPU_TEMP_C.store(v, Ordering::Relaxed);
-                    }
+                if let Some(v) = parse_temp(&line) {
+                    CPU_TEMP_C.store(v, Ordering::Relaxed);
+                    LAST_UPDATE_MS.store(crate::metrics::clock_ms(), Ordering::Relaxed);
                 }
             }
             // Stream ended (sidecar exited): clear the stale reading.
@@ -199,4 +212,28 @@ pub fn start(app: AppHandle) {
             }
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sidecar_lines_parse_to_plausible_temperatures() {
+        assert_eq!(parse_temp("54\r"), Some(54));
+        assert_eq!(parse_temp(" 199 "), Some(199));
+        assert_eq!(parse_temp("0"), None);
+        assert_eq!(parse_temp("200"), None);
+        assert_eq!(parse_temp("-3"), None);
+        assert_eq!(parse_temp("cputemp: open failed"), None);
+    }
+
+    #[test]
+    fn a_reading_that_stops_arriving_expires() {
+        // Regression (MT8): the last temperature stayed on the HUD after the sidecar
+        // stopped printing.
+        let stamp = 10_000;
+        assert!(crate::metrics::is_fresh(stamp, stamp + MAX_AGE_MS, MAX_AGE_MS));
+        assert!(!crate::metrics::is_fresh(stamp, stamp + MAX_AGE_MS + 1, MAX_AGE_MS));
+    }
 }

@@ -258,6 +258,27 @@ pub fn has_game() -> bool {
     HAS_GAME.load(Ordering::Relaxed)
 }
 
+/// Process-local monotonic clock for sidecar readings, in milliseconds. Starts at 1
+/// so a stored stamp of 0 can mean "never written".
+pub fn clock_ms() -> u64 {
+    static EPOCH: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
+    EPOCH.get_or_init(Instant::now).elapsed().as_millis() as u64 + 1
+}
+
+/// Whether a reading stamped at `stamp_ms` (0 = never) is still recent enough to show.
+///
+/// The sidecar readers only write when a new value arrives, so without this a game
+/// that stops presenting (loading screen, hang, minimized) or a sidecar that stops
+/// printing kept its last number on the HUD as if it were live.
+pub fn is_fresh(stamp_ms: u64, now_ms: u64, max_age_ms: u64) -> bool {
+    stamp_ms != 0 && now_ms.saturating_sub(stamp_ms) <= max_age_ms
+}
+
+/// Oldest FPS/frametime reading still shown: two sampler ticks, never under 2 s.
+pub fn fps_max_age_ms() -> u64 {
+    (INTERVAL_MS.load(Ordering::Relaxed) * 2).max(2000)
+}
+
 const MB: u64 = 1024 * 1024;
 
 /// How long the sampler stays idle before releasing the GPU telemetry backends
@@ -737,4 +758,36 @@ pub fn start(app: AppHandle) {
             }
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_reading_is_fresh_only_within_its_max_age() {
+        // Regression (MT2/MT8): a value that stopped updating stayed on the HUD forever.
+        assert!(is_fresh(1_000, 1_000, 2_000));
+        assert!(is_fresh(1_000, 3_000, 2_000));
+        assert!(!is_fresh(1_000, 3_001, 2_000));
+        // 0 means "never written", whatever the clock says.
+        assert!(!is_fresh(0, 1, 2_000));
+        // A stamp from the future (racing writer) is not stale.
+        assert!(is_fresh(5_000, 4_000, 2_000));
+    }
+
+    #[test]
+    fn fps_max_age_is_two_ticks_with_a_two_second_floor() {
+        let prev = INTERVAL_MS.load(Ordering::Relaxed);
+        INTERVAL_MS.store(250, Ordering::Relaxed);
+        assert_eq!(fps_max_age_ms(), 2_000);
+        INTERVAL_MS.store(5_000, Ordering::Relaxed);
+        assert_eq!(fps_max_age_ms(), 10_000);
+        INTERVAL_MS.store(prev, Ordering::Relaxed);
+    }
+
+    #[test]
+    fn clock_never_returns_the_never_written_sentinel() {
+        assert!(clock_ms() >= 1);
+    }
 }

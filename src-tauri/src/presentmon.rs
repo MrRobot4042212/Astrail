@@ -12,7 +12,7 @@ use std::collections::VecDeque;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Manager};
@@ -20,6 +20,8 @@ use tauri::{AppHandle, Manager};
 /// Latest FPS / frametime as hundredths (0 = no data), so they fit in atomics.
 static FPS_X100: AtomicU32 = AtomicU32::new(0);
 static FRAMETIME_X100: AtomicU32 = AtomicU32::new(0);
+/// `metrics::clock_ms()` of the last published frame (0 = never).
+static LAST_UPDATE_MS: AtomicU64 = AtomicU64::new(0);
 
 /// Our own ETW session name. PresentMon defaults to a fixed well-known name, which
 /// is why `--stop_existing_session` used to be needed — and why it could tear down
@@ -39,8 +41,16 @@ fn child_lock() -> MutexGuard<'static, Option<Child>> {
     CHILD.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
-/// Current FPS and average frametime (ms), if PresentMon is producing data.
+/// Current FPS and average frametime (ms), if PresentMon produced them recently.
+///
+/// The reader only writes when a frame arrives, so a game that stops presenting
+/// (loading screen, hang, minimized) must expire here instead of freezing its last
+/// FPS on the HUD.
 pub fn current() -> (Option<f32>, Option<f32>) {
+    let stamp = LAST_UPDATE_MS.load(Ordering::Relaxed);
+    if !crate::metrics::is_fresh(stamp, crate::metrics::clock_ms(), crate::metrics::fps_max_age_ms()) {
+        return (None, None);
+    }
     let f = FPS_X100.load(Ordering::Relaxed);
     let ft = FRAMETIME_X100.load(Ordering::Relaxed);
     let opt = |v: u32| if v == 0 { None } else { Some(v as f32 / 100.0) };
@@ -50,6 +60,7 @@ pub fn current() -> (Option<f32>, Option<f32>) {
 fn reset() {
     FPS_X100.store(0, Ordering::Relaxed);
     FRAMETIME_X100.store(0, Ordering::Relaxed);
+    LAST_UPDATE_MS.store(0, Ordering::Relaxed);
 }
 
 /// Locate the PresentMon binary: bundled resource, next to our exe, or the dev
@@ -170,6 +181,7 @@ fn parse_stdout(out: impl std::io::Read) {
         let fps = if avg_ft > 0.0 { 1000.0 / avg_ft } else { 0.0 };
         FRAMETIME_X100.store((avg_ft * 100.0) as u32, Ordering::Relaxed);
         FPS_X100.store((fps * 100.0) as u32, Ordering::Relaxed);
+        LAST_UPDATE_MS.store(crate::metrics::clock_ms(), Ordering::Relaxed);
     }
     // Stream ended (game closed / PresentMon stopped): clear stale numbers.
     reset();

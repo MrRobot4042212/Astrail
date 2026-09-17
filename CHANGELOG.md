@@ -30,6 +30,11 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
   error real de permisos sigue forzando el rescaneo. Fue lo que hizo fallar
   `fingerprint_is_stable_between_calls` en los runners de GitHub y bloqueó la
   publicación.
+- **FPS y temperatura congelados en el HUD.** Si el juego dejaba de presentar
+  frames (pausa, cambio de ventana) o el sidecar de temperatura dejaba de
+  responder, el overlay seguía mostrando el último valor como si fuera actual.
+  Ahora las lecturas caducan (FPS a los 2 s o dos intervalos, temperatura a los
+  3 s) y la fila desaparece en lugar de mentir.
 - **Sensor de temperatura de CPU equivocado en Ryzen con varios CCD.** Ganaba el
   último sensor que cuadrara por nombre, así que un CCD podía desplazar al valor
   de paquete según el orden. Ahora hay un orden de preferencia fijo (paquete,
