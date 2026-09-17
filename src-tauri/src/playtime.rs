@@ -409,7 +409,7 @@ fn should_persist_active(
     ts: u64,
 ) -> bool {
     persisted != current
-        || last_persist.map_or(true, |t| ts.saturating_sub(t) >= ACTIVE_PERSIST_SECS)
+        || last_persist.is_none_or(|t| ts.saturating_sub(t) >= ACTIVE_PERSIST_SECS)
 }
 
 /// Whether a process with this PID is still alive, via a single cheap Win32 query, so

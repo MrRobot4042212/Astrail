@@ -1,5 +1,8 @@
-# Pin the toolchain so a local build, CI and a release all use the same compiler.
-# Bump deliberately, together with `rust-version` in Cargo.toml.
+# Local builds, CI and releases all track the current stable channel with the
+# same components and target. The oldest compiler the crate promises to build
+# with is `rust-version` in Cargo.toml (verified against `cargo metadata`: the
+# highest `rust_version` in the dependency graph); bump that when a dependency
+# or a language feature requires it, not with every stable release.
 [toolchain]
 channel = "stable"
 components = ["clippy", "rustfmt"]

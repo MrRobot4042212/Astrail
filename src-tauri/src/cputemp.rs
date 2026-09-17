@@ -67,7 +67,7 @@ fn parse_temp(line: &str) -> Option<u32> {
 
 /// Whether a sidecar that died on its own may be started again at `now`.
 fn respawn_allowed(last_unexpected_exit: Option<Instant>, now: Instant) -> bool {
-    last_unexpected_exit.map_or(true, |t| now.saturating_duration_since(t) >= RESPAWN_BACKOFF)
+    last_unexpected_exit.is_none_or(|t| now.saturating_duration_since(t) >= RESPAWN_BACKOFF)
 }
 
 /// Locate the sidecar: bundled resource, next to our exe, or the dev `binaries/`.
