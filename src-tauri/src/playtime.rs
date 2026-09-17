@@ -32,6 +32,11 @@ const FULL_SCAN_SECS: u64 = 20;
 const HISTORY_MAX: usize = 500;
 /// Sessions shorter than this are ignored (a crash, a wrong-process match…).
 const MIN_SESSION_SECS: u64 = 30;
+/// While the tracked set is unchanged, `active_sessions.json` is rewritten at most
+/// this often. `last_seen` moves on every poll, so `save_if_changed` never matched
+/// and every 5 s tick did a read + tmp write + fsync + rename on the game drive.
+/// A crash loses at most this much of the in-flight session.
+const ACTIVE_PERSIST_SECS: u64 = 30;
 
 /// Substrings of the path *relative to the install dir* that are never the game
 /// itself (crash handlers, redistributables, anti-cheat services…). Matching the
@@ -394,6 +399,19 @@ fn prefer_foreground(
         .is_some_and(|dir| under_install_dir(fg_path, &dir))
 }
 
+/// Whether the in-flight sessions must be written now: the tracked set changed
+/// (a session started or ended — never lose that), or the periodic interval
+/// elapsed so a crash loses at most `ACTIVE_PERSIST_SECS` of play.
+fn should_persist_active(
+    persisted: &[(String, u64)],
+    current: &[(String, u64)],
+    last_persist: Option<u64>,
+    ts: u64,
+) -> bool {
+    persisted != current
+        || last_persist.map_or(true, |t| ts.saturating_sub(t) >= ACTIVE_PERSIST_SECS)
+}
+
 /// Whether a process with this PID is still alive, via a single cheap Win32 query, so
 /// a confirmed-running game can be re-checked between full scans without walking every
 /// process on the system.
@@ -446,6 +464,9 @@ pub fn start(app: AppHandle) {
         let mut dbg_overlay_game: Option<String> = None;
         // Last observed wake generation (see `WAKE`).
         let mut seen: u64 = 0;
+        // What `active_sessions.json` holds: sorted (id, start) + when it was written.
+        let mut persisted_keys: Vec<(String, u64)> = Vec::new();
+        let mut last_persist: Option<u64> = None;
 
         loop {
             // Nothing tracked and nothing launched → block until something
@@ -662,15 +683,22 @@ pub fn start(app: AppHandle) {
             }
 
             // Flush in-progress sessions for crash recovery.
-            let snapshot: Vec<ActiveSession> = active
-                .iter()
-                .map(|(id, (start, last, _pid))| ActiveSession {
-                    id: id.clone(),
-                    start: *start,
-                    last_seen: *last,
-                })
-                .collect();
-            active_save(&app, &snapshot);
+            let mut keys: Vec<(String, u64)> =
+                active.iter().map(|(id, (start, _, _))| (id.clone(), *start)).collect();
+            keys.sort();
+            if should_persist_active(&persisted_keys, &keys, last_persist, ts) {
+                let snapshot: Vec<ActiveSession> = active
+                    .iter()
+                    .map(|(id, (start, last, _pid))| ActiveSession {
+                        id: id.clone(),
+                        start: *start,
+                        last_seen: *last,
+                    })
+                    .collect();
+                active_save(&app, &snapshot);
+                persisted_keys = keys;
+                last_persist = Some(ts);
+            }
         }
     });
 }
@@ -828,5 +856,18 @@ mod tests {
         assert!(!prefer_foreground(Some(game), launcher, dir, exe));
         // …but a foreground exact match is always adopted.
         assert!(prefer_foreground(Some(launcher), game, dir, exe));
+    }
+
+    #[test]
+    fn active_sessions_are_persisted_on_change_or_every_interval_not_every_poll() {
+        // Regression (P1): `last_seen` moves every 5 s poll, so the store was
+        // rewritten with an fsync on every tick for the whole play session.
+        let one = vec![("steam:1".to_string(), 1_000)];
+        assert!(should_persist_active(&[], &one, None, 1_000));
+        assert!(!should_persist_active(&one, &one, Some(1_000), 1_005));
+        assert!(!should_persist_active(&one, &one, Some(1_000), 1_000 + ACTIVE_PERSIST_SECS - 1));
+        assert!(should_persist_active(&one, &one, Some(1_000), 1_000 + ACTIVE_PERSIST_SECS));
+        // A session ending is written at once, whatever the interval says.
+        assert!(should_persist_active(&one, &[], Some(1_000), 1_005));
     }
 }

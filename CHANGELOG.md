@@ -64,6 +64,10 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
   ese proceso no está en primer plano. Ahora gana el proceso en primer plano, el
   seguimiento cambia a él en unos 5 s, y cerrar el launcher ya no da por
   terminada la sesión de juego.
+- **Escrituras constantes en disco durante la partida.** El tiempo de juego en
+  curso se guardaba cada 5 s aunque sólo cambiara la hora de última actividad
+  (unas 720 escrituras sincronizadas por hora). Ahora se guarda al cambiar las
+  sesiones o cada 30 s; tras un cierre inesperado se pueden perder hasta 30 s.
 - **Reintentos de NVML/ADLX en cada refresco.** En un equipo sin GPU NVIDIA (o sin
   AMD) se intentaba cargar la librería que falta en cada tick del HUD. Ahora el
   fallo se recuerda hasta que el overlay se libera por inactividad.
