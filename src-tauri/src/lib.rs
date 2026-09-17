@@ -963,18 +963,32 @@ fn user_screenshots(app: AppHandle, id: String) -> Result<Vec<String>, String> {
 /// The entry is re-resolved from the manual store / library cache here, so the
 /// executable and protocol URI that reach `launcher.rs` are always ones a
 /// scanner produced -- never a struct the webview built.
-// NOT `async`: `ShellExecuteW` may hand the launch to a Shell extension, and
-// those can require a COM single-threaded apartment. The main thread already has
-// one (the webview runtime initializes it); Tauri's blocking pool does not. The
-// work here is a canonicalize plus a process spawn, i.e. milliseconds.
+///
+/// Two steps on two threads. Resolving parses the whole `library_cache.json`,
+/// which grows with the library, so it runs on the blocking pool instead of
+/// freezing IPC, the tray and the shortcuts. The launch itself goes back to the
+/// main thread: `ShellExecuteW` may hand it to a Shell extension that needs a
+/// COM single-threaded apartment, which the main thread has (the webview runtime
+/// initializes it) and the blocking pool does not.
 #[tauri::command]
-fn launch_game(app: AppHandle, id: String) -> Result<(), String> {
-    let Some(game) = resolve_game(&app, &id) else {
-        return Err(format!("Entrada desconocida: {id}"));
-    };
-    launcher::launch(&game)
-    // Playtime is accumulated by the global watcher (see `playtime::start`),
-    // which times any library game regardless of how it was launched.
+async fn launch_game(app: AppHandle, id: String) -> Result<(), String> {
+    let resolver = app.clone();
+    let game = blocking(move || {
+        resolve_game(&resolver, &id).ok_or_else(|| format!("Unknown library entry: {id}"))
+    })
+    .await?;
+    let (tx, rx) = std::sync::mpsc::channel();
+    app.run_on_main_thread(move || {
+        let _ = tx.send(launcher::launch(&game));
+    })
+    .map_err(|e| format!("Could not reach the main thread: {e}"))?;
+    // Playtime is accumulated by the watcher (see `playtime::start`), which
+    // `launcher::launch` notifies before it starts the process.
+    blocking(move || {
+        rx.recv()
+            .unwrap_or_else(|_| Err("The launch was dropped before it ran".into()))
+    })
+    .await
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

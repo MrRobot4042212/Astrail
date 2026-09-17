@@ -92,6 +92,9 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
 - **Se podían abrir dos Meteor a la vez**, duplicando icono de bandeja, atajos y
   vigilancia de juegos, y el segundo cortaba el FPS del primero. Ahora abrir
   Meteor otra vez trae al frente la ventana existente.
+- **Lanzar un juego congelaba Meteor un instante**, también el HUD y los atajos:
+  la biblioteca se leía entera en el hilo principal. Ahora se resuelve en segundo
+  plano.
 - **La pantalla de ajustes del overlay se abría en el monitor principal** aunque
   el juego estuviera en otro. Ahora cubre el monitor del juego, y ya no difumina
   el fondo encima de la partida.
