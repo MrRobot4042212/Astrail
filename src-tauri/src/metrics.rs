@@ -27,6 +27,9 @@ use nvml_wrapper::Nvml;
 
 /// Master switch, mirrors `AppSettings.overlay.enabled`.
 static OVERLAY_ENABLED: AtomicBool = AtomicBool::new(false);
+/// Set while an update is being installed: both sidecar controllers stand down so
+/// the shutdown done before the installer runs is not undone by a respawn.
+static SIDECARS_SUSPENDED: AtomicBool = AtomicBool::new(false);
 /// Whether any FPS-class metric (fps/frametime) is enabled, so PresentMon only
 /// runs when its output is actually shown.
 static FPS_WANTED: AtomicBool = AtomicBool::new(false);
@@ -244,14 +247,31 @@ pub fn current_pid() -> u32 {
 /// Whether PresentMon should be running: overlay on, an FPS metric enabled, and
 /// ADLX isn't already providing FPS (on AMD it is → no need for the ETW session).
 pub fn want_fps() -> bool {
-    OVERLAY_ENABLED.load(Ordering::Relaxed)
-        && FPS_WANTED.load(Ordering::Relaxed)
-        && !ADLX_FPS_ACTIVE.load(Ordering::Relaxed)
+    sidecar_wanted(
+        OVERLAY_ENABLED.load(Ordering::Relaxed),
+        FPS_WANTED.load(Ordering::Relaxed) && !ADLX_FPS_ACTIVE.load(Ordering::Relaxed),
+        SIDECARS_SUSPENDED.load(Ordering::Relaxed),
+    )
 }
 
 /// Whether the CPU-temp sidecar should run: overlay on and CPU temp enabled.
 pub fn want_cpu_temp() -> bool {
-    OVERLAY_ENABLED.load(Ordering::Relaxed) && CPU_TEMP_WANTED.load(Ordering::Relaxed)
+    sidecar_wanted(
+        OVERLAY_ENABLED.load(Ordering::Relaxed),
+        CPU_TEMP_WANTED.load(Ordering::Relaxed),
+        SIDECARS_SUSPENDED.load(Ordering::Relaxed),
+    )
+}
+
+/// The gate both sidecar controllers share. A suspension overrides every setting.
+fn sidecar_wanted(overlay_enabled: bool, metric_wanted: bool, suspended: bool) -> bool {
+    overlay_enabled && metric_wanted && !suspended
+}
+
+/// Suspend (or resume) both sidecars and wake their controllers so they act on it.
+pub fn set_sidecars_suspended(suspended: bool) {
+    SIDECARS_SUSPENDED.store(suspended, Ordering::Relaxed);
+    wake_sidecars();
 }
 
 /// Whether a game is currently running (the overlay's gate for the sidecar).
@@ -874,6 +894,17 @@ mod tests {
         apply_adlx_fps(&mut s, 143.0);
         assert_eq!(s.fps, Some(143.0));
         assert_eq!(s.frametime_ms, None);
+    }
+
+    #[test]
+    fn a_suspended_sidecar_is_not_wanted_whatever_the_settings() {
+        // Regression (BD1): the update installer exits the process without running
+        // `RunEvent::Exit`, so the sidecars are stopped beforehand; the controllers
+        // must not bring them back while the download finishes.
+        assert!(sidecar_wanted(true, true, false));
+        assert!(!sidecar_wanted(true, true, true));
+        assert!(!sidecar_wanted(false, true, false));
+        assert!(!sidecar_wanted(true, false, false));
     }
 
     #[test]

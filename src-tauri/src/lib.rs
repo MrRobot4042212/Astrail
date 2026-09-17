@@ -688,6 +688,44 @@ fn is_elevated() -> bool {
     }
 }
 
+/// Flush pending state and stop both sidecars properly. Termination is not a
+/// shutdown for either of them: cputemp would leave the LibreHardwareMonitor kernel
+/// driver loaded and registered for the rest of the boot, and PresentMon would leave
+/// its ETW realtime session live with its buffers pinned until reboot. The
+/// kill-on-close job (`jobobj.rs`) stays as the crash backstop, which is all it can
+/// be — TerminateProcess cannot be intercepted.
+fn shutdown_for_exit(app: &AppHandle) {
+    // The URL cache is written at most every 2 s during a cover pass; make sure the
+    // last entries are not lost.
+    crate::art::flush(app);
+    #[cfg(windows)]
+    {
+        crate::presentmon::shutdown();
+        crate::cputemp::shutdown();
+    }
+}
+
+/// Called right before the updater installs. The plugin's `install` ends in
+/// `std::process::exit`, so `RunEvent::Exit` never fires on that path; without this
+/// an update taken with admin metrics on left the ETW session and the kernel driver
+/// behind. The sidecars stay suspended until `abort_update` (the install failed) or
+/// the process exits.
+#[tauri::command]
+async fn prepare_for_update(app: AppHandle) -> Result<(), String> {
+    crate::metrics::set_sidecars_suspended(true);
+    blocking(move || {
+        shutdown_for_exit(&app);
+        Ok(())
+    })
+    .await
+}
+
+/// The install did not happen after `prepare_for_update`: let the sidecars run again.
+#[tauri::command]
+fn abort_update() {
+    crate::metrics::set_sidecars_suspended(false);
+}
+
 /// Relaunch Meteor as administrator (UAC prompt), then exit this instance.
 #[tauri::command]
 fn restart_as_admin(app: AppHandle) -> Result<(), String> {
@@ -1237,6 +1275,8 @@ pub fn run() {
             username,
             is_elevated,
             restart_as_admin,
+            prepare_for_update,
+            abort_update,
             open_game_folder,
             open_external,
             user_screenshots,
@@ -1248,22 +1288,7 @@ pub fn run() {
         .expect("error al iniciar la aplicación Tauri")
         .run(|app_handle, event| {
             if let tauri::RunEvent::Exit = event {
-                // The URL cache is written at most every 2 s during a cover pass;
-                // make sure the last entries are not lost on a clean exit.
-                crate::art::flush(app_handle);
-
-                // Stop the sidecars properly before the Job Object gets to them.
-                // Termination is not a shutdown for either of these: cputemp would
-                // leave the LibreHardwareMonitor kernel driver loaded and registered
-                // for the rest of the boot, and PresentMon would leave its ETW
-                // realtime session live with its buffers pinned until reboot. The
-                // kill-on-close job (`jobobj.rs`) stays as the crash backstop, which
-                // is all it can be — TerminateProcess cannot be intercepted.
-                #[cfg(windows)]
-                {
-                    crate::presentmon::shutdown();
-                    crate::cputemp::shutdown();
-                }
+                shutdown_for_exit(app_handle);
             }
         });
 }

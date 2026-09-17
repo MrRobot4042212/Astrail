@@ -79,6 +79,9 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
 - **Arrastrar el selector de color del HUD escribía los ajustes decenas de veces
   por segundo** (disco, atajos re-registrados, Discord). Ahora la vista previa se
   actualiza al arrastrar y el color se aplica al cerrar el selector.
+- **Actualizar dejaba el driver de temperatura y la sesión ETW de PresentMon
+  cargados.** El instalador cierra Meteor sin pasar por el apagado normal; ahora
+  ambos sidecars se detienen antes de instalar (y vuelven si la instalación falla).
 
 ---
 

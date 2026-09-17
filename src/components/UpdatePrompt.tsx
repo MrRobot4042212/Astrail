@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { check, type Update } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
+import { abortUpdate, prepareForUpdate } from '@/lib/tauri';
 import { RefreshIcon, CloseIcon } from './icons';
 
 type Phase = 'idle' | 'available' | 'downloading' | 'ready' | 'error';
@@ -42,8 +43,9 @@ export function UpdatePrompt() {
     setPct(0);
     let total = 0;
     let got = 0;
+    let prepared = false;
     try {
-      await update.downloadAndInstall((event) => {
+      await update.download((event) => {
         if (event.event === 'Started') {
           total = event.data.contentLength ?? 0;
         } else if (event.event === 'Progress') {
@@ -53,10 +55,19 @@ export function UpdatePrompt() {
           setPct(100);
         }
       });
+      // Install exits the process without the normal shutdown, so stop the
+      // sidecars (kernel driver, ETW session) first. Only after the download: a
+      // failed download must not cost the running game its metrics.
+      // Set before the call: it suspends the sidecars first, so even a rejection
+      // needs the abort below.
+      prepared = true;
+      await prepareForUpdate();
+      await update.install();
       setPhase('ready');
       // Restart into the freshly installed version.
       await relaunch();
     } catch {
+      if (prepared) await abortUpdate().catch(() => {});
       setPhase('error');
     }
   }

@@ -159,6 +159,13 @@ export const isElevated = () => invoke<boolean>('is_elevated');
 /** Relaunch Meteor as administrator (UAC), then the current instance exits. */
 export const restartAsAdmin = () => invoke<void>('restart_as_admin');
 
+/** Stop the metrics sidecars before the updater installs (its install exits the
+ *  process without the normal shutdown). Pair with `abortUpdate` if install fails. */
+export const prepareForUpdate = () => invoke<void>('prepare_for_update');
+
+/** Resume the sidecars after a failed install. */
+export const abortUpdate = () => invoke<void>('abort_update');
+
 /** Open/close the in-game overlay settings screen (shows/hides the WebView2 window
  *  and pauses the native HUD while open). */
 export const setOverlayInteractive = (interactive: boolean) =>
