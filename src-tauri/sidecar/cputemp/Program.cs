@@ -19,6 +19,11 @@
 using System.Globalization;
 using LibreHardwareMonitor.Hardware;
 
+// `cputemp.exe --self-test`: checks the sensor ranking without opening the driver,
+// so CI (no admin, no kernel driver) can exercise the selection logic.
+if (args.Length > 0 && args[0] == "--self-test")
+    return SensorRank.SelfTest();
+
 var computer = new Computer { IsCpuEnabled = true };
 try
 {
@@ -72,19 +77,13 @@ while (!stop.IsSet)
     {
         if (hw.HardwareType != HardwareType.Cpu) continue;
 
-        // Prefer a package/Tctl/Tdie sensor; fall back to the hottest core.
-        float? pkg = null;
-        float? maxCore = null;
+        var readings = new List<(string Name, float Value)>();
         foreach (ISensor s in hw.Sensors)
         {
             if (s.SensorType != SensorType.Temperature || s.Value is not float v) continue;
-            string name = s.Name ?? string.Empty;
-            if (name.Contains("Package") || name.Contains("Tctl") || name.Contains("Tdie"))
-                pkg = v;
-            else if (name.Contains("Core"))
-                maxCore = maxCore is float m ? Math.Max(m, v) : v;
+            readings.Add((s.Name ?? string.Empty, v));
         }
-        temp = pkg ?? maxCore;
+        temp = SensorRank.Pick(readings);
         if (temp is not null) break;
     }
 
@@ -101,6 +100,68 @@ while (!stop.IsSet)
 
 Shutdown();
 return 0;
+
+// Picks the CPU temperature from one CPU's temperature sensors.
+//
+// Ordered preference, first hit per rank. The previous loop let the *last* sensor
+// whose name contained Package/Tctl/Tdie win, so on multi-CCD Ryzen a per-CCD
+// sensor could displace the package reading depending on enumeration order.
+// Sensor names follow LibreHardwareMonitor's naming (reported, not verified against
+// every LHM version): Intel "CPU Package" / "Core Max" / "CPU Core #n"; AMD
+// "Core (Tctl/Tdie)", "Core (Tdie)", "Core (Tctl)", "CCDs Max (Tdie)", "CCD1 (Tdie)".
+static class SensorRank
+{
+    // Lower is better; null = never use (averages, TjMax distances).
+    public static int? Rank(string name)
+    {
+        if (name.Contains("Distance") || name.Contains("Average")) return null;
+        if (name.Contains("Package")) return 0;
+        bool ccd = name.Contains("CCD");
+        if (!ccd && name.Contains("Tdie") && !name.Contains("Tctl")) return 1;
+        if (!ccd && name.Contains("Tctl")) return 2;
+        if (name.Contains("CCDs Max")) return 3;
+        if (name.Contains("Core Max")) return 4;
+        if (ccd || name.Contains("Core")) return 5;
+        return null;
+    }
+
+    public static float? Pick(IEnumerable<(string Name, float Value)> readings)
+    {
+        int bestRank = int.MaxValue;
+        float? best = null;
+        foreach (var (name, value) in readings)
+        {
+            if (Rank(name) is not int r || r > bestRank) continue;
+            if (r < bestRank) { bestRank = r; best = value; }
+            // Individual cores/CCDs: report the hottest; better ranks keep the first hit.
+            else if (r == 5 && best is float b && value > b) best = value;
+        }
+        return best;
+    }
+
+    public static int SelfTest()
+    {
+        var failures = 0;
+        void Check(string label, float? got, float? want)
+        {
+            if (got == want) return;
+            Console.Error.WriteLine($"FAIL {label}: got {got?.ToString(CultureInfo.InvariantCulture) ?? "null"}, want {want?.ToString(CultureInfo.InvariantCulture) ?? "null"}");
+            failures++;
+        }
+
+        Check("package beats a later CCD", Pick(new[] { ("CPU Package", 60f), ("CCD1 (Tdie)", 70f) }), 60f);
+        Check("package beats an earlier CCD", Pick(new[] { ("CCD2 (Tdie)", 72f), ("Core (Tctl/Tdie)", 65f), ("CCD1 (Tdie)", 70f) }), 65f);
+        Check("Tdie beats Tctl", Pick(new[] { ("Core (Tctl)", 75f), ("Core (Tdie)", 65f) }), 65f);
+        Check("CCDs Max beats one CCD", Pick(new[] { ("CCD1 (Tdie)", 61f), ("CCDs Max (Tdie)", 68f), ("CCDs Average (Tdie)", 64f) }), 68f);
+        Check("hottest individual core", Pick(new[] { ("CPU Core #1", 50f), ("CPU Core #2", 58f), ("CPU Core #3", 55f) }), 58f);
+        Check("TjMax distance is not a temperature", Pick(new[] { ("CPU Core #1 Distance to TjMax", 45f), ("CPU Core #1", 55f) }), 55f);
+        Check("averages are ignored", Pick(new[] { ("Core Average", 50f) }), null);
+        Check("no sensors", Pick(Array.Empty<(string, float)>()), null);
+
+        Console.WriteLine(failures == 0 ? "cputemp self-test: ok" : $"cputemp self-test: {failures} failure(s)");
+        return failures == 0 ? 0 : 1;
+    }
+}
 
 // Walks the hardware tree and calls Update() so sensor values refresh.
 sealed class UpdateVisitor : IVisitor

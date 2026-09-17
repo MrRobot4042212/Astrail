@@ -72,6 +72,10 @@ jobs:
       - name: Fetch bundled binaries (PresentMon + cputemp sidecar)
         run: pwsh scripts/fetch-binaries.ps1
 
+      # Sensor selection logic only; opening the kernel driver is not possible here.
+      - name: cputemp sidecar self-test
+        run: ./src-tauri/binaries/cputemp.exe --self-test
+
       - name: Clippy
         working-directory: src-tauri
         run: cargo clippy --all-targets -- -D warnings

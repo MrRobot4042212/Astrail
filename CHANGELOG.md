@@ -30,6 +30,11 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
   error real de permisos sigue forzando el rescaneo. Fue lo que hizo fallar
   `fingerprint_is_stable_between_calls` en los runners de GitHub y bloqueó la
   publicación.
+- **Sensor de temperatura de CPU equivocado en Ryzen con varios CCD.** Ganaba el
+  último sensor que cuadrara por nombre, así que un CCD podía desplazar al valor
+  de paquete según el orden. Ahora hay un orden de preferencia fijo (paquete,
+  Tdie, Tctl, máximo de CCD, máximo de núcleo, núcleo más caliente) y se ignoran
+  medias y distancias a TjMax.
 
 ---
 
