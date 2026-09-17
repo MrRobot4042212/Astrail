@@ -81,6 +81,10 @@ fn embed_sidecar_hashes() {
 
 fn main() {
     load_dotenv();
+    // `src/about.rs` reads this with `option_env!` to decide whether the About
+    // screen says "unofficial build"; only the release workflow of the upstream
+    // repository sets it. Declared here so flipping it rebuilds the crate.
+    println!("cargo:rerun-if-env-changed=METEOR_OFFICIAL_BUILD");
     #[cfg(windows)]
     embed_sidecar_hashes();
 

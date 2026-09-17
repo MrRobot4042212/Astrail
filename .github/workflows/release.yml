@@ -159,6 +159,11 @@ jobs:
           # embedding a shared credential in every user's binary.
           IGDB_CLIENT_ID: ${{ secrets.IGDB_CLIENT_ID }}
           IGDB_CLIENT_SECRET: ${{ secrets.IGDB_CLIENT_SECRET }}
+          # Settings → About says "unofficial build" unless this is set, which
+          # only happens here, in the upstream repository. A fork that runs the
+          # same workflow gets the warning without having to remember anything —
+          # term 2 of ADDITIONAL-TERMS.md (GPL section 7c).
+          METEOR_OFFICIAL_BUILD: ${{ github.repository == 'MrRobot4042212/Meteor' && '1' || '' }}
         with:
           # tauri-action substitutes __VERSION__ with the app version and creates
           # the tag itself, so the tag can never disagree with what was built.
