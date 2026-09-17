@@ -287,6 +287,29 @@ const MB: u64 = 1024 * 1024;
 #[cfg(windows)]
 const BACKEND_IDLE_SECS: u64 = 60;
 
+/// One initialization attempt per backend release cycle.
+///
+/// A failed `Nvml::init()` / `amd::init()` used to be retried on every drawn tick:
+/// on an AMD-only machine that was a `LoadLibrary("nvml.dll")` probe per frame of
+/// the HUD, and an `adlx_init` per tick on an NVIDIA-only one. The attempt is
+/// remembered until the backends are released after `BACKEND_IDLE_SECS` idle, so a
+/// driver installed or restarted mid-session is picked up on the next game.
+#[derive(Debug, Default)]
+struct InitOnce {
+    tried: bool,
+}
+
+impl InitOnce {
+    /// `true` only for the first call since construction or the last `reset`.
+    fn should_try(&mut self) -> bool {
+        !std::mem::replace(&mut self.tried, true)
+    }
+
+    fn reset(&mut self) {
+        self.tried = false;
+    }
+}
+
 /// Block until the wake event fires, a window message arrives, or the timeout
 /// elapses; then drain the HUD window's message queue.
 ///
@@ -404,8 +427,11 @@ pub fn start(app: AppHandle) {
         // nvml.dll / amdadlx64.dll at startup cost every user memory (and a
         // driver DLL) even with the overlay switched off.
         let mut nvml: Option<Nvml> = None;
+        let mut nvml_init = InitOnce::default();
         #[cfg(windows)]
         let mut amd = false;
+        #[cfg(windows)]
+        let mut amd_init = InitOnce::default();
         #[cfg(windows)]
         let mut backends_idle_since: Option<Instant> = None;
         // Global CPU%/RAM: direct Win32 (GetSystemTimes / GlobalMemoryStatusEx),
@@ -547,6 +573,8 @@ pub fn start(app: AppHandle) {
                             amd = false;
                             applied_gpu.clear();
                         }
+                        nvml_init.reset();
+                        amd_init.reset();
                         overlay::teardown();
                         backends_idle_since = None; // released; nothing left to do
                     }
@@ -571,16 +599,16 @@ pub fn start(app: AppHandle) {
             #[cfg(windows)]
             {
                 backends_idle_since = None;
-                if nvml.is_none() {
+                if nvml.is_none() && nvml_init.should_try() {
                     nvml = Nvml::init().ok();
                 }
-                if !amd {
+                if !amd && amd_init.should_try() {
                     amd = crate::amd::init();
                     applied_gpu.clear();
                 }
             }
             #[cfg(not(windows))]
-            if nvml.is_none() {
+            if nvml.is_none() && nvml_init.should_try() {
                 nvml = Nvml::init().ok();
             }
 
@@ -846,6 +874,20 @@ mod tests {
         apply_adlx_fps(&mut s, 143.0);
         assert_eq!(s.fps, Some(143.0));
         assert_eq!(s.frametime_ms, None);
+    }
+
+    #[test]
+    fn a_failed_backend_init_is_not_retried_every_tick() {
+        // Regression (W4): a missing nvml.dll / ADLX was re-probed on every drawn tick.
+        let mut init = InitOnce::default();
+        assert!(init.should_try());
+        for _ in 0..100 {
+            assert!(!init.should_try());
+        }
+        // Released after the idle period → the next game gets one fresh attempt.
+        init.reset();
+        assert!(init.should_try());
+        assert!(!init.should_try());
     }
 
     #[test]

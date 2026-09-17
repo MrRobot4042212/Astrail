@@ -58,6 +58,9 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
   cargar su driver (HVCI, lista de bloqueo de drivers): un proceso elevado de
   13 MB arrancando dos veces por segundo toda la partida. Ahora espera 30 s antes
   de reintentar.
+- **Reintentos de NVML/ADLX en cada refresco.** En un equipo sin GPU NVIDIA (o sin
+  AMD) se intentaba cargar la librería que falta en cada tick del HUD. Ahora el
+  fallo se recuerda hasta que el overlay se libera por inactividad.
 
 ---
 
