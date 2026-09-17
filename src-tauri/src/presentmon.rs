@@ -120,14 +120,115 @@ fn spawn(bin: &Path, pid: u32) -> std::io::Result<Child> {
     Ok(child)
 }
 
-/// Read PresentMon's CSV stream and maintain a ~1s rolling window of frame times.
+/// Frames kept per swapchain: roughly the last second of presents.
+const WINDOW_MS: f32 = 1000.0;
+/// A swapchain that has not presented for this long no longer competes for "busiest".
+const CHAIN_TTL_MS: u64 = 1000;
+/// Upper bound on tracked swapchains, so a process that churns swapchains cannot
+/// grow the table without limit.
+const MAX_CHAINS: usize = 8;
+
+/// Rolling ~1 s window of one swapchain's frame times.
+struct Chain {
+    id: u64,
+    frames: VecDeque<f32>,
+    sum: f32,
+    last_ms: u64,
+}
+
+/// Parses PresentMon's CSV and keeps one frame window **per swapchain**.
+///
+/// A game process often owns more than one swapchain (an embedded Chromium
+/// launcher/UI, a secondary window, a video layer). PresentMon emits one row per
+/// present for all of them, and `msBetweenPresents` is measured per swapchain, so
+/// folding every row into one window mixed a 144 fps game with a 30 fps UI into a
+/// single inflated number. The reported value is the busiest live swapchain, which
+/// is the one rendering the game.
+pub(crate) struct FrameParser {
+    ft_col: Option<usize>,
+    sc_col: Option<usize>,
+    chains: Vec<Chain>,
+}
+
+impl FrameParser {
+    pub(crate) fn new() -> Self {
+        Self { ft_col: None, sc_col: None, chains: Vec::new() }
+    }
+
+    /// Feed one CSV line read at `now_ms`. Returns `(fps, avg_frametime_ms)` of the
+    /// busiest live swapchain after a valid data row, `None` otherwise.
+    pub(crate) fn feed(&mut self, line: &str, now_ms: u64) -> Option<(f32, f32)> {
+        // Header: locate the frametime column (the name varies across versions:
+        // "msBetweenPresents" / "MsBetweenPresents") and the swapchain column. Parsed
+        // once; the swapchain column is optional (all rows share one window without it).
+        let Some(ft_idx) = self.ft_col else {
+            for (i, c) in line.split(',').enumerate() {
+                let c = c.trim().to_ascii_lowercase();
+                if c.contains("betweenpresents") {
+                    self.ft_col = Some(i);
+                } else if c == "swapchainaddress" {
+                    self.sc_col = Some(i);
+                }
+            }
+            return None;
+        };
+
+        // Data rows (the hot path at 200-800 fps): one pass over the fields, no
+        // per-line allocation.
+        let mut ft: Option<f32> = None;
+        let mut chain_id: u64 = 0;
+        for (i, field) in line.split(',').enumerate() {
+            if i == ft_idx {
+                ft = field.trim().parse::<f32>().ok();
+            } else if Some(i) == self.sc_col {
+                chain_id = parse_address(field);
+            }
+        }
+        let ft = ft.filter(|v| v.is_finite() && *v > 0.0)?;
+
+        self.chains.retain(|c| now_ms.saturating_sub(c.last_ms) <= CHAIN_TTL_MS);
+        let pos = match self.chains.iter().position(|c| c.id == chain_id) {
+            Some(p) => p,
+            None => {
+                if self.chains.len() >= MAX_CHAINS {
+                    if let Some(oldest) = (0..self.chains.len()).min_by_key(|&i| self.chains[i].last_ms) {
+                        self.chains.swap_remove(oldest);
+                    }
+                }
+                self.chains.push(Chain { id: chain_id, frames: VecDeque::new(), sum: 0.0, last_ms: now_ms });
+                self.chains.len() - 1
+            }
+        };
+
+        let chain = &mut self.chains[pos];
+        chain.last_ms = now_ms;
+        chain.frames.push_back(ft);
+        chain.sum += ft;
+        while chain.sum > WINDOW_MS && chain.frames.len() > 1 {
+            if let Some(old) = chain.frames.pop_front() {
+                chain.sum -= old;
+            }
+        }
+
+        // Busiest = most presents in its last second; ties go to the most recent.
+        let best = self.chains.iter().max_by_key(|c| (c.frames.len(), c.last_ms))?;
+        let avg_ft = best.sum / best.frames.len() as f32;
+        (avg_ft > 0.0).then(|| (1000.0 / avg_ft, avg_ft))
+    }
+}
+
+/// `0x0000020F3A1B2C40` → its numeric value; anything unparsable maps to 0, which
+/// just groups those rows into one shared window.
+fn parse_address(field: &str) -> u64 {
+    let f = field.trim();
+    let hex = f.strip_prefix("0x").or_else(|| f.strip_prefix("0X")).unwrap_or(f);
+    u64::from_str_radix(hex, 16).unwrap_or(0)
+}
+
+/// Read PresentMon's CSV stream and publish the busiest swapchain's FPS/frametime.
 fn parse_stdout(out: impl std::io::Read) {
     let mut reader = BufReader::new(out);
-    // Index of the "...BetweenPresents" column (frametime in ms), found from the header.
-    let mut ft_col: Option<usize> = None;
-    // Rolling window of recent frametimes (ms) and their running sum.
-    let mut window: VecDeque<f32> = VecDeque::new();
-    let mut sum = 0.0f32;
+    let mut parser = FrameParser::new();
 
     // One reused buffer instead of `lines()`, which hands back an owned `String` per
     // line: this reads one line per presented frame, so at the 200-800 fps this path
@@ -142,46 +243,12 @@ fn parse_stdout(out: impl std::io::Read) {
             Ok(_) => {}
             Err(_) => break,
         }
-        let line = line.trim_end();
-
-        // Header: locate the frametime column (name varies across versions:
-        // "msBetweenPresents" / "MsBetweenPresents"). Parsed once. `split(',').position`
-        // iterates without collecting into a Vec.
-        if ft_col.is_none() {
-            ft_col = line
-                .split(',')
-                .position(|c| c.trim().to_ascii_lowercase().contains("betweenpresents"));
-            continue;
+        let now = crate::metrics::clock_ms();
+        if let Some((fps, avg_ft)) = parser.feed(line.trim_end(), now) {
+            FRAMETIME_X100.store((avg_ft * 100.0) as u32, Ordering::Relaxed);
+            FPS_X100.store((fps * 100.0) as u32, Ordering::Relaxed);
+            LAST_UPDATE_MS.store(now, Ordering::Relaxed);
         }
-
-        // `ft_col` is Some here — the branch above `continue`s otherwise — but this
-        // runs on a reader thread where `panic = "abort"` would take the whole app
-        // down, so the impossible case skips the line instead of asserting.
-        let Some(idx) = ft_col else { continue };
-        // Data rows (the hot path at 200-800 fps): pull just the Nth field with no
-        // per-line allocation, instead of collecting every column into a Vec.
-        let Some(ft) = line.split(',').nth(idx).and_then(|v| v.trim().parse::<f32>().ok()) else {
-            continue;
-        };
-        if !(ft.is_finite() && ft > 0.0) {
-            continue;
-        }
-
-        window.push_back(ft);
-        sum += ft;
-        // Keep roughly the last second of frames.
-        while sum > 1000.0 && window.len() > 1 {
-            if let Some(old) = window.pop_front() {
-                sum -= old;
-            }
-        }
-
-        let n = window.len() as f32;
-        let avg_ft = sum / n;
-        let fps = if avg_ft > 0.0 { 1000.0 / avg_ft } else { 0.0 };
-        FRAMETIME_X100.store((avg_ft * 100.0) as u32, Ordering::Relaxed);
-        FPS_X100.store((fps * 100.0) as u32, Ordering::Relaxed);
-        LAST_UPDATE_MS.store(crate::metrics::clock_ms(), Ordering::Relaxed);
     }
     // Stream ended (game closed / PresentMon stopped): clear stale numbers.
     reset();
@@ -398,4 +465,105 @@ pub fn start(app: AppHandle) {
             }
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const HEADER: &str = "Application,ProcessID,SwapChainAddress,Runtime,SyncInterval,PresentFlags,Dropped,TimeInSeconds,msInPresentAPI,msBetweenPresents";
+
+    fn row(chain: &str, ft: f32) -> String {
+        format!("game.exe,1234,{chain},DXGI,0,0,0,1.0,0.1,{ft}")
+    }
+
+    #[test]
+    fn single_swapchain_reports_its_rate() {
+        let mut p = FrameParser::new();
+        assert_eq!(p.feed(HEADER, 1), None);
+        let mut last = None;
+        for i in 0..120 {
+            last = p.feed(&row("0x00000001", 1000.0 / 60.0), 1 + i * 16);
+        }
+        let (fps, ft) = last.expect("data rows publish a value");
+        assert!((fps - 60.0).abs() < 0.5, "fps {fps}");
+        assert!((ft - 16.667).abs() < 0.1, "ft {ft}");
+    }
+
+    #[test]
+    fn a_second_swapchain_does_not_inflate_fps() {
+        // Regression (MT3): a 144 fps game plus a 30 fps embedded UI in the same
+        // process used to be folded into one window and read as ~174 fps.
+        let mut p = FrameParser::new();
+        p.feed(HEADER, 1);
+        let mut last = None;
+        let mut t_game = 0.0f32;
+        let mut t_ui = 0.0f32;
+        let (ft_game, ft_ui) = (1000.0 / 144.0, 1000.0 / 30.0);
+        while t_game < 3000.0 {
+            if t_ui <= t_game {
+                last = p.feed(&row("0x000002AA", ft_ui), 1 + t_ui as u64);
+                t_ui += ft_ui;
+            } else {
+                last = p.feed(&row("0x000001BB", ft_game), 1 + t_game as u64);
+                t_game += ft_game;
+            }
+        }
+        let (fps, _) = last.expect("value");
+        assert!((fps - 144.0).abs() < 1.0, "fps {fps}");
+    }
+
+    #[test]
+    fn a_swapchain_that_stops_presenting_stops_competing() {
+        let mut p = FrameParser::new();
+        p.feed(HEADER, 1);
+        // Busy chain for one second, then silent.
+        for i in 0..144u64 {
+            p.feed(&row("0x1", 1000.0 / 144.0), 1 + i * 7);
+        }
+        // Slow chain keeps going past the busy chain's TTL.
+        let mut last = None;
+        for i in 0..20u64 {
+            last = p.feed(&row("0x2", 100.0), 1_100 + i * 100);
+        }
+        let (fps, _) = last.expect("value");
+        assert!((fps - 10.0).abs() < 0.5, "fps {fps}");
+    }
+
+    #[test]
+    fn rows_without_a_swapchain_column_share_one_window() {
+        let mut p = FrameParser::new();
+        p.feed("Application,ProcessID,msBetweenPresents", 1);
+        let mut last = None;
+        for i in 0..60u64 {
+            last = p.feed(&format!("game.exe,1234,{}", 1000.0 / 60.0), 1 + i * 16);
+        }
+        assert!((last.expect("value").0 - 60.0).abs() < 0.5);
+    }
+
+    #[test]
+    fn garbage_and_non_positive_frametimes_are_ignored() {
+        let mut p = FrameParser::new();
+        p.feed(HEADER, 1);
+        assert_eq!(p.feed(&row("0x1", 0.0), 2), None);
+        assert_eq!(p.feed("game.exe,1234,0x1,DXGI,0,0,0,1.0,0.1,NaN", 3), None);
+        assert_eq!(p.feed("short,row", 4), None);
+    }
+
+    #[test]
+    fn tracked_swapchains_are_bounded() {
+        let mut p = FrameParser::new();
+        p.feed(HEADER, 1);
+        for i in 0..100u64 {
+            p.feed(&row(&format!("0x{i:X}"), 16.0), 1 + i);
+        }
+        assert!(p.chains.len() <= MAX_CHAINS);
+    }
+
+    #[test]
+    fn swapchain_addresses_parse_with_or_without_prefix() {
+        assert_eq!(parse_address(" 0x0000020F3A1B2C40 "), 0x0000_020F_3A1B_2C40);
+        assert_eq!(parse_address("FF"), 0xFF);
+        assert_eq!(parse_address("n/a"), 0);
+    }
 }

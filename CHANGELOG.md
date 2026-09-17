@@ -35,6 +35,9 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
   responder, el overlay seguía mostrando el último valor como si fuera actual.
   Ahora las lecturas caducan (FPS a los 2 s o dos intervalos, temperatura a los
   3 s) y la fila desaparece en lugar de mentir.
+- **FPS inflados en juegos con varias ventanas de render** (interfaces Chromium
+  incrustadas, ventanas secundarias): los frames de todas se sumaban. Ahora se
+  mide cada swapchain por separado y se muestra la más activa.
 - **Sensor de temperatura de CPU equivocado en Ryzen con varios CCD.** Ganaba el
   último sensor que cuadrara por nombre, así que un CCD podía desplazar al valor
   de paquete según el orden. Ahora hay un orden de preferencia fijo (paquete,
