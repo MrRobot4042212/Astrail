@@ -53,7 +53,9 @@ export const LibraryGrid = memo(function LibraryGrid({
         <GameCard
           key={game.id}
           game={game}
-          index={i}
+          // Only the entrance stagger reads it, and it caps at 24: clamping here
+          // keeps the prop stable for later cards so memo holds on reorder.
+          index={Math.min(i, 24)}
           onLaunch={onLaunch}
           // Manual entries are removed outright; store-owned ones are only hidden,
           // since the next scan would bring them straight back.
