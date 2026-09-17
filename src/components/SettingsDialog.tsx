@@ -21,7 +21,8 @@ import {
   restartAsAdmin,
 } from '@/lib/tauri';
 import type { GpuInfo, OverlaySettings, OverlayPosition, SystemInfo, MetricsSample, ShortcutsSettings } from '@/lib/types';
-import { CloseIcon, InfoIcon, GearIcon, FireIcon } from './icons';
+import { CloseIcon, InfoIcon, GearIcon, FireIcon, BookIcon } from './icons';
+import { AboutTab } from './AboutTab';
 import { DEFAULT_SHORTCUTS, formatShortcut, recordShortcut } from '@/lib/shortcuts';
 import { colorToCommit } from '@/lib/color';
 import { OverlayPanel } from './Overlay';
@@ -73,12 +74,13 @@ const OVERLAY_METRICS: { key: keyof OverlaySettings; tKey: string; note?: string
   { key: 'show_ram', tKey: 'metrics.ram' },
 ];
 
-type Tab = 'system' | 'app' | 'metrics';
+type Tab = 'system' | 'app' | 'metrics' | 'about';
 
 const TABS: { id: Tab; tKey: string; icon: typeof InfoIcon }[] = [
   { id: 'metrics', tKey: 'settings.tabMetrics', icon: FireIcon },
   { id: 'system', tKey: 'settings.tabSystem', icon: InfoIcon },
   { id: 'app', tKey: 'settings.tabApp', icon: GearIcon },
+  { id: 'about', tKey: 'settings.tabAbout', icon: BookIcon },
 ];
 
 export function SettingsDialog({
@@ -341,6 +343,7 @@ export function SettingsDialog({
                 shortcuts={shortcuts}
               />
             )}
+            {tab === 'about' && <AboutTab />}
 
             {error && <p className="mt-6 text-sm text-accent">{error}</p>}
           </div>

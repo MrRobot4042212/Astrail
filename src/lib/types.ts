@@ -169,6 +169,19 @@ export interface SystemInfo {
   displays: DisplayInfo[];
 }
 
+/** Version, author and license of the running build, for Settings → "Acerca de". */
+export interface AboutInfo {
+  version: string;
+  author: string;
+  repository: string;
+  license: string;
+  /** False in any build that did not come out of the project's own release workflow. */
+  official: boolean;
+}
+
+/** The legal documents embedded in the binary. */
+export type LegalDocument = 'license' | 'additional-terms' | 'third-party-notices';
+
 /** One telemetry sample. The live HUD is now drawn natively in Rust; this type is
  *  kept for the settings-panel live preview (mock data) and the shared `OverlayPanel`. */
 export interface MetricsSample {

@@ -157,7 +157,11 @@ pub fn open_folder(dir: &Path) -> Result<(), String> {
 /// built from fixed templates with only the game name interpolated, so an
 /// allowlist is an exact fit — and it keeps a poisoned library entry from
 /// turning "open community links" into "open anything".
+///
+/// `github.com` is here for the project links in Settings → About, which the
+/// additional terms of the license require the app to keep showing.
 const EXTERNAL_HOSTS: &[&str] = &[
+    "github.com",
     "pcgamingwiki.com",
     "nexusmods.com",
     "protondb.com",
@@ -250,6 +254,7 @@ mod tests {
     fn external_urls_are_host_allowlisted() {
         assert!(is_allowed_external("https://www.pcgamingwiki.com/w/index.php?search=Halo"));
         assert!(is_allowed_external("https://duckduckgo.com/?q=x"));
+        assert!(is_allowed_external("https://github.com/MrRobot4042212/Meteor"));
         // Not on the list, wrong scheme, credential trick, or a lookalike host.
         assert!(!is_allowed_external("https://evil.example/"));
         assert!(!is_allowed_external("http://www.reddit.com/"));

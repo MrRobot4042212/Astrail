@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Additional terms under GPL-3.0 section 7 apply: see ADDITIONAL-TERMS.md
 
+mod about;
 mod appicons;
 mod apps_db;
 mod art;
@@ -604,6 +605,20 @@ fn get_app_settings(state: tauri::State<'_, std::sync::Mutex<AppSettings>>) -> R
 #[tauri::command(async)]
 fn system_info() -> Result<system::SystemInfo, String> {
     Ok(system::collect())
+}
+
+/// Version, author and license of this build, for Settings → About.
+#[tauri::command]
+fn about_info() -> about::AboutInfo {
+    about::info()
+}
+
+/// The full text of one of the embedded legal documents.
+// Async: the notices are half a megabyte, and serializing them should not sit
+// on the main thread.
+#[tauri::command(async)]
+fn legal_document(name: String) -> Result<&'static str, String> {
+    about::document(&name)
 }
 
 /// Overlay MPO diagnostics: live composition health + the system-config levers
@@ -1257,6 +1272,8 @@ pub fn run() {
             get_app_settings,
             patch_app_settings,
             system_info,
+            about_info,
+            legal_document,
             overlay_mpo_diagnostics,
             username,
             is_elevated,

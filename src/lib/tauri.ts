@@ -3,7 +3,7 @@
 // Additional terms under GPL-3.0 section 7 apply: see ADDITIONAL-TERMS.md
 
 import { invoke } from '@tauri-apps/api/core';
-import type { Game, Category, PlayStat, AppSettings, AppSettingsPatch, SystemInfo, MpoDiagnostics } from './types';
+import type { Game, Category, PlayStat, AppSettings, AppSettingsPatch, SystemInfo, MpoDiagnostics, AboutInfo, LegalDocument } from './types';
 
 /** Unified library across every source (Steam, Epic, GOG, EA, Ubisoft, Xbox, manual). */
 export const getLibrary = () => invoke<Game[]>('get_library');
@@ -151,6 +151,13 @@ export const patchAppSettings = (patch: AppSettingsPatch) =>
 
 /** Hardware/system info for the "Mi equipo" settings panel. */
 export const systemInfo = () => invoke<SystemInfo>('system_info');
+
+/** Version, author and license of this build, for the "Acerca de" settings panel. */
+export const aboutInfo = () => invoke<AboutInfo>('about_info');
+
+/** The verbatim text of a legal document embedded in the binary. */
+export const legalDocument = (name: LegalDocument) =>
+  invoke<string>('legal_document', { name });
 
 /** Overlay MPO diagnostics: live health + config levers (monitors, refresh, HAGS). */
 export const overlayMpoDiagnostics = () =>
