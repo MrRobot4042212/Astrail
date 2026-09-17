@@ -316,6 +316,100 @@ fn download(url: &str, dest: &Path) -> bool {
     jsonstore::write_atomic(dest, &bytes).is_ok()
 }
 
+/// Whether a cover value is a remote URL rather than a local path.
+pub fn is_remote(value: &str) -> bool {
+    let v = value.trim();
+    (v.len() >= 8 && v[..8].eq_ignore_ascii_case("https://"))
+        || (v.len() >= 7 && v[..7].eq_ignore_ascii_case("http://"))
+}
+
+/// Largest user cover we download. Store art is well under 1 MB; the cap only
+/// bounds what a pasted URL can make the app read into memory.
+const USER_COVER_MAX_BYTES: u64 = 20 * 1024 * 1024;
+
+/// File extension for a downloaded cover, from its `Content-Type` first and
+/// the URL path second; `storage::save_cover_image` falls back to `jpg`.
+fn cover_ext(content_type: Option<&str>, url: &str) -> String {
+    let from_type = content_type
+        .and_then(|ct| ct.split(';').next())
+        .and_then(|ct| ct.trim().strip_prefix("image/"))
+        .map(|sub| match sub.to_ascii_lowercase().as_str() {
+            "jpeg" | "pjpeg" => "jpg".to_string(),
+            other => other.to_string(),
+        });
+    from_type.unwrap_or_else(|| {
+        url.split(['?', '#'])
+            .next()
+            .and_then(|path| path.rsplit('.').next())
+            .map(|ext| ext.to_ascii_lowercase())
+            .unwrap_or_default()
+    })
+}
+
+/// Download a user-pasted cover URL into `user_covers/` and return the local
+/// path, so the webview renders it through the asset protocol instead of
+/// fetching from an arbitrary host (the CSP only allows the IGDB CDN).
+pub fn fetch_user_cover(app: &AppHandle, id: &str, url: &str) -> Result<String, String> {
+    let url = url.trim();
+    if crate::files::https_host(url).is_none() {
+        return Err("Cover URLs must be plain https:// links".to_string());
+    }
+    let resp = agent()
+        .get(url)
+        .call()
+        .map_err(|e| format!("Could not download the cover ({e})"))?;
+    let content_type = resp.header("content-type").map(str::to_string);
+    if !content_type.as_deref().is_some_and(|ct| ct.trim_start().starts_with("image/")) {
+        return Err("The URL did not return an image".to_string());
+    }
+    let mut bytes = Vec::new();
+    resp.into_reader()
+        .take(USER_COVER_MAX_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|e| format!("Could not download the cover ({e})"))?;
+    if bytes.len() as u64 > USER_COVER_MAX_BYTES {
+        return Err(format!(
+            "The cover is larger than {} MB",
+            USER_COVER_MAX_BYTES / (1024 * 1024)
+        ));
+    }
+    let ext = cover_ext(content_type.as_deref(), url);
+    crate::storage::save_cover_image(app, id, &bytes, &ext)
+}
+
+/// One-time migration for covers stored as remote URLs by older builds (cover
+/// overrides and manual apps): download each onto disk. A failure leaves the
+/// value alone and is retried at the next start.
+pub fn migrate_remote_user_covers(app: &AppHandle) {
+    let overrides = crate::storage::load_cover_overrides(app);
+    for (id, url) in overrides.iter().filter(|(_, url)| is_remote(url)) {
+        match fetch_user_cover(app, id, url) {
+            Ok(path) => {
+                let _ = crate::storage::set_cover_override(app, id, Some(&path));
+            }
+            Err(e) => eprintln!("[art] could not migrate the cover of {id}: {e}"),
+        }
+    }
+
+    let Ok(mut manual) = crate::storage::load_manual(app) else { return };
+    let mut changed = false;
+    for game in &mut manual {
+        let Some(url) = game.cover_url.as_deref().filter(|u| is_remote(u)) else {
+            continue;
+        };
+        match fetch_user_cover(app, &game.id, url) {
+            Ok(path) => {
+                game.cover_url = Some(path);
+                changed = true;
+            }
+            Err(e) => eprintln!("[art] could not migrate the cover of {}: {e}", game.id),
+        }
+    }
+    if changed {
+        let _ = crate::storage::save_manual(app, &manual);
+    }
+}
+
 fn now() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -571,5 +665,19 @@ mod tests {
         assert!(!dir.join("mid.ico").exists());
         assert!(dir.join("new.ico").exists());
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn remote_cover_values_are_recognised_and_typed() {
+        // Regression (A19): a pasted cover URL was rendered straight from any
+        // host, so `img-src https:` had to stay in the CSP.
+        assert!(is_remote("https://example.com/a.jpg"));
+        assert!(is_remote("HTTP://example.com/a.jpg"));
+        assert!(!is_remote(r"C:\Users\me\AppData\Local\Meteor\user_covers\x.jpg"));
+        assert!(!is_remote(""));
+        assert!(!is_remote("https:/"));
+        assert_eq!(cover_ext(Some("image/jpeg"), "https://x/y"), "jpg");
+        assert_eq!(cover_ext(Some("image/png; charset=binary"), "https://x/y.jpg"), "png");
+        assert_eq!(cover_ext(None, "https://x/y.WEBP?size=1"), "webp");
     }
 }

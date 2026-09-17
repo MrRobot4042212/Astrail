@@ -27,9 +27,10 @@ export const resolveCoverHires = (name: string) =>
 export const resolveCover = (name: string) =>
   invoke<string | null>('resolve_cover', { name });
 
-/** Manually set (or clear, with null) the cover for a game id. Wins over auto. */
+/** Set (or clear) a cover override. A remote URL is downloaded by Rust and the
+ *  stored local path comes back, which is what the grid must render. */
 export const setCover = (id: string, url: string | null) =>
-  invoke<void>('set_cover', { id, url });
+  invoke<string | null>('set_cover', { id, url });
 
 /** Save a dropped/picked local image as the cover. Returns the saved local path. */
 export const setCoverImage = (id: string, data: number[], ext: string) =>

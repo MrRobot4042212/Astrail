@@ -271,9 +271,22 @@ fn cached_library(app: AppHandle) -> Result<Vec<Game>, String> {
 
 /// Set a manual cover URL for a game id (empty/None clears it). Overrides always
 /// take precedence over auto-resolved artwork.
+///
+/// A remote URL is downloaded into `user_covers/` first and the local path is
+/// what gets stored and returned: the CSP only lets the webview load images
+/// from the IGDB CDN, so a pasted URL cannot be rendered directly.
 #[tauri::command(async)]
-fn set_cover(app: AppHandle, id: String, url: Option<String>) -> Result<(), String> {
-    storage::set_cover_override(&app, &id, url.as_deref())
+async fn set_cover(app: AppHandle, id: String, url: Option<String>) -> Result<Option<String>, String> {
+    blocking(move || {
+        let value = match url.as_deref().map(str::trim).filter(|u| !u.is_empty()) {
+            Some(u) if art::is_remote(u) => Some(art::fetch_user_cover(&app, &id, u)?),
+            Some(u) => Some(u.to_string()),
+            None => None,
+        };
+        storage::set_cover_override(&app, &id, value.as_deref())?;
+        Ok(value)
+    })
+    .await
 }
 
 /// Save a dropped/picked local image as a game's cover and set it as the override.
@@ -363,8 +376,9 @@ fn restore_hidden(app: AppHandle) -> Result<(), String> {
     storage::clear_hidden(&app)
 }
 
+/// A remote cover URL is downloaded into `user_covers/` (see `set_cover`).
 #[tauri::command(async)]
-fn add_manual_app(
+async fn add_manual_app(
     app: AppHandle,
     name: String,
     executable: String,
@@ -375,32 +389,40 @@ fn add_manual_app(
         return Err("El nombre no puede estar vacío".into());
     }
 
-    let mut manual = storage::load_manual(&app)?;
-    let id = format!(
-        "manual:{}",
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_err(|e| e.to_string())?
-            .as_millis()
-    );
+    blocking(move || {
+        let mut manual = storage::load_manual(&app)?;
+        let id = format!(
+            "manual:{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map_err(|e| e.to_string())?
+                .as_millis()
+        );
 
-    let game = Game {
-        id,
-        name,
-        source: GameSource::Manual,
-        app_id: None,
-        executable: Some(executable),
-        install_dir: None,
-        cover_url: cover_url.filter(|s| !s.trim().is_empty()),
-        launch_uri: None,
-        favorite: false,
-        categories: Vec::new(),
+        let cover_url = match cover_url.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+            Some(u) if art::is_remote(u) => Some(art::fetch_user_cover(&app, &id, u)?),
+            Some(u) => Some(u.to_string()),
+            None => None,
+        };
 
-    };
+        let game = Game {
+            id,
+            name,
+            source: GameSource::Manual,
+            app_id: None,
+            executable: Some(executable),
+            install_dir: None,
+            cover_url,
+            launch_uri: None,
+            favorite: false,
+            categories: Vec::new(),
+        };
 
-    manual.push(game.clone());
-    storage::save_manual(&app, &manual)?;
-    Ok(game)
+        manual.push(game.clone());
+        storage::save_manual(&app, &manual)?;
+        Ok(game)
+    })
+    .await
 }
 
 /// Remove a manually-added app. Store-managed entries are ignored.
@@ -1167,14 +1189,16 @@ pub fn run() {
             // One-off cache maintenance, off the main thread: rename cover files
             // from the old unstable hash to FNV-1a, then keep `covers/` and
             // `app_icons/` under their size caps (they had none before, so they
-            // grew forever); and rewrite an unquoted autostart command line left
-            // by the old plugin.
+            // grew forever); pull remote user covers onto disk so the CSP can
+            // stop allowing images from any host; and rewrite an unquoted
+            // autostart command line left by the old plugin.
             {
                 let maintenance = handle.clone();
                 std::thread::spawn(move || {
                     crate::art::migrate_filenames(&maintenance);
                     crate::art::prune_covers(&maintenance);
                     crate::appicons::maintain(&maintenance);
+                    crate::art::migrate_remote_user_covers(&maintenance);
                     if let Err(e) = autostart::repair() {
                         eprintln!("[autostart] could not repair the Run value: {e}");
                     }

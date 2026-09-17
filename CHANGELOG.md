@@ -11,6 +11,11 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
 ## [No publicado] — Trabajo en curso
 
 ### Cambiado
+- **Las carátulas pegadas como URL se descargan a disco.** Al poner una URL como
+  carátula (en el diálogo de carátula o al añadir una app manual) Meteor la
+  descarga a `user_covers/` y guarda la ruta local; las URLs guardadas por
+  versiones anteriores se migran al arrancar. Así la ventana solo carga imágenes
+  del CDN de IGDB y de su propio disco, nunca de un servidor arbitrario.
 - **Permisos de ventana al mínimo.** La ventana principal solo puede escuchar
   eventos, abrir el diálogo de archivo, comprobar/descargar/instalar
   actualizaciones y relanzarse; la ventana de ajustes in-game solo escuchar

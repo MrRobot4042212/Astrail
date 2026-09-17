@@ -35,8 +35,8 @@ export function CoverDialog({
     setBusy(true);
     setError(null);
     try {
-      await setCover(game.id, value);
-      onSaved(game.id, value);
+      const stored = await setCover(game.id, value);
+      onSaved(game.id, stored);
       onClose();
     } catch (e) {
       setError(String(e));

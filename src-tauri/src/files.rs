@@ -130,7 +130,7 @@ const EXTERNAL_HOSTS: &[&str] = &[
 
 /// Host of an `https://` URL, lowercased, or `None` if it is not a plain https
 /// URL we can parse without pulling in a URL crate.
-fn https_host(url: &str) -> Option<String> {
+pub(crate) fn https_host(url: &str) -> Option<String> {
     if url.chars().any(|c| c.is_control() || c == '"' || c == ' ') {
         return None;
     }
