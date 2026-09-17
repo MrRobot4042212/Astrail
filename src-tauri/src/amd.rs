@@ -6,15 +6,27 @@
 //! the Adrenalin driver) at runtime; on non-AMD systems `init` returns false and
 //! the overlay simply omits GPU metrics — the same graceful degradation as NVML.
 //!
-//! Not thread-safe: all calls must come from the single metrics-sampler thread.
+//! The SDK is not assumed thread-safe: every FFI call goes through `ADLX_LOCK`.
+//! The sampler owns the long-lived session; other callers use
+//! `list_gpus_transient`.
 
 
-use std::sync::Mutex;
+use std::sync::{Mutex, MutexGuard, PoisonError};
 
 /// Serializes all ADLX FFI calls: the metrics sampler (its own thread) and the
 /// `system_info` command (a Tauri command thread) can both reach into ADLX, and
 /// the SDK isn't guaranteed thread-safe across concurrent calls.
-static ADLX_LOCK: Mutex<()> = Mutex::new(());
+///
+/// The value records whether the **sampler** holds ADLX up (`init` succeeded and
+/// `shutdown` has not run). `list_gpus_transient` reads it so a settings screen
+/// neither leaves ADLX resident after the sampler released it nor tears it down
+/// under a running HUD.
+static ADLX_LOCK: Mutex<bool> = Mutex::new(false);
+
+fn lock() -> MutexGuard<'static, bool> {
+    // A panic elsewhere must not take GPU telemetry down with it on the sampler.
+    ADLX_LOCK.lock().unwrap_or_else(PoisonError::into_inner)
+}
 
 // Validity bits in `AdlxSample.flags`, mirroring the C++ shim.
 const F_USAGE: u32 = 1 << 0;
@@ -72,7 +84,28 @@ pub struct GpuListEntry {
 
 /// List the GPUs ADLX can sample (empty if ADLX isn't initialized / no AMD).
 pub fn list_gpus() -> Vec<GpuListEntry> {
-    let _guard = ADLX_LOCK.lock().unwrap();
+    let _guard = lock();
+    enumerate()
+}
+
+/// List the GPUs for a caller that is not the sampler (`system_info`): uses the
+/// sampler's ADLX session when there is one, otherwise brings ADLX up only for
+/// the enumeration and releases it again.
+pub fn list_gpus_transient() -> Vec<GpuListEntry> {
+    let guard = lock();
+    if *guard {
+        return enumerate();
+    }
+    if unsafe { adlx_init() } != 0 {
+        return Vec::new();
+    }
+    let gpus = enumerate();
+    unsafe { adlx_shutdown() };
+    gpus
+}
+
+/// Caller holds `ADLX_LOCK`.
+fn enumerate() -> Vec<GpuListEntry> {
     let count = unsafe { adlx_gpu_count() };
     if count <= 0 {
         return Vec::new();
@@ -106,7 +139,7 @@ pub fn list_gpus() -> Vec<GpuListEntry> {
 
 /// Select which ADLX GPU `sample` reads (0-based index into `list_gpus`).
 pub fn select(idx: usize) -> bool {
-    let _guard = ADLX_LOCK.lock().unwrap();
+    let _guard = lock();
     unsafe { adlx_select(idx as i32) == 0 }
 }
 
@@ -130,14 +163,15 @@ pub struct GpuSample {
 
 /// Initialize ADLX. Returns true on success (AMD GPU + driver present).
 pub fn init() -> bool {
-    let _guard = ADLX_LOCK.lock().unwrap();
-    unsafe { adlx_init() == 0 }
+    let mut held = lock();
+    *held = unsafe { adlx_init() == 0 };
+    *held
 }
 
 /// Read the current GPU metrics, or `None` if ADLX isn't producing a sample. `want_fps`
 /// gates the FPS counter read so we don't pay for it when the overlay shows no FPS row.
 pub fn sample(want_fps: bool) -> Option<GpuSample> {
-    let _guard = ADLX_LOCK.lock().unwrap();
+    let _guard = lock();
     let mut s = AdlxSample::default();
     if unsafe { adlx_sample(&mut s, want_fps as i32) } != 0 {
         return None;
@@ -160,6 +194,7 @@ pub fn sample(want_fps: bool) -> Option<GpuSample> {
 /// Tear down ADLX (best-effort; safe to call when not initialized).
 #[allow(dead_code)]
 pub fn shutdown() {
-    let _guard = ADLX_LOCK.lock().unwrap();
-    unsafe { adlx_shutdown() }
+    let mut held = lock();
+    unsafe { adlx_shutdown() };
+    *held = false;
 }

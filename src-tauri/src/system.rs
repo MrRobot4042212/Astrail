@@ -125,18 +125,14 @@ fn gpus() -> Vec<GpuInfo> {
 
     // AMD via ADLX.
     #[cfg(windows)]
-    {
-        if crate::amd::init() {
-            for (i, g) in crate::amd::list_gpus().into_iter().enumerate() {
-                out.push(GpuInfo {
-                    name: g.name,
-                    vendor: "AMD".to_string(),
-                    vram_mb: g.vram_mb,
-                    kind: g.kind,
-                    key: format!("adlx:{i}"),
-                });
-            }
-        }
+    for (i, g) in crate::amd::list_gpus_transient().into_iter().enumerate() {
+        out.push(GpuInfo {
+            name: g.name,
+            vendor: "AMD".to_string(),
+            vram_mb: g.vram_mb,
+            kind: g.kind,
+            key: format!("adlx:{i}"),
+        });
     }
 
     out

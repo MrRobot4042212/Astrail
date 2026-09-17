@@ -631,7 +631,8 @@ fn overlay_mpo_diagnostics() -> system::MpoDiagnostics {
 /// The current OS user's name, for greetings. Prefers the Windows display/full
 /// name (e.g. "Diego Chicoma"); falls back to the login name (USERNAME). Empty
 /// string if nothing is available.
-#[tauri::command]
+// Async: `GetUserNameExW(NameDisplay)` can round-trip to a domain controller.
+#[tauri::command(async)]
 fn username() -> String {
     #[cfg(windows)]
     {
