@@ -18,7 +18,11 @@ next-env.d.ts
 # Metrics binaries: large/third-party, produced or downloaded in CI (see release.yml),
 # not versioned. The sidecar C# source and the ADLX SDK *are* committed.
 /src-tauri/binaries/*.exe
+# Local secrets: IGDB credentials, updater signing key. Only the example ships.
 .env
+.env.*
+!.env.example
+*.key
 
 # Local audit/report artifacts, kept out of the repository
 meteor-audit-*.html
