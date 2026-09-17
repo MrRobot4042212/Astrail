@@ -1,8 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- Tiny sidecar: streams the CPU package temperature (°C, one int per line) to
-       stdout once per second, read by Rust (cputemp.rs). LibreHardwareMonitor loads
-       a kernel driver to read Ryzen Tctl / Intel core temps, so it needs admin. -->
+  <!-- Tiny sidecar: streams the CPU package temperature and AMD GPU telemetry as
+       key=value lines to stdout once per second, read by Rust (cputemp.rs).
+       LibreHardwareMonitor loads a kernel driver to read Ryzen Tctl / Intel core
+       temps, so the CPU half needs admin; the GPU half goes through the AMD
+       driver's ADL and does not (see Program.cs). -->
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>

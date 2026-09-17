@@ -204,6 +204,7 @@ pub fn load_settings(app: &AppHandle) -> AppSettings {
             // Read-time migration: no write here, so a settings file that is never
             // saved again still stops stealing F9/F10/F11 from every application.
             settings.shortcuts.migrate_legacy_defaults();
+            settings.overlay.migrate_legacy_gpu();
             settings
         }
         _ => AppSettings {

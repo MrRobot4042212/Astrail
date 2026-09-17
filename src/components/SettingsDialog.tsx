@@ -16,7 +16,7 @@ import {
   isElevated,
   restartAsAdmin,
 } from '@/lib/tauri';
-import type { OverlaySettings, OverlayPosition, SystemInfo, MetricsSample, ShortcutsSettings } from '@/lib/types';
+import type { GpuInfo, OverlaySettings, OverlayPosition, SystemInfo, MetricsSample, ShortcutsSettings } from '@/lib/types';
 import { CloseIcon, InfoIcon, GearIcon, FireIcon } from './icons';
 import { DEFAULT_SHORTCUTS, formatShortcut, recordShortcut } from '@/lib/shortcuts';
 import { colorToCommit } from '@/lib/color';
@@ -43,6 +43,11 @@ function fmtMem(mb: number): string {
   if (mb >= 1024) return `${(mb / 1024).toFixed(mb >= 10240 ? 0 : 1)} GB`;
   return `${mb} MB`;
 }
+
+const GPU_KIND_KEYS: Record<Exclude<GpuInfo['kind'], ''>, string> = {
+  integrated: 'settings.sGpuIntegrated',
+  discrete: 'settings.sGpuDiscrete',
+};
 
 const OVERLAY_POSITIONS: { value: OverlayPosition; tKey: string }[] = [
   { value: 'top-left', tKey: 'overlayScreen.posTopLeft' },
@@ -445,7 +450,7 @@ function MetricsTab({
                       .map((g) => (
                         <option key={g.key} value={g.key}>
                           {g.name}
-                          {g.kind ? ` · ${g.kind}` : ''}
+                          {g.kind ? ` · ${t(GPU_KIND_KEYS[g.kind])}` : ''}
                         </option>
                       ))}
                   </select>
@@ -583,7 +588,7 @@ function SystemTab({ sys }: { sys: SystemInfo | null }) {
                     left={
                       <>
                         {g.name}
-                        {g.kind && <Tag>{g.kind}</Tag>}
+                        {g.kind && <Tag>{t(GPU_KIND_KEYS[g.kind])}</Tag>}
                         {!g.key && <Tag>{t('settings.sNoMetrics')}</Tag>}
                       </>
                     }

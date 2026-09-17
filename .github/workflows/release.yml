@@ -68,10 +68,9 @@ jobs:
         run: npm ci
 
       # --- Metrics binaries bundled as resources (see tauri.conf.json) ---------
-      # The ADLX shim (AMD GPU) compiles from vendored sources via build.rs, so it
-      # needs no step here. PresentMon (NVIDIA FPS) and the cputemp sidecar (CPU
-      # temp) are produced into src-tauri/binaries/ by the shared script, which
-      # verifies PresentMon's SHA-256 before it is bundled.
+      # PresentMon (FPS with admin) and the cputemp sidecar (CPU temp, AMD GPU
+      # metrics and FPS) are produced into src-tauri/binaries/ by the shared
+      # script, which verifies PresentMon's SHA-256 before it is bundled.
       #
       # Note the installer is NOT Authenticode-signed. Only the updater artifact
       # is signed, with minisign, which protects an update in flight but does

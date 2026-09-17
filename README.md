@@ -15,10 +15,10 @@ frontend. No hay servidor: toda la lógica vive en Rust y se invoca desde React.
 1. **Node.js 20+** — https://nodejs.org (Next 16 lo exige; CI usa 20)
 2. **Rust** (incluye `cargo`) — https://rustup.rs
 3. **Microsoft C++ Build Tools** (workload "Desktop development with C++") —
-   https://visualstudio.microsoft.com/visual-cpp-build-tools/ — necesario para
-   compilar el shim C++ de ADLX (métricas de GPU AMD).
-4. **.NET 8 SDK** — https://dotnet.microsoft.com/download — compila el sidecar de
-   temperatura de CPU.
+   https://visualstudio.microsoft.com/visual-cpp-build-tools/ — el enlazador y
+   el SDK de Windows que usa Rust en Windows (toolchain MSVC).
+4. **.NET 8 SDK** — https://dotnet.microsoft.com/download — compila el sidecar
+   `cputemp` (temperatura de CPU, métricas y FPS de GPU AMD).
 5. **WebView2** — ya viene preinstalado en Windows 11.
 
 ## Arrancar en desarrollo

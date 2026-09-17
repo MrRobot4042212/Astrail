@@ -1,5 +1,3 @@
-#[cfg(windows)]
-mod amd;
 mod appicons;
 mod apps_db;
 mod art;
@@ -855,13 +853,7 @@ fn cover_game_monitor(w: &tauri::WebviewWindow) {
 /// for the native HUD renderer. The native HUD (drawn by the sampler) reflects this
 /// on its next tick; when `enabled` is false the sampler hides it.
 fn apply_overlay_settings(_app: &AppHandle, settings: &AppSettings) {
-    let fps_wanted = settings.overlay.show_fps || settings.overlay.show_frametime;
-    metrics::configure(
-        settings.overlay.enabled,
-        settings.overlay.interval_ms,
-        fps_wanted,
-        settings.overlay.show_cpu_temp,
-    );
+    metrics::configure(&settings.overlay);
     metrics::set_gpu(settings.overlay.gpu.clone());
     // Snapshot the full overlay config (colors, position, font size, opacity, which
     // metrics) so the native HUD renderer reads it each tick.
@@ -1123,15 +1115,7 @@ pub fn run() {
             let handle = app.handle().clone();
             let settings = storage::load_settings(&handle);
             // Apply the saved overlay config to the sampler before it starts.
-            metrics::configure(
-                settings.overlay.enabled,
-                settings.overlay.interval_ms,
-                settings.overlay.show_fps || settings.overlay.show_frametime,
-                settings.overlay.show_cpu_temp,
-            );
-            metrics::set_gpu(settings.overlay.gpu.clone());
-            // Snapshot the full overlay config for the native HUD renderer.
-            metrics::set_render_cfg(settings.overlay.clone());
+            apply_overlay_settings(&handle, &settings);
             app.manage(std::sync::Mutex::new(settings.clone()));
 
             // NOTE: the in-game overlay WebView window is intentionally **not** created

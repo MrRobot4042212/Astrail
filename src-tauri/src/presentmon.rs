@@ -361,7 +361,8 @@ pub fn start(app: AppHandle) {
         // PresentMon's ETW realtime session requires admin. Elevation can't change at
         // runtime, so check once: when not elevated we never even attempt to spawn it
         // (no access-denied spam, no overhead). FPS on NVIDIA therefore only appears
-        // when Meteor is already running as admin; AMD gets FPS from ADLX regardless.
+        // when Meteor is already running as admin; AMD gets fullscreen FPS from the
+        // cputemp sidecar regardless.
         let elevated = {
             #[cfg(windows)]
             {

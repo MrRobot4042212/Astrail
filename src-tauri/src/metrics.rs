@@ -4,12 +4,14 @@
 //! the native HUD window via the `overlay` facade (DirectComposition when available,
 //! GDI fallback). It is fully idle-cheap: it only samples + draws while the overlay is
 //! enabled, a game is running, AND that game is the foreground window (the playtime
-//! watcher publishes the current game + pid here). On systems without an NVIDIA GPU the
-//! GPU fields are simply omitted; AMD GPUs are read via ADLX.
+//! watcher publishes the current game + pid here). NVIDIA GPUs are read via NVML, AMD
+//! GPUs via the LibreHardwareMonitor sidecar (`cputemp`, ADL); on anything else the GPU
+//! fields are simply omitted.
 //!
-//! FPS / frametime come from ADLX (AMD, no admin) or the PresentMon ETW controller
-//! (NVIDIA, admin only) — both degrade silently to `None`. Everything else works
-//! without admin.
+//! FPS / frametime come from the sidecar (AMD, no admin, exclusive fullscreen only;
+//! borderless games report nothing) or the PresentMon ETW controller (admin only) —
+//! both degrade silently to `None`.
+//! Everything except CPU temperature and PresentMon works without admin.
 
 use serde::Serialize;
 use std::sync::atomic::{AtomicBool, AtomicIsize, AtomicU32, AtomicU64, AtomicU8, Ordering};
@@ -36,24 +38,38 @@ static FPS_WANTED: AtomicBool = AtomicBool::new(false);
 /// Whether CPU temperature is enabled, so the LHM sidecar (kernel driver) only
 /// runs when its output is actually shown.
 static CPU_TEMP_WANTED: AtomicBool = AtomicBool::new(false);
-/// Whether ADLX is currently supplying FPS (AMD's native, admin-free counter). When
-/// true the PresentMon controller stays idle — running an ETW session per frame for
-/// a number we'd only discard is pure overhead (and needs admin).
-static ADLX_FPS_ACTIVE: AtomicBool = AtomicBool::new(false);
+/// Whether any GPU metric (usage, temperature, VRAM) is enabled, so the sidecar only
+/// reads an AMD GPU when its output is actually shown.
+static GPU_WANTED: AtomicBool = AtomicBool::new(false);
+/// GPU selector the sidecar reads for the running game ("auto" or an AMD PnP id
+/// fragment), published by the sampler when the sidecar is the GPU source. None =
+/// NVML or no GPU. See `sidecar_gpu`.
+static SIDECAR_GPU: Mutex<Option<String>> = Mutex::new(None);
+/// Whether the sampler has picked the GPU source for the running game, i.e. whether
+/// `SIDECAR_GPU` means anything yet. Until its first drawn tick it has not, and the
+/// sidecar waits: a CPU-only sidecar started at launch was restarted with `--gpu` a
+/// moment later, loading its kernel driver twice.
+static GPU_ROUTE_KNOWN: AtomicBool = AtomicBool::new(false);
+/// Whether the sidecar is currently supplying FPS (AMD's native, admin-free counter).
+/// When true the PresentMon controller stays idle — running an ETW session per frame
+/// for a number we'd only discard is pure overhead (and needs admin).
+static SIDECAR_FPS_ACTIVE: AtomicBool = AtomicBool::new(false);
 /// Whether the sampler has decided the FPS source for the running game. Until the
 /// first sample of a session it has not, and PresentMon waits: on an AMD machine
 /// it used to start an ETW session and tear it down one tick later.
 static FPS_SOURCE_KNOWN: AtomicBool = AtomicBool::new(false);
-/// How long ADLX keeps the FPS row to itself before its first reading. Past this
-/// with no reading (driver without the FPS counter), PresentMon takes over.
-const ADLX_FPS_GRACE: Duration = Duration::from_secs(3);
+/// How long the sidecar keeps the FPS row to itself without a reading. At the start
+/// of a session it covers the sidecar's start (~1 s) and first lines. Past this with
+/// no reading (borderless game, driver without the counter, or a game that left
+/// exclusive fullscreen), PresentMon takes over until the readings come back.
+const SIDECAR_FPS_GRACE: Duration = Duration::from_secs(5);
 /// Sampling interval in milliseconds.
 static INTERVAL_MS: AtomicU64 = AtomicU64::new(1000);
 /// PID of the running game's main process (for PresentMon). 0 = none.
 static CURRENT_PID: AtomicU32 = AtomicU32::new(0);
 /// Name of the running game the overlay should label, set by the playtime watcher.
 static CURRENT_GAME: Mutex<Option<String>> = Mutex::new(None);
-/// Which GPU to sample: "auto" | "nvml:<i>" | "adlx:<i>". None = "auto".
+/// Which GPU to sample: "auto" | "nvml:<i>" | "pci:<AMD PnP id fragment>". None = "auto".
 static GPU_SELECT: Mutex<Option<String>> = Mutex::new(None);
 /// Whether the in-game overlay *settings* screen (WebView2 window) is open. While
 /// it is, the native HUD hides so the two overlays don't fight for the z-order.
@@ -62,7 +78,7 @@ static SETTINGS_OPEN: AtomicBool = AtomicBool::new(false);
 /// snapshotted so the native HUD renderer can read it each tick.
 static RENDER_CFG: Mutex<Option<crate::models::OverlaySettings>> = Mutex::new(None);
 /// Whether a game is currently published (mirrors `CURRENT_GAME.is_some()` as an
-/// atomic, so the cputemp controller does not take a mutex twice a second).
+/// atomic, so the sidecar controllers do not take a mutex twice a second).
 static HAS_GAME: AtomicBool = AtomicBool::new(false);
 /// Bumped whenever any live config changes (`configure`, `set_gpu`,
 /// `set_render_cfg`, `set_settings_open`). The sampler clones the config only
@@ -120,17 +136,21 @@ pub struct MetricsSample {
     pub gpu_power_w: Option<f32>,
     // CPU temperature from the LibreHardwareMonitor sidecar (admin + driver).
     pub cpu_temp_c: Option<u32>,
-    // PresentMon (per-process, measured) or ADLX (focused app, FPS only).
+    // PresentMon (per-process, measured) or the sidecar (fullscreen app, FPS only).
     pub fps: Option<f32>,
     pub frametime_ms: Option<f32>,
 }
 
 /// Apply overlay settings live (called on startup, on settings change, on hotkey).
-pub fn configure(enabled: bool, interval_ms: u64, fps_wanted: bool, cpu_temp_wanted: bool) {
-    OVERLAY_ENABLED.store(enabled, Ordering::Relaxed);
-    FPS_WANTED.store(fps_wanted, Ordering::Relaxed);
-    CPU_TEMP_WANTED.store(cpu_temp_wanted, Ordering::Relaxed);
-    INTERVAL_MS.store(interval_ms.clamp(200, 5000), Ordering::Relaxed);
+pub fn configure(overlay: &crate::models::OverlaySettings) {
+    OVERLAY_ENABLED.store(overlay.enabled, Ordering::Relaxed);
+    FPS_WANTED.store(overlay.show_fps || overlay.show_frametime, Ordering::Relaxed);
+    GPU_WANTED.store(
+        overlay.show_gpu || overlay.show_gpu_temp || overlay.show_vram,
+        Ordering::Relaxed,
+    );
+    CPU_TEMP_WANTED.store(overlay.show_cpu_temp, Ordering::Relaxed);
+    INTERVAL_MS.store(overlay.interval_ms.clamp(200, 5000), Ordering::Relaxed);
     bump_config();
 }
 
@@ -192,7 +212,7 @@ pub fn wake() {
     }
 }
 
-/// Set which GPU the sampler reads: "auto" | "nvml:<i>" | "adlx:<i>".
+/// Set which GPU the sampler reads: "auto" | "nvml:<i>" | "pci:<AMD PnP id fragment>".
 pub fn set_gpu(sel: String) {
     *GPU_SELECT.lock().unwrap_or_else(|e| e.into_inner()) = Some(sel);
     bump_config();
@@ -252,34 +272,117 @@ pub fn current_pid() -> u32 {
 }
 
 /// Whether PresentMon should be running: overlay on, an FPS metric enabled, and
-/// ADLX isn't already providing FPS (on AMD it is → no need for the ETW session).
+/// the sidecar isn't already providing FPS (on AMD it is → no need for the ETW session).
 pub fn want_fps() -> bool {
     sidecar_wanted(
         OVERLAY_ENABLED.load(Ordering::Relaxed),
         FPS_WANTED.load(Ordering::Relaxed)
             && FPS_SOURCE_KNOWN.load(Ordering::Relaxed)
-            && !ADLX_FPS_ACTIVE.load(Ordering::Relaxed),
+            && !SIDECAR_FPS_ACTIVE.load(Ordering::Relaxed),
         SIDECARS_SUSPENDED.load(Ordering::Relaxed),
     )
 }
 
-/// Whether ADLX supplies FPS this tick: its backend was the one sampled, and it has
-/// either produced a reading this session or is still inside the grace window.
-/// Without the grace, a first tick with no reading yet would hand FPS to
-/// PresentMon and take it back on the next one.
-fn adlx_owns_fps(adlx_sampled: bool, adlx_fps_seen: bool, session_age: Duration) -> bool {
-    adlx_sampled && (adlx_fps_seen || session_age < ADLX_FPS_GRACE)
+/// Whether the sidecar supplies FPS this tick: it is the GPU source and its last FPS
+/// reading (or, before the first one, the session start) is within the grace window.
+/// Without the grace, a first tick with no reading yet would hand FPS to PresentMon
+/// and take it back on the next one; timing from the last reading rather than the
+/// first lets PresentMon take over when AMD's counter stops mid-session.
+fn sidecar_owns_fps(
+    sidecar_sampled: bool,
+    since_last_fps: Option<Duration>,
+    session_age: Duration,
+) -> bool {
+    sidecar_sampled && since_last_fps.unwrap_or(session_age) < SIDECAR_FPS_GRACE
 }
 
 /// Publish the FPS source decision, waking the PresentMon controller only when it
 /// changed. Both atomics are written once per tick, never cleared and re-set inside
 /// one, so the controller cannot observe a transient "PresentMon wanted".
-fn publish_fps_source(known: bool, adlx: bool) {
-    let was_adlx = ADLX_FPS_ACTIVE.swap(adlx, Ordering::Relaxed);
+fn publish_fps_source(known: bool, sidecar: bool) {
+    let was_sidecar = SIDECAR_FPS_ACTIVE.swap(sidecar, Ordering::Relaxed);
     let was_known = FPS_SOURCE_KNOWN.swap(known, Ordering::Relaxed);
-    if was_adlx != adlx || was_known != known {
+    if was_sidecar != sidecar || was_known != known {
         wake_sidecars();
     }
+}
+
+/// Where the sampler reads GPU telemetry from.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum GpuRoute<'a> {
+    /// NVML device index.
+    Nvml(u32),
+    /// The sidecar, with its `--gpu` selector ("auto" or an AMD PnP id fragment).
+    Sidecar(&'a str),
+    None,
+}
+
+/// Resolve the saved GPU choice against the backends present on this machine.
+///
+/// A choice that no longer applies (card removed, driver gone, or a legacy `adlx:<i>`
+/// value) falls back to "auto": NVIDIA first, then AMD. An AMD choice must be one of
+/// `amd_keys` (`system::amd_gpu_keys`, the cards present), which also keeps anything
+/// else in a hand-edited settings file off the sidecar's command line.
+fn gpu_route<'a>(sel: &'a str, nvml_present: bool, amd_keys: &[String]) -> GpuRoute<'a> {
+    if nvml_present {
+        if let Some(index) = sel.strip_prefix("nvml:").and_then(|i| i.parse().ok()) {
+            return GpuRoute::Nvml(index);
+        }
+    }
+    if amd_keys.iter().any(|key| key == sel) {
+        if let Some(fragment) = sel.strip_prefix("pci:") {
+            return GpuRoute::Sidecar(fragment);
+        }
+    }
+    if nvml_present {
+        GpuRoute::Nvml(0)
+    } else if !amd_keys.is_empty() {
+        GpuRoute::Sidecar("auto")
+    } else {
+        GpuRoute::None
+    }
+}
+
+/// Publish the GPU source decision for the sidecar: whether it is made (`known`) and
+/// the selector (None = the sidecar is not the GPU source). Wakes its controller only
+/// when something changed: this runs on every drawn tick. The selector is written
+/// before `known`, so a controller that sees `known` also sees this game's selector.
+fn publish_sidecar_gpu(known: bool, selector: Option<&str>) {
+    let mut current = SIDECAR_GPU.lock().unwrap_or_else(|e| e.into_inner());
+    let changed = current.as_deref() != selector;
+    if changed {
+        *current = selector.map(str::to_owned);
+    }
+    drop(current);
+    let was_known = GPU_ROUTE_KNOWN.swap(known, Ordering::Relaxed);
+    if changed || was_known != known {
+        wake_sidecars();
+    }
+}
+
+/// Whether the overlay could need the sidecar as its GPU source: overlay on and a GPU
+/// metric or FPS shown.
+fn sidecar_gpu_wanted() -> bool {
+    sidecar_wanted(
+        OVERLAY_ENABLED.load(Ordering::Relaxed),
+        GPU_WANTED.load(Ordering::Relaxed) || FPS_WANTED.load(Ordering::Relaxed),
+        SIDECARS_SUSPENDED.load(Ordering::Relaxed),
+    )
+}
+
+/// The `--gpu` selector the sidecar should run with, or None when it should not read
+/// a GPU: overlay off, no GPU metric or FPS shown, no game, or NVML is the source.
+pub fn sidecar_gpu() -> Option<String> {
+    if !(sidecar_gpu_wanted() && has_game()) {
+        return None;
+    }
+    SIDECAR_GPU.lock().unwrap_or_else(|e| e.into_inner()).clone()
+}
+
+/// Whether a game is running that may need the sidecar as its GPU source, but the
+/// sampler has not picked the source yet (see `GPU_ROUTE_KNOWN`).
+pub fn sidecar_gpu_pending() -> bool {
+    sidecar_gpu_wanted() && has_game() && !GPU_ROUTE_KNOWN.load(Ordering::Relaxed)
 }
 
 /// Whether the CPU-temp sidecar should run: overlay on and CPU temp enabled.
@@ -337,11 +440,11 @@ const BACKEND_IDLE_SECS: u64 = 60;
 
 /// One initialization attempt per backend release cycle.
 ///
-/// A failed `Nvml::init()` / `amd::init()` used to be retried on every drawn tick:
-/// on an AMD-only machine that was a `LoadLibrary("nvml.dll")` probe per frame of
-/// the HUD, and an `adlx_init` per tick on an NVIDIA-only one. The attempt is
-/// remembered until the backends are released after `BACKEND_IDLE_SECS` idle, so a
-/// driver installed or restarted mid-session is picked up on the next game.
+/// A failed `Nvml::init()` used to be retried on every drawn tick: on an AMD-only
+/// machine that was a `LoadLibrary("nvml.dll")` probe per frame of the HUD. The
+/// attempt (and the AMD adapter probe) is remembered until the backends are released
+/// after `BACKEND_IDLE_SECS` idle, so a driver installed or restarted mid-session is
+/// picked up on the next game.
 #[derive(Debug, Default)]
 struct InitOnce {
     tried: bool,
@@ -445,14 +548,14 @@ pub fn monitor_geometry(hwnd: isize) -> MonitorGeometry {
     }
 }
 
-/// Put an ADLX FPS reading on the sample.
+/// Put a sidecar FPS reading on the sample.
 ///
-/// ADLX reports an **integer** FPS for the focused application, so `1000 / fps` is
-/// not a frametime measurement: at 143 fps it cannot tell 6.9 ms from 7.0 ms and it
-/// hides every stutter inside the second. Showing it as `Frame x.x ms` next to
-/// PresentMon-grade values presented a derived number as a measured one, so the
-/// frametime row is left empty on this path.
-fn apply_adlx_fps(sample: &mut MetricsSample, fps: f32) {
+/// The sidecar reports an **integer** FPS for the fullscreen application, so
+/// `1000 / fps` is not a frametime measurement: at 143 fps it cannot tell 6.9 ms from
+/// 7.0 ms and it hides every stutter inside the second. Showing it as `Frame x.x ms`
+/// next to PresentMon-grade values presented a derived number as a measured one, so
+/// the frametime row is left empty on this path.
+fn apply_sidecar_fps(sample: &mut MetricsSample, fps: f32) {
     sample.fps = Some(fps);
     sample.frametime_ms = None;
 }
@@ -472,12 +575,13 @@ pub fn start(app: AppHandle) {
         }
         // GPU telemetry backends are created on the first tick that actually
         // draws and released after `BACKEND_IDLE_SECS` without a game: loading
-        // nvml.dll / amdadlx64.dll at startup cost every user memory (and a
-        // driver DLL) even with the overlay switched off.
+        // nvml.dll at startup cost every user memory (and a driver DLL) even with
+        // the overlay switched off. AMD GPUs are read by the sidecar; here we only
+        // remember which ones there are.
         let mut nvml: Option<Nvml> = None;
         let mut nvml_init = InitOnce::default();
-        #[cfg(windows)]
-        let mut amd = false;
+        #[cfg_attr(not(windows), allow(unused_mut))]
+        let mut amd_keys: Vec<String> = Vec::new();
         #[cfg(windows)]
         let mut amd_init = InitOnce::default();
         #[cfg(windows)]
@@ -511,9 +615,6 @@ pub fn start(app: AppHandle) {
         let mut perf_hidden = false;
         #[cfg(windows)]
         let mut published_health: u8 = 0;
-        // Last GPU selection applied to ADLX, so we only re-select when it changes.
-        #[cfg(windows)]
-        let mut applied_gpu = String::new();
         // Deep diagnostics (opt-in via METEOR_OVERLAY_DEBUG). Tracks the last gating
         // decision so we only log on change, plus a heartbeat timer.
         #[cfg(windows)]
@@ -526,9 +627,9 @@ pub fn start(app: AppHandle) {
         let mut cfg_gen: u64 = u64::MAX;
         let mut cfg: Option<crate::models::OverlaySettings> = None;
         let mut sel = String::from("auto");
-        // FPS source state for the running game (see `adlx_owns_fps`).
+        // FPS source state for the running game (see `sidecar_owns_fps`).
         let mut fps_session_start: Option<Instant> = None;
-        let mut adlx_fps_seen = false;
+        let mut sidecar_fps_at: Option<Instant> = None;
 
         loop {
             // Idle (overlay off, no game, or the settings screen open) → wait with
@@ -595,12 +696,13 @@ pub fn start(app: AppHandle) {
                 }
             }
             if game.is_none() {
-                // The game is gone (not just alt-tabbed): decide the FPS source
-                // afresh for the next one.
+                // The game is gone (not just alt-tabbed): decide the FPS and GPU
+                // sources afresh for the next one.
                 if !HAS_GAME.load(Ordering::Relaxed) {
                     fps_session_start = None;
-                    adlx_fps_seen = false;
+                    sidecar_fps_at = None;
                     publish_fps_source(false, false);
+                    publish_sidecar_gpu(false, None);
                 }
                 // Re-prime on the way back so the first CPU% after a pause is not
                 // averaged over the whole time the sampler was parked.
@@ -623,14 +725,8 @@ pub fn start(app: AppHandle) {
                 {
                     let idle_for = backends_idle_since.get_or_insert_with(Instant::now);
                     if idle_for.elapsed() >= Duration::from_secs(BACKEND_IDLE_SECS) {
-                        if nvml.is_some() {
-                            nvml = None;
-                        }
-                        if amd {
-                            crate::amd::shutdown();
-                            amd = false;
-                            applied_gpu.clear();
-                        }
+                        nvml = None;
+                        amd_keys = Vec::new();
                         nvml_init.reset();
                         amd_init.reset();
                         overlay::teardown();
@@ -657,17 +753,16 @@ pub fn start(app: AppHandle) {
             #[cfg(windows)]
             {
                 backends_idle_since = None;
-                if nvml.is_none() && nvml_init.should_try() {
-                    nvml = Nvml::init().ok();
-                }
-                if !amd && amd_init.should_try() {
-                    amd = crate::amd::init();
-                    applied_gpu.clear();
+                if amd_init.should_try() {
+                    amd_keys = crate::system::amd_gpu_keys();
                 }
             }
-            #[cfg(not(windows))]
             if nvml.is_none() && nvml_init.should_try() {
-                nvml = Nvml::init().ok();
+                // A driver without a device (GPU removed, eGPU unplugged) is no
+                // NVIDIA: "auto" must fall through to AMD.
+                nvml = Nvml::init()
+                    .ok()
+                    .filter(|n| n.device_count().is_ok_and(|count| count > 0));
             }
 
             // CPU + RAM. The first reading after a (re)prime is `None` and the HUD
@@ -682,7 +777,6 @@ pub fn start(app: AppHandle) {
             #[cfg(not(windows))]
             let (cpu_usage, ram_used_mb, ram_total_mb) = (None::<f32>, 0u64, 0u64);
 
-            // GPU (NVIDIA via NVML), all best-effort.
             let mut sample = MetricsSample {
                 game,
                 cpu_usage,
@@ -698,68 +792,48 @@ pub fn start(app: AppHandle) {
                 fps: None,
                 frametime_ms: None,
             };
-            // CPU temperature from the LibreHardwareMonitor sidecar (None unless
-            // it's running with admin + a loadable driver).
-            sample.cpu_temp_c = crate::cputemp::current();
+            // The LibreHardwareMonitor sidecar's latest reading. CPU temperature is
+            // None unless it runs with admin + a loadable driver.
+            let reading = crate::cputemp::current();
+            sample.cpu_temp_c = reading.and_then(|r| r.cpu_temp_c);
 
             // FPS / frametime from the PresentMon controller (None unless it's
-            // running with admin + the bundled binary). The ADLX path below may
+            // running with admin + the bundled binary). The sidecar path below may
             // override this with AMD's native FPS.
             let (fps, frametime) = crate::presentmon::current();
             sample.fps = fps;
             sample.frametime_ms = frametime;
 
-            // Which GPU to read: "auto" | "nvml:<i>" | "adlx:<i>" (see set_gpu).
-            // `sel` is refreshed at the top of the loop only when the config
-            // generation moved, so a steady tick allocates nothing here.
-            let nvml_idx = sel.strip_prefix("nvml:").and_then(|s| s.parse::<u32>().ok());
-            #[cfg(windows)]
-            let want_adlx = sel.starts_with("adlx:");
-
-            // Apply a changed ADLX selection (only when it changes — re-selecting
-            // every tick is wasteful). "auto" on an AMD-only box prefers discrete.
-            #[cfg(windows)]
-            if amd && sel.as_str() != applied_gpu.as_str() {
-                if let Some(i) = sel.strip_prefix("adlx:").and_then(|s| s.parse::<usize>().ok()) {
-                    crate::amd::select(i);
-                } else if nvml.is_none() {
-                    let gpus = crate::amd::list_gpus();
-                    let idx = gpus.iter().position(|g| g.kind == "Discreta").unwrap_or(0);
-                    crate::amd::select(idx);
-                }
-                applied_gpu = sel.clone();
-            }
-
-            // Sample the chosen backend. ADLX wins when explicitly picked or when
-            // there's no NVIDIA; otherwise NVML (default index 0, or the picked one).
-            let mut gpu_filled = false;
-            #[cfg_attr(not(windows), allow(unused_mut))]
-            let mut adlx_sampled = false;
-            #[cfg(windows)]
-            let fps_wanted = FPS_WANTED.load(Ordering::Relaxed);
-            #[cfg(windows)]
-            if amd && (want_adlx || nvml.is_none()) {
-                if let Some(g) = crate::amd::sample(fps_wanted) {
-                    sample.gpu_usage = g.usage;
-                    sample.gpu_temp_c = g.temp_c;
-                    sample.vram_used_mb = g.vram_used_mb;
-                    sample.vram_total_mb = g.vram_total_mb;
-                    sample.gpu_clock_mhz = g.clock_mhz;
-                    sample.gpu_power_w = g.power_w;
-                    // ADLX reports FPS of the focused app natively (no PID
-                    // targeting / admin); prefer it over PresentMon when present and
-                    // flag it so the PresentMon controller stays idle (no ETW session).
-                    if let Some(f) = g.fps {
-                        apply_adlx_fps(&mut sample, f);
-                        adlx_fps_seen = true;
+            // Which GPU to read (see `gpu_route`). `sel` is refreshed at the top of
+            // the loop only when the config generation moved.
+            let route = gpu_route(&sel, nvml.is_some(), &amd_keys);
+            let sidecar_sampled = matches!(route, GpuRoute::Sidecar(_));
+            publish_sidecar_gpu(true, match route {
+                GpuRoute::Sidecar(selector) => Some(selector),
+                _ => None,
+            });
+            match route {
+                // Right after a route change this can still be the previous
+                // sidecar's reading, for at most the second it takes to restart.
+                GpuRoute::Sidecar(_) => {
+                    if let Some(r) = reading {
+                        sample.gpu_usage = r.gpu_usage;
+                        sample.gpu_temp_c = r.gpu_temp_c;
+                        sample.vram_used_mb = r.vram_used_mb;
+                        sample.vram_total_mb = r.vram_total_mb;
+                        sample.gpu_clock_mhz = r.gpu_clock_mhz;
+                        sample.gpu_power_w = r.gpu_power_w;
+                        // AMD's FPS of the fullscreen app (no PID targeting, no
+                        // admin): preferred over PresentMon when present, and it
+                        // keeps the PresentMon controller idle (no ETW session).
+                        if let Some(f) = r.fps {
+                            apply_sidecar_fps(&mut sample, f);
+                            sidecar_fps_at = Some(Instant::now());
+                        }
                     }
-                    adlx_sampled = true;
-                    gpu_filled = true;
                 }
-            }
-            if !gpu_filled {
-                if let Some(nvml) = &nvml {
-                    if let Ok(dev) = nvml.device_by_index(nvml_idx.unwrap_or(0)) {
+                GpuRoute::Nvml(index) => {
+                    if let Some(dev) = nvml.as_ref().and_then(|n| n.device_by_index(index).ok()) {
                         if let Ok(u) = dev.utilization_rates() {
                             sample.gpu_usage = Some(u.gpu);
                         }
@@ -778,9 +852,15 @@ pub fn start(app: AppHandle) {
                         }
                     }
                 }
+                GpuRoute::None => {}
             }
             let session_age = fps_session_start.get_or_insert_with(Instant::now).elapsed();
-            publish_fps_source(true, adlx_owns_fps(adlx_sampled, adlx_fps_seen, session_age));
+            let sidecar_fps = sidecar_owns_fps(
+                sidecar_sampled,
+                sidecar_fps_at.map(|at| at.elapsed()),
+                session_age,
+            );
+            publish_fps_source(true, sidecar_fps);
 
             // Draw the native HUD via the overlay facade: a content-sized window backed
             // by a DirectComposition flip swapchain (MPO-friendly → the game keeps its
@@ -884,17 +964,65 @@ mod tests {
     use super::*;
 
     #[test]
-    fn adlx_keeps_fps_through_its_first_ticks_so_presentmon_is_not_started_and_killed() {
-        // Regression (MT7): the first AMD tick had no ADLX reading yet, so PresentMon
+    fn the_sidecar_keeps_fps_through_its_first_ticks_so_presentmon_is_not_started_and_killed() {
+        // Regression (MT7): the first AMD tick had no FPS reading yet, so PresentMon
         // was spawned (ETW session) and torn down one tick later on every launch.
         let early = Duration::from_millis(500);
-        assert!(adlx_owns_fps(true, false, early));
-        assert!(adlx_owns_fps(true, true, Duration::from_secs(60)));
-        // A driver without the FPS counter hands over after the grace window.
-        assert!(!adlx_owns_fps(true, false, ADLX_FPS_GRACE));
-        // NVML sampled (ADLX not the backend): always PresentMon.
-        assert!(!adlx_owns_fps(false, false, early));
-        assert!(!adlx_owns_fps(false, true, early));
+        assert!(sidecar_owns_fps(true, None, early));
+        // No FPS reading (borderless game, driver without the counter): hands over
+        // after the grace window.
+        assert!(!sidecar_owns_fps(true, None, SIDECAR_FPS_GRACE));
+        // NVML sampled (sidecar not the GPU source): always PresentMon.
+        assert!(!sidecar_owns_fps(false, None, early));
+        assert!(!sidecar_owns_fps(false, Some(Duration::ZERO), early));
+    }
+
+    #[test]
+    fn presentmon_takes_over_when_the_sidecar_fps_stops_mid_session() {
+        // Regression: a game that left exclusive fullscreen stopped AMD's counter, but
+        // one earlier reading kept the FPS row on the sidecar, empty, all session.
+        let late = Duration::from_secs(600);
+        assert!(sidecar_owns_fps(true, Some(Duration::from_secs(1)), late));
+        assert!(!sidecar_owns_fps(true, Some(SIDECAR_FPS_GRACE), late));
+        // And the sidecar gets it back as soon as its readings return.
+        assert!(sidecar_owns_fps(true, Some(Duration::ZERO), late));
+    }
+
+    #[test]
+    fn the_gpu_choice_falls_back_to_what_this_machine_has() {
+        const RX: &str = "pci:VEN_1002&DEV_7550&SUBSYS_88111EAE&REV_C0";
+        const IGPU: &str = "pci:VEN_1002&DEV_13C0&SUBSYS_88771043&REV_C9";
+        let rx = &RX["pci:".len()..];
+        let both = [RX.to_string(), IGPU.to_string()];
+        let only_igpu = [IGPU.to_string()];
+        // Auto: NVIDIA first, then AMD.
+        assert_eq!(gpu_route("auto", true, &both), GpuRoute::Nvml(0));
+        assert_eq!(gpu_route("auto", false, &both), GpuRoute::Sidecar("auto"));
+        assert_eq!(gpu_route("auto", false, &[]), GpuRoute::None);
+        // An explicit choice wins while its card is there.
+        assert_eq!(gpu_route("nvml:1", true, &both), GpuRoute::Nvml(1));
+        assert_eq!(gpu_route(RX, true, &both), GpuRoute::Sidecar(rx));
+        // Otherwise it behaves as auto.
+        assert_eq!(gpu_route("nvml:1", false, &both), GpuRoute::Sidecar("auto"));
+        assert_eq!(gpu_route(RX, true, &[]), GpuRoute::Nvml(0));
+        // Regression: a saved AMD card that was removed, while another AMD GPU stays,
+        // was still passed to the sidecar, which matched nothing.
+        assert_eq!(gpu_route(RX, false, &only_igpu), GpuRoute::Sidecar("auto"));
+        // Settings saved by the ADLX build.
+        assert_eq!(gpu_route("adlx:0", false, &both), GpuRoute::Sidecar("auto"));
+    }
+
+    #[test]
+    fn only_a_present_amd_card_reaches_the_sidecar_command_line() {
+        let keys = ["pci:VEN_1002&DEV_7550&SUBSYS_88111EAE&REV_C0".to_string()];
+        for sel in [
+            "pci:VEN_1002\" --cpu",
+            "pci:VEN_1002&DEV_7550",
+            "pci:VEN_1002&DEV_7550&SUBSYS_88111EAE&REV_C0 --cpu",
+            "VEN_1002&DEV_7550&SUBSYS_88111EAE&REV_C0",
+        ] {
+            assert_eq!(gpu_route(sel, false, &keys), GpuRoute::Sidecar("auto"), "{sel}");
+        }
     }
 
     #[test]
@@ -938,12 +1066,12 @@ mod tests {
     }
 
     #[test]
-    fn adlx_fps_does_not_invent_a_frametime() {
+    fn sidecar_fps_does_not_invent_a_frametime() {
         // Regression (MT5): `1000 / integer fps` was drawn as a measured frametime,
         // and it also overwrote a stale PresentMon frametime from another source.
         let mut s = empty_sample();
         s.frametime_ms = Some(4.2);
-        apply_adlx_fps(&mut s, 143.0);
+        apply_sidecar_fps(&mut s, 143.0);
         assert_eq!(s.fps, Some(143.0));
         assert_eq!(s.frametime_ms, None);
     }
@@ -961,7 +1089,7 @@ mod tests {
 
     #[test]
     fn a_failed_backend_init_is_not_retried_every_tick() {
-        // Regression (W4): a missing nvml.dll / ADLX was re-probed on every drawn tick.
+        // Regression (W4): a missing nvml.dll was re-probed on every drawn tick.
         let mut init = InitOnce::default();
         assert!(init.should_try());
         for _ in 0..100 {

@@ -201,7 +201,7 @@ pub struct OverlaySettings {
     pub show_cpu: bool,
     #[serde(default = "yes")]
     pub show_ram: bool,
-    /// Which GPU to sample: "auto" | "nvml:<i>" | "adlx:<i>".
+    /// Which GPU to sample: "auto" | "nvml:<i>" | "pci:<AMD PnP id fragment>".
     #[serde(default = "default_overlay_gpu")]
     pub gpu: String,
     /// Color of metric labels ("FPS", "GPU"…). CSS hex color.
@@ -248,6 +248,16 @@ impl Default for OverlaySettings {
             bg_opacity: default_bg_opacity(),
             font_size: default_font_size_key(),
             mpo_mode: default_mpo_mode(),
+        }
+    }
+}
+
+impl OverlaySettings {
+    /// Reset a GPU choice saved by the ADLX build (`adlx:<i>`). Those indices meant
+    /// nothing outside ADLX and the picker has no such option any more.
+    pub fn migrate_legacy_gpu(&mut self) {
+        if self.gpu.starts_with("adlx:") {
+            self.gpu = default_overlay_gpu();
         }
     }
 }
@@ -332,6 +342,18 @@ mod tests {
             default_shortcut_overlay_settings(),
         ] {
             assert!(combo.contains('+'), "{combo} has no modifier");
+        }
+    }
+
+    #[test]
+    fn an_adlx_gpu_choice_is_reset_to_auto() {
+        let mut o = OverlaySettings { gpu: "adlx:1".into(), ..Default::default() };
+        o.migrate_legacy_gpu();
+        assert_eq!(o.gpu, "auto");
+        for kept in ["nvml:1", "pci:VEN_1002&DEV_7550&SUBSYS_88111EAE&REV_C0"] {
+            let mut o = OverlaySettings { gpu: kept.into(), ..Default::default() };
+            o.migrate_legacy_gpu();
+            assert_eq!(o.gpu, kept);
         }
     }
 

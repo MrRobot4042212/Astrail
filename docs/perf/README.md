@@ -29,7 +29,7 @@ powershell -File docs\perf\capture.ps1 -Label fase3 -Minutes 10 -Compare docs\pe
 | `context_switches_s` | Cambios de contexto/s de los hilos de `meteor` | Cuántas veces despierta: el watcher, el sampler y el controlador de cputemp tenían temporizadores fijos |
 | `meteor_private_mb` / `webview_workingset_mb` | Memoria privada del proceso y del árbol WebView2 | El WebView2 sigue residente al ocultar la ventana |
 | `files_written` | Ficheros de `%APPDATA%\com.alfonso.meteor` cuya fecha cambió durante la ventana | En reposo debe ser **0**; el watcher escribía `active_sessions.json` cada 5 s |
-| `nvml_loaded` / `adlx_loaded` | Si están cargadas las DLL de GPU | Se cargaban al arrancar aunque el overlay estuviese apagado |
+| `nvml_loaded` / `sidecar_running` | Si está cargada la DLL de NVML y si corre el sidecar `cputemp` | Las métricas de GPU se cargaban al arrancar aunque el overlay estuviese apagado |
 | `caches.covers_mb` | Tamaño de la caché de portadas | Crece sin límite hasta la Fase 4 |
 
 ## Medidas que no captura el script

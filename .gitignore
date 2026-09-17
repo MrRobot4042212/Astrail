@@ -16,7 +16,7 @@ next-env.d.ts
 # rust / tauri
 /src-tauri/target
 # Metrics binaries: large/third-party, produced or downloaded in CI (see release.yml),
-# not versioned. The sidecar C# source and the ADLX SDK *are* committed.
+# not versioned. The sidecar C# source *is* committed.
 /src-tauri/binaries/*.exe
 # Local secrets: IGDB credentials, updater signing key. Only the example ships.
 .env

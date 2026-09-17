@@ -262,7 +262,7 @@ export const en = {
     // Metrics
     mDesc: 'Performance overlay over the game and the GPU it measures.',
     mAdminTitle: 'Administrator permissions',
-    mAdminBody: '<0>CPU temperature</0> and <1>FPS on NVIDIA cards</1> need Meteor to run as administrator (they load a system driver/session). The rest of the metrics (GPU, FPS on AMD, CPU/RAM) work without admin.',
+    mAdminBody: '<0>CPU temperature</0> and <1>FPS</1> need Meteor to run as administrator (they load a system driver/session). The rest of the metrics (GPU, CPU/RAM) work without admin.',
     mRestartAdmin: 'Restart as administrator',
     mRunningAdmin: '✓ Running as administrator.',
     mOverlayTitle: 'Metrics overlay (in-game)',
@@ -297,6 +297,8 @@ export const en = {
     sMotherboard: 'Motherboard',
     sGpus: 'Graphics cards',
     sNoMetrics: 'no metrics',
+    sGpuIntegrated: 'Integrated',
+    sGpuDiscrete: 'Discrete',
     sDisplays: 'Displays',
     sPrimary: 'primary',
     sStorage: 'Storage',

@@ -11,6 +11,19 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
 ## [No publicado] — Trabajo en curso
 
 ### Cambiado
+- **Las métricas de GPU AMD ya no usan el SDK de ADLX.** El sidecar `cputemp`
+  (LibreHardwareMonitor) lee uso, temperatura, potencia, reloj, VRAM y FPS de la
+  GPU AMD por ADL, la librería que instala el propio driver, sin permisos de
+  administrador. Se retiran el SDK de ADLX, su shim en C++ y la dependencia
+  `cc`, cuya licencia no permitía publicar Meteor como software libre.
+  - **Los FPS en AMD pasan a necesitar administrador** (PresentMon), igual que
+    en NVIDIA. ADL solo da FPS de juegos en pantalla completa exclusiva y no los
+    da en juegos actuales en ventana sin bordes; cuando los da, se usan.
+  - El panel lista todas las GPU por DXGI (también Intel, sin métricas) y
+    distingue integrada de dedicada. Las AMD se eligen por su id de PnP, así que
+    una GPU elegida en una versión anterior (`adlx:<i>`) vuelve a "Automática".
+  - El sidecar se arranca solo con un juego abierto y el overlay pidiendo GPU o
+    FPS, y actualiza una vez por segundo.
 - **Las carátulas pegadas como URL se descargan a disco.** Al poner una URL como
   carátula (en el diálogo de carátula o al añadir una app manual) Meteor la
   descarga a `user_covers/` y guarda la ruta local; las URLs guardadas por

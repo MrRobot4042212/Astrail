@@ -2150,7 +2150,6 @@ dependencies = [
 name = "meteor"
 version = "0.1.3"
 dependencies = [
- "cc",
  "discord-rich-presence",
  "nvml-wrapper",
  "pelite",

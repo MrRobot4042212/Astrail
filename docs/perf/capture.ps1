@@ -15,8 +15,8 @@
     * Memory     — Private Bytes of meteor.exe and of the WebView2 process tree
     * Disk       — files under %APPDATA%\com.alfonso.meteor whose mtime moved,
                    which is the honest measure of "writes while doing nothing"
-    * Modules    — whether nvml.dll / amdadlx64.dll are loaded (they should not
-                   be until a game runs, from phase 3 on)
+    * Backends   — whether nvml.dll is loaded and the cputemp sidecar is running
+                   (neither should be until a game runs, from phase 3 on)
 
 .EXAMPLE
   # 1. Start Meteor, close the window so it sits in the tray, then:
@@ -150,7 +150,7 @@ $result = [ordered]@{
         files_written       = @($touched | Sort-Object -Unique)
         files_written_count = @($touched).Count
         nvml_loaded         = [bool]($modules -contains 'nvml.dll')
-        adlx_loaded         = [bool]($modules -contains 'amdadlx64.dll')
+        sidecar_running     = [bool](Get-Process cputemp -ErrorAction SilentlyContinue)
     }
     caches           = [ordered]@{
         covers_mb    = if (Test-Path "$dataDir\covers") { [math]::Round((Get-ChildItem "$dataDir\covers" -File | Measure-Object Length -Sum).Sum / 1MB, 1) } else { 0 }

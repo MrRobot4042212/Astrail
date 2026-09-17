@@ -16,9 +16,7 @@ crate-type = ["rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
-# Compiles the C++ ADLX shim (AMD GPU telemetry) on Windows. See build.rs.
 [target.'cfg(windows)'.build-dependencies]
-cc = "1"
 # Embeds the SHA-256 of the bundled sidecars (see build.rs, sidecar_integrity.rs).
 sha2 = "0.10"
 

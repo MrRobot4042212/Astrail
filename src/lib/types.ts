@@ -67,7 +67,7 @@ export interface OverlaySettings {
   show_cpu: boolean;
   show_cpu_temp: boolean;
   show_ram: boolean;
-  /** Which GPU to sample: "auto" | "nvml:<i>" | "adlx:<i>". */
+  /** Which GPU to sample: "auto" | "nvml:<i>" | "pci:<AMD PnP id fragment>". */
   gpu: string;
   /** CSS hex color for metric labels ("FPS", "GPU"…). */
   label_color: string;
@@ -132,7 +132,8 @@ export interface GpuInfo {
   name: string;
   vendor: string;
   vram_mb: number;
-  kind: string;
+  /** Empty when Windows could not tell. */
+  kind: 'integrated' | 'discrete' | '';
   key: string;
 }
 
@@ -180,9 +181,9 @@ export interface MetricsSample {
   gpu_power_w?: number | null;
   /** CPU temperature from the LibreHardwareMonitor sidecar (admin + driver). */
   cpu_temp_c?: number | null;
-  /** PresentMon (per swapchain) or ADLX. Null when no fresh frame arrived. */
+  /** PresentMon (per swapchain) or the cputemp sidecar (AMD, fullscreen). Null when no fresh frame arrived. */
   fps?: number | null;
-  /** PresentMon only; ADLX reports an integer FPS, so no frametime is derived from it. */
+  /** PresentMon only; the sidecar reports an integer FPS, so no frametime is derived from it. */
   frametime_ms?: number | null;
 }
 
