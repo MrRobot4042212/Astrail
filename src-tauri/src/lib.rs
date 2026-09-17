@@ -729,6 +729,12 @@ fn set_app_settings(
     Ok(())
 }
 
+/// Parse a stored combination into a global shortcut, refusing unsafe ones.
+///
+/// `RegisterHotKey` takes the key away from every application on the machine, games
+/// included. The settings recorder used to store whatever key it saw, including the
+/// Escape pressed to *cancel* recording, and this parser accepted it, so a bare
+/// `Escape` became a system-wide hotkey. See `is_safe_global_shortcut`.
 fn parse_shortcut(s: &str) -> Option<tauri_plugin_global_shortcut::Shortcut> {
     let mut s = s.to_string();
     if let Some(idx) = s.rfind('+') {
@@ -742,7 +748,25 @@ fn parse_shortcut(s: &str) -> Option<tauri_plugin_global_shortcut::Shortcut> {
             }
         }
     }
-    s.parse().ok()
+    s.parse().ok().filter(is_safe_global_shortcut)
+}
+
+/// A global shortcut must carry Ctrl, Alt or Win. Shift alone is only accepted with
+/// a function key: `Shift+A` would swallow capital letters everywhere, while
+/// `Shift+F5` is not typing.
+fn is_safe_global_shortcut(sc: &tauri_plugin_global_shortcut::Shortcut) -> bool {
+    use tauri_plugin_global_shortcut::{Code, Modifiers};
+    if sc.mods.intersects(Modifiers::CONTROL | Modifiers::ALT | Modifiers::SUPER) {
+        return true;
+    }
+    sc.mods.contains(Modifiers::SHIFT)
+        && matches!(
+            sc.key,
+            Code::F1 | Code::F2 | Code::F3 | Code::F4 | Code::F5 | Code::F6 | Code::F7 | Code::F8
+                | Code::F9 | Code::F10 | Code::F11 | Code::F12 | Code::F13 | Code::F14 | Code::F15
+                | Code::F16 | Code::F17 | Code::F18 | Code::F19 | Code::F20 | Code::F21 | Code::F22
+                | Code::F23 | Code::F24
+        )
 }
 
 fn register_shortcuts(app: &AppHandle, shortcuts: &crate::models::ShortcutsSettings) {
@@ -762,7 +786,9 @@ fn register_shortcuts(app: &AppHandle, shortcuts: &crate::models::ShortcutsSetti
             continue;
         }
         let Some(parsed) = parse_shortcut(combo) else {
-            eprintln!("[shortcuts] {what}: '{combo}' is not a valid combination; not registered");
+            eprintln!(
+                "[shortcuts] {what}: '{combo}' is not a valid combination or lacks a Ctrl/Alt/Win modifier; not registered"
+            );
             continue;
         };
         if let Err(e) = app.global_shortcut().register(parsed) {
@@ -1240,4 +1266,42 @@ pub fn run() {
                 }
             }
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_escape_that_cancels_recording_is_never_a_global_hotkey() {
+        // Regression (FE1): the recorder stored "ESCAPE" and it was registered as a
+        // bare, machine-wide Escape hotkey.
+        assert!(parse_shortcut("ESCAPE").is_none());
+        assert!(parse_shortcut("Escape").is_none());
+    }
+
+    #[test]
+    fn bare_keys_and_shift_letters_are_refused() {
+        assert!(parse_shortcut("F9").is_none());
+        assert!(parse_shortcut("A").is_none());
+        assert!(parse_shortcut("Shift+A").is_none());
+        assert!(parse_shortcut("Space").is_none());
+    }
+
+    #[test]
+    fn modified_combinations_are_accepted() {
+        assert!(parse_shortcut("Ctrl+Shift+F9").is_some());
+        assert!(parse_shortcut("CommandOrControl+Shift+O").is_some());
+        assert!(parse_shortcut("Alt+5").is_some());
+        assert!(parse_shortcut("Super+Space").is_some());
+        assert!(parse_shortcut("Shift+F5").is_some());
+    }
+
+    #[test]
+    fn the_shipped_defaults_are_accepted() {
+        let d = crate::models::ShortcutsSettings::default();
+        for combo in [&d.spotlight, &d.overlay_toggle, &d.overlay_settings] {
+            assert!(parse_shortcut(combo).is_some(), "{combo}");
+        }
+    }
 }

@@ -285,6 +285,7 @@ export const en = {
     mPreviewNote: 'This is how the overlay will look with the current settings. Sample data.',
     mPreviewWord: 'Preview',
     mRecording: 'Press the key combination...',
+    mShortcutNeedsModifier: 'Include Ctrl, Alt or Win (Esc to cancel)',
     // System information
     sDesc: 'Summary of the hardware detected on this PC.',
     sSummary: 'Summary',

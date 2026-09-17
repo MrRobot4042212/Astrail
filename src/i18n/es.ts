@@ -284,6 +284,7 @@ export const es = {
     mPreviewNote: 'Así se verá el overlay con la configuración actual. Datos de ejemplo.',
     mPreviewWord: 'Previsualización',
     mRecording: 'Presiona la combinación de teclas...',
+    mShortcutNeedsModifier: 'Incluye Ctrl, Alt o Win (Esc para cancelar)',
     // Información del sistema
     sDesc: 'Resumen del hardware detectado en este equipo.',
     sSummary: 'Resumen',

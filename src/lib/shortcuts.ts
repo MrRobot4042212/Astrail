@@ -34,3 +34,43 @@ export function formatShortcut(shortcut: string | undefined | null): string[] {
     return part;
   });
 }
+
+/** The subset of a `KeyboardEvent` the recorder reads (plain object in tests). */
+export type ShortcutKey = Pick<KeyboardEvent, 'key' | 'code' | 'ctrlKey' | 'shiftKey' | 'altKey' | 'metaKey'>;
+
+export type RecordResult =
+  | { kind: 'cancel' }
+  | { kind: 'pending' }
+  | { kind: 'needs-modifier' }
+  | { kind: 'combo'; value: string };
+
+/**
+ * Interpret one keydown while recording a global shortcut.
+ *
+ * Escape is checked first and always cancels: it used to fall into the generic
+ * branch and be saved as `ESCAPE`, which the backend then registered as a bare,
+ * machine-wide hotkey. A combination must carry Ctrl, Alt or Win (Shift alone only
+ * with a function key), mirroring `is_safe_global_shortcut` in `src-tauri/src/lib.rs`.
+ */
+export function recordShortcut(e: ShortcutKey): RecordResult {
+  if (e.key === 'Escape') return { kind: 'cancel' };
+  if (['Control', 'Alt', 'Shift', 'Meta'].includes(e.key)) return { kind: 'pending' };
+
+  const isFunctionKey = /^F([1-9]|1\d|2[0-4])$/.test(e.code);
+  if (!(e.ctrlKey || e.altKey || e.metaKey || (e.shiftKey && isFunctionKey))) {
+    return { kind: 'needs-modifier' };
+  }
+
+  const keys: string[] = [];
+  if (e.ctrlKey) keys.push('CommandOrControl');
+  if (e.shiftKey) keys.push('Shift');
+  if (e.altKey) keys.push('Alt');
+  if (e.metaKey) keys.push('Super');
+
+  let key = e.code;
+  if (key.startsWith('Key')) key = key.slice(3);
+  else if (key.startsWith('Digit')) key = key.slice(5);
+  else if (key !== 'Space') key = e.key.toUpperCase();
+  keys.push(key);
+  return { kind: 'combo', value: keys.join('+') };
+}

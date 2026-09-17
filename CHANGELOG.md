@@ -71,6 +71,11 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
 - **Reintentos de NVML/ADLX en cada refresco.** En un equipo sin GPU NVIDIA (o sin
   AMD) se intentaba cargar la librería que falta en cada tick del HUD. Ahora el
   fallo se recuerda hasta que el overlay se libera por inactividad.
+- **Cancelar con Esc registraba Esc como atajo global.** Al grabar un atajo, Esc
+  se guardaba como combinación en vez de cancelar, y Meteor capturaba la tecla
+  Escape en todo el sistema, también dentro de los juegos. Ahora Esc cancela, los
+  atajos exigen Ctrl, Alt o Win (Mayús sólo vale con F1–F24) y un atajo guardado
+  que no cumpla esto deja de registrarse.
 
 ---
 

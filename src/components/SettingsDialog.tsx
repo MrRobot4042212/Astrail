@@ -18,7 +18,7 @@ import {
 } from '@/lib/tauri';
 import type { OverlaySettings, OverlayPosition, SystemInfo, MetricsSample, ShortcutsSettings } from '@/lib/types';
 import { CloseIcon, InfoIcon, GearIcon, FireIcon } from './icons';
-import { DEFAULT_SHORTCUTS, formatShortcut } from '@/lib/shortcuts';
+import { DEFAULT_SHORTCUTS, formatShortcut, recordShortcut } from '@/lib/shortcuts';
 import { OverlayPanel } from './Overlay';
 import { OverlayMpoPanel } from './OverlayMpoPanel';
 
@@ -938,6 +938,7 @@ function SegmentedControl<T extends string | number>({
 function ShortcutInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const { t } = useTranslation();
   const [recording, setRecording] = useState(false);
+  const [needsModifier, setNeedsModifier] = useState(false);
 
   useEffect(() => {
     if (!recording) return;
@@ -946,24 +947,16 @@ function ShortcutInput({ value, onChange }: { value: string; onChange: (v: strin
       e.preventDefault();
       e.stopPropagation();
 
-      const keys = [];
-      if (e.ctrlKey) keys.push('CommandOrControl');
-      if (e.shiftKey) keys.push('Shift');
-      if (e.altKey) keys.push('Alt');
-      if (e.metaKey) keys.push('Super');
-
-      if (!['Control', 'Alt', 'Shift', 'Meta'].includes(e.key)) {
-        let key = e.code;
-        if (key.startsWith('Key')) key = key.slice(3);
-        else if (key.startsWith('Digit')) key = key.slice(5);
-        else if (key === 'Space') key = 'Space';
-        else key = e.key.toUpperCase();
-        
-        keys.push(key);
-        onChange(keys.join('+'));
+      const result = recordShortcut(e);
+      if (result.kind === 'cancel') {
         setRecording(false);
-      } else if (e.key === 'Escape' && keys.length === 0) {
+        setNeedsModifier(false);
+      } else if (result.kind === 'needs-modifier') {
+        setNeedsModifier(true);
+      } else if (result.kind === 'combo') {
+        onChange(result.value);
         setRecording(false);
+        setNeedsModifier(false);
       }
     };
 
@@ -978,7 +971,7 @@ function ShortcutInput({ value, onChange }: { value: string; onChange: (v: strin
         recording ? 'border-accent bg-accent/10 text-ink' : 'border-line bg-elevated text-muted hover:text-ink'
       }`}
     >
-      {recording ? t('settings.mRecording') : value}
+      {recording ? t(needsModifier ? 'settings.mShortcutNeedsModifier' : 'settings.mRecording') : value}
     </button>
   );
 }
