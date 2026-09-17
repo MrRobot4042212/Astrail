@@ -93,9 +93,12 @@ jobs:
         run: |
           $conf     = (Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
           $pkg      = (Get-Content package.json -Raw | ConvertFrom-Json).version
-          $lock     = (Get-Content package-lock.json -Raw | ConvertFrom-Json)
-          $lockTop  = $lock.version
-          $lockSelf = $lock.packages.''.version
+          # npm's lockfile keys the root package as `packages[""]`; pwsh 7's
+          # ConvertFrom-Json refuses an empty property name unless it builds a
+          # hashtable instead of a PSCustomObject.
+          $lock     = (Get-Content package-lock.json -Raw | ConvertFrom-Json -AsHashtable)
+          $lockTop  = $lock['version']
+          $lockSelf = $lock['packages']['']['version']
           $cargo    = (Select-String -Path src-tauri/Cargo.toml -Pattern '^version\s*=\s*"([^"]+)"' |
                        Select-Object -First 1).Matches[0].Groups[1].Value
           $lockRs   = (Get-Content src-tauri/Cargo.lock -Raw |
