@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "overlay-window",
-  "description": "Permisos mínimos de la ventana de ajustes in-game: solo el núcleo (invoke + eventos). No necesita diálogos, actualizador ni control de procesos, así que no los tiene: es la ventana que se abre encima de un juego.",
+  "description": "Permisos mínimos de la ventana de ajustes in-game: solo escuchar eventos (invoke no necesita permiso). No necesita diálogos, actualizador, procesos, bandeja ni menús, así que no los tiene: es la ventana que se abre encima de un juego.",
   "windows": ["overlay"],
-  "permissions": ["core:default"]
+  "permissions": ["core:event:allow-listen", "core:event:allow-unlisten"]
 }

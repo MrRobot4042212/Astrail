@@ -11,6 +11,10 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
 ## [No publicado] — Trabajo en curso
 
 ### Cambiado
+- **Permisos de ventana al mínimo.** La ventana principal solo puede escuchar
+  eventos, abrir el diálogo de archivo, comprobar/descargar/instalar
+  actualizaciones y relanzarse; la ventana de ajustes in-game solo escuchar
+  eventos. Se retiran los permisos de bandeja y menús que ningún código usaba.
 - **Iniciar con Windows sin el plugin de autoarranque.** Meteor escribe él mismo
   la clave `Run` del usuario, con la ruta entre comillas, y respeta la casilla
   de "Aplicaciones de inicio" del Administrador de tareas. El desinstalador
