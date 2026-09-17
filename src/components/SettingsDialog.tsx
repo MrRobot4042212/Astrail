@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation, Trans } from 'react-i18next';
 import {
   clearCoverCache,
@@ -19,6 +19,7 @@ import {
 import type { OverlaySettings, OverlayPosition, SystemInfo, MetricsSample, ShortcutsSettings } from '@/lib/types';
 import { CloseIcon, InfoIcon, GearIcon, FireIcon } from './icons';
 import { DEFAULT_SHORTCUTS, formatShortcut, recordShortcut } from '@/lib/shortcuts';
+import { colorToCommit } from '@/lib/color';
 import { OverlayPanel } from './Overlay';
 import { OverlayMpoPanel } from './OverlayMpoPanel';
 
@@ -884,20 +885,50 @@ function ColorPicker({
   value: string;
   onChange: (v: string) => void;
 }) {
+  // While the picker is open, drag ticks only update this local draft; the
+  // settings are written once, when the picker closes (native `change`) or loses
+  // focus. React's `onChange` on a color input is the per-tick `input` event.
+  const [draft, setDraft] = useState<string | null>(null);
+  const shown = draft ?? value;
+  const inputRef = useRef<HTMLInputElement>(null);
+  const lastSent = useRef(value);
+  const commitRef = useRef<(next: string) => void>(() => {});
+
+  useEffect(() => {
+    lastSent.current = value;
+    commitRef.current = (next: string) => {
+      setDraft(null);
+      const commit = colorToCommit(next, lastSent.current);
+      if (commit === null) return;
+      lastSent.current = commit;
+      onChange(commit);
+    };
+  }, [value, onChange]);
+
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    const onNativeChange = () => commitRef.current(el.value);
+    el.addEventListener('change', onNativeChange);
+    return () => el.removeEventListener('change', onNativeChange);
+  }, []);
+
   return (
     <div className="flex items-center justify-between gap-3">
       <span className="text-xs text-muted">{label}</span>
       <label
         className="relative h-7 w-10 cursor-pointer overflow-hidden border border-line transition hover:border-accent/60"
-        title={value}
+        title={shown}
       >
         {/* Color swatch visible surface */}
-        <div className="absolute inset-0" style={{ background: value }} />
+        <div className="absolute inset-0" style={{ background: shown }} />
         {/* Native color input sits on top, invisible but captures clicks */}
         <input
+          ref={inputRef}
           type="color"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
+          value={shown}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={(e) => commitRef.current(e.currentTarget.value)}
           className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
         />
       </label>

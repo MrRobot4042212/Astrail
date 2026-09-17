@@ -76,6 +76,9 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
   Escape en todo el sistema, también dentro de los juegos. Ahora Esc cancela, los
   atajos exigen Ctrl, Alt o Win (Mayús sólo vale con F1–F24) y un atajo guardado
   que no cumpla esto deja de registrarse.
+- **Arrastrar el selector de color del HUD escribía los ajustes decenas de veces
+  por segundo** (disco, atajos re-registrados, Discord). Ahora la vista previa se
+  actualiza al arrastrar y el color se aplica al cerrar el selector.
 
 ---
 
