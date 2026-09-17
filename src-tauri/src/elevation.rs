@@ -93,31 +93,11 @@ pub fn await_previous_instance() {
     }
 }
 
-/// Whether our own executable sits in a location the current user can write to
-/// (the default Tauri/NSIS per-user install goes to `%LOCALAPPDATA%`).
-///
-/// This gates the elevated logon task: a `/RL HIGHEST` scheduled task pointing at
-/// a user-writable path is a local privilege-escalation primitive — anything able
-/// to replace that file gets silent SYSTEM-adjacent execution at every logon,
-/// with no UAC prompt. When it is user-writable we refuse to create the task and
-/// fall back to the ordinary (non-elevated) `Run` key.
-pub fn exe_in_user_writable_location() -> bool {
-    let Ok(exe) = std::env::current_exe() else {
-        // Unknown location: assume the unsafe case.
-        return true;
-    };
-    let exe = std::fs::canonicalize(&exe).unwrap_or(exe);
-    let user_roots = ["USERPROFILE", "LOCALAPPDATA", "APPDATA", "TEMP", "PUBLIC"];
-    user_roots.iter().any(|var| {
-        std::env::var(var)
-            .ok()
-            .and_then(|dir| std::fs::canonicalize(dir).ok())
-            .is_some_and(|root| exe.starts_with(&root))
-    })
-}
-
-/// Name of the Task Scheduler entry used to autostart Meteor elevated.
-const AUTOSTART_TASK: &str = "MeteorAutostart";
+/// Name of the Task Scheduler entry older builds created to autostart Meteor
+/// elevated. It is no longer created: autostart is the ordinary `Run` key only,
+/// because a `/RL HIGHEST` logon task restarts an elevated launcher at every
+/// logon without UAC, and every game spawned from it inherits the admin token.
+const LEGACY_AUTOSTART_TASK: &str = "MeteorAutostart";
 
 /// Run `schtasks` without flashing a console window, returning whether it
 /// exited successfully.
@@ -134,50 +114,25 @@ fn schtasks(args: &[&str]) -> std::io::Result<bool> {
     Ok(status.success())
 }
 
-/// Whether the elevated logon autostart task exists.
-pub fn logon_task_exists() -> bool {
-    schtasks(&["/Query", "/TN", AUTOSTART_TASK]).unwrap_or(false)
-}
-
-/// Create (or overwrite) a Task Scheduler entry that launches Meteor at logon
-/// with highest privileges. This is the only way Windows will autostart an app
-/// that requires elevation (UAC) without a prompt at every login — a plain
-/// `HKCU\...\Run` entry is silently blocked for elevated apps. Requires the
-/// current process to be elevated (creating a `/RL HIGHEST` task needs admin)
-/// **and** the executable to live outside a user-writable directory — see
-/// `exe_in_user_writable_location`.
-pub fn create_logon_task() -> Result<(), String> {
-    if exe_in_user_writable_location() {
-        return Err(
-            "No se crea la tarea de inicio elevada: el ejecutable está en una carpeta escribible por el usuario."
-                .into(),
-        );
+/// Remove the elevated logon task left by an older build. Returns `true` when a
+/// task existed and is now gone, so the caller can move autostart to the `Run`
+/// key. Only an elevated process can delete a `/RL HIGHEST` task, and such a task
+/// only ever launches Meteor elevated, so callers skip this when not elevated:
+/// the next logon launch performs it, and normal launches spawn nothing.
+pub fn remove_legacy_logon_task() -> bool {
+    if !schtasks(&["/Query", "/TN", LEGACY_AUTOSTART_TASK]).unwrap_or(false) {
+        return false;
     }
-    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
-    // schtasks parses its own /TR value, so wrap the path in quotes for spaces.
-    let tr = format!("\"{}\"", exe.display());
-    let ok = schtasks(&[
-        "/Create", "/TN", AUTOSTART_TASK, "/TR", &tr, "/SC", "ONLOGON", "/RL",
-        "HIGHEST", "/F",
-    ])
-    .map_err(|e| e.to_string())?;
-    if ok {
-        Ok(())
-    } else {
-        Err("No se pudo crear la tarea de inicio automático (schtasks).".into())
-    }
-}
-
-/// Remove the elevated logon autostart task. No-op (Ok) if it doesn't exist.
-pub fn delete_logon_task() -> Result<(), String> {
-    if !logon_task_exists() {
-        return Ok(());
-    }
-    let ok = schtasks(&["/Delete", "/TN", AUTOSTART_TASK, "/F"]).map_err(|e| e.to_string())?;
-    if ok {
-        Ok(())
-    } else {
-        Err("No se pudo borrar la tarea de inicio automático (schtasks).".into())
+    match schtasks(&["/Delete", "/TN", LEGACY_AUTOSTART_TASK, "/F"]) {
+        Ok(true) => true,
+        Ok(false) => {
+            eprintln!("[elevation] schtasks could not delete the legacy {LEGACY_AUTOSTART_TASK} task");
+            false
+        }
+        Err(e) => {
+            eprintln!("[elevation] schtasks failed to start: {e}");
+            false
+        }
     }
 }
 

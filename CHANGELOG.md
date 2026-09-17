@@ -18,6 +18,11 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
   de versión no coinciden entre sí o si esa versión ya está publicada. Esto
   último es la red contra mergear sin subir la versión: republicar la misma
   versión no llega a nadie, porque el actualizador nunca va hacia atrás.
+- **Iniciar con Windows usa siempre la clave `Run` del usuario.** Con Meteor
+  abierto como administrador se intentaba crear una tarea programada elevada, que
+  en la instalación normal fallaba siempre y dejaba el interruptor roto. Ahora no
+  hay tarea: Meteor arranca sin privilegios al iniciar sesión, y la tarea antigua
+  se elimina la próxima vez que Meteor se abra como administrador.
 - **La publicación se niega a salir sin las credenciales de IGDB.** Antes una
   release sin esos secretos se publicaba igual, con las carátulas desactivadas.
 

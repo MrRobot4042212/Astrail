@@ -579,51 +579,21 @@ fn show_main(app: &AppHandle) {
     }
 }
 
-/// Whether Meteor is set to launch on Windows login. Cuenta como activo tanto la
-/// clave `Run` del plugin (arranque normal) como la **tarea programada** elevada
-/// (`MeteorAutostart`), que usamos cuando Meteor corre como administrador porque
-/// la clave Run no puede lanzar apps que requieren UAC (las bloquea en silencio).
+/// Whether Meteor is set to launch on Windows login (the autostart `Run` key).
 #[tauri::command(async)]
 fn get_autostart(app: AppHandle) -> Result<bool, String> {
     use tauri_plugin_autostart::ManagerExt;
-    #[cfg(windows)]
-    {
-        if elevation::logon_task_exists() {
-            return Ok(true);
-        }
-    }
     app.autolaunch()
         .is_enabled()
         .map_err(|e| format!("Failed to read autostart: {e}"))
 }
 
+/// Autostart is the `Run` key only, elevated or not: Meteor never starts itself
+/// elevated at logon (see `elevation::remove_legacy_logon_task`).
 #[tauri::command(async)]
 fn set_autostart(app: AppHandle, enabled: bool) -> Result<(), String> {
     use tauri_plugin_autostart::ManagerExt;
     let auto = app.autolaunch();
-
-    // En Windows, si el proceso está elevado (Meteor configurado como admin
-    // permanente vía el flag RUNASADMIN del instalador), la clave `Run` no sirve:
-    // Windows bloquea en el login las entradas Run que requieren elevación. Usamos
-    // una tarea programada `/RL HIGHEST /SC ONLOGON`, que sí arranca elevado sin
-    // prompt UAC. Limpiamos siempre la clave Run para no dejar una entrada muerta.
-    #[cfg(windows)]
-    {
-        if elevation::is_elevated() {
-            if enabled {
-                elevation::create_logon_task()?;
-                // Quita la clave Run heredada (bloqueada) si la hubiera.
-                let _ = auto.disable();
-            } else {
-                elevation::delete_logon_task()?;
-                let _ = auto.disable();
-            }
-            return Ok(());
-        }
-        // No elevado: nos aseguramos de no dejar una tarea programada huérfana
-        // antes de gestionar la clave Run normal.
-        let _ = elevation::delete_logon_task();
-    }
 
     // Idempotente: si ya está en el estado pedido no hacemos nada. Evita que
     // `disable()` falle con "el sistema no puede encontrar el archivo
@@ -1151,30 +1121,23 @@ pub fn run() {
             // `ensure_overlay_window` and destroyed on close, so no WebView2 process sits
             // resident during gameplay. This is the key "lightweight overlay" change.
 
-            // Migración: si Meteor corre elevado (admin permanente) y quedó una
-            // clave `Run` de autostart pero no la tarea programada, conviértela. La
-            // clave Run no arranca apps elevadas (Windows las bloquea en el login),
-            // así que sin esto el autostart no funcionaría para usuarios admin.
+            // Migration: older builds autostarted an elevated Meteor through a
+            // `/RL HIGHEST` logon task. Replace it with the ordinary Run key. Only
+            // an elevated process can delete that task, and the task itself only
+            // launches Meteor elevated, so a normal launch spawns nothing here.
             #[cfg(windows)]
-            {
-                use tauri_plugin_autostart::ManagerExt;
-                // Security migration: a `/RL HIGHEST` logon task pointing at an
-                // executable in a user-writable folder is a privilege-escalation
-                // primitive. Drop it and fall back to the ordinary Run key.
-                if elevation::exe_in_user_writable_location() && elevation::logon_task_exists() {
-                    let removed = elevation::delete_logon_task().is_ok();
-                    if removed && !app.autolaunch().is_enabled().unwrap_or(false) {
-                        let _ = app.autolaunch().enable();
+            if elevation::is_elevated() {
+                let migrate = handle.clone();
+                std::thread::spawn(move || {
+                    use tauri_plugin_autostart::ManagerExt;
+                    if elevation::remove_legacy_logon_task()
+                        && !migrate.autolaunch().is_enabled().unwrap_or(false)
+                    {
+                        if let Err(e) = migrate.autolaunch().enable() {
+                            eprintln!("[autostart] could not move autostart to the Run key: {e}");
+                        }
                     }
-                } else if elevation::is_elevated()
-                    && !elevation::logon_task_exists()
-                    && app.autolaunch().is_enabled().unwrap_or(false)
-                    && elevation::create_logon_task().is_ok()
-                {
-                    // Elevated *and* installed outside a user-writable folder:
-                    // the Run key cannot launch an elevated app, the task can.
-                    let _ = app.autolaunch().disable();
-                }
+                });
             }
 
             // One-off cache maintenance, off the main thread: rename cover files
