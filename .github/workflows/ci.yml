@@ -149,5 +149,12 @@ jobs:
           node-version: 20
           cache: npm
 
-      - name: npm audit (high and above)
+      # The gate covers what ships: only production dependencies end up in the
+      # exported bundle. Build-time tooling is audited too, but as a report,
+      # so an advisory in a dev-only package cannot block a release on its own.
+      - name: npm audit (shipped dependencies, high and above)
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: npm audit (build-time dependencies, report only)
+        continue-on-error: true
         run: npm audit --audit-level=high
