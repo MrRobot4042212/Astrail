@@ -122,6 +122,22 @@ jobs:
           "version=$conf" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           Write-Host "Publishing v$conf"
 
+      # An unset repository secret expands to an empty string, and a build
+      # without IGDB credentials does not fail: it ships with cover lookups
+      # disabled. Every installation auto-updates, so catch it here instead.
+      - name: Require the build-time secrets
+        shell: pwsh
+        env:
+          IGDB_CLIENT_ID: ${{ secrets.IGDB_CLIENT_ID }}
+          IGDB_CLIENT_SECRET: ${{ secrets.IGDB_CLIENT_SECRET }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          $missing = @('IGDB_CLIENT_ID', 'IGDB_CLIENT_SECRET', 'TAURI_SIGNING_PRIVATE_KEY') |
+            Where-Object { [string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($_)) }
+          if ($missing) {
+            throw "Missing repository secrets: $($missing -join ', '). Add them under Settings > Secrets and variables > Actions."
+          }
+
       - uses: tauri-apps/tauri-action@fce9c6108b31ea247710505d3aaaa893ee6768d4 # v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

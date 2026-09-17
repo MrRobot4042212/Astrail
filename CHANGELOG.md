@@ -18,6 +18,8 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
   de versión no coinciden entre sí o si esa versión ya está publicada. Esto
   último es la red contra mergear sin subir la versión: republicar la misma
   versión no llega a nadie, porque el actualizador nunca va hacia atrás.
+- **La publicación se niega a salir sin las credenciales de IGDB.** Antes una
+  release sin esos secretos se publicaba igual, con las carátulas desactivadas.
 
 ### Corregido
 - **La detección de cambios en la biblioteca no funcionaba en perfiles sin
