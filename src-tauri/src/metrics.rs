@@ -321,15 +321,27 @@ fn wait_tick(timeout_ms: u32) {
     overlay::pump();
 }
 
-/// Size and DPI scale of the monitor showing `hwnd` (falls back to the primary).
+/// Virtual-desktop rectangle and DPI scale of a monitor.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct MonitorGeometry {
+    pub left: i32,
+    pub top: i32,
+    pub width: i32,
+    pub height: i32,
+    pub scale: f64,
+}
+
+/// Rectangle and DPI scale of the monitor showing `hwnd` (falls back to the primary).
 ///
 /// Read straight from Win32 on this thread. It used to go through
 /// `app.get_webview_window("main").primary_monitor()`, which blocks on a round
 /// trip to the main event loop **on every drawn frame** (debt C6) — and always
 /// answered with the primary monitor, so the HUD was mispositioned on a
-/// secondary display.
+/// secondary display. The origin matters as much as the size: without
+/// `rcMonitor.left/top` the corner math placed the HUD on the primary monitor while
+/// sizing it for the game's.
 #[cfg(windows)]
-fn monitor_geometry(hwnd: isize) -> (i32, i32, f64) {
+fn monitor_geometry(hwnd: isize) -> MonitorGeometry {
     use windows::Win32::Foundation::HWND;
     use windows::Win32::Graphics::Gdi::{
         GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTOPRIMARY,
@@ -347,13 +359,18 @@ fn monitor_geometry(hwnd: isize) -> (i32, i32, f64) {
             ..Default::default()
         };
         if !GetMonitorInfoW(monitor, &mut info).as_bool() {
-            return (1920, 1080, 1.0);
+            return MonitorGeometry { left: 0, top: 0, width: 1920, height: 1080, scale: 1.0 };
         }
-        let width = info.rcMonitor.right - info.rcMonitor.left;
-        let height = info.rcMonitor.bottom - info.rcMonitor.top;
+        let r = info.rcMonitor;
         let (mut dpi_x, mut dpi_y) = (96u32, 96u32);
         let _ = GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &mut dpi_x, &mut dpi_y);
-        (width, height, dpi_x as f64 / 96.0)
+        MonitorGeometry {
+            left: r.left,
+            top: r.top,
+            width: r.right - r.left,
+            height: r.bottom - r.top,
+            scale: dpi_x as f64 / 96.0,
+        }
     }
 }
 
@@ -692,7 +709,7 @@ pub fn start(app: AppHandle) {
                 if let Some(cfg) = cfg.as_ref() {
                     // Geometry of the monitor the game is on, read directly from
                     // Win32 on this thread (no round trip to the main event loop).
-                    let (mon_w, mon_h, scale) = monitor_geometry(overlay::foreground());
+                    let monitor = monitor_geometry(overlay::foreground());
 
                     // A foreground change starts a fresh measure "session": let the HUD
                     // present for a moment, then read the real composition mode. Also the
@@ -719,7 +736,7 @@ pub fn start(app: AppHandle) {
                             shown = false;
                         }
                     } else {
-                        overlay::render(cfg, &sample, mon_w, mon_h, scale);
+                        overlay::render(cfg, &sample, monitor);
                         shown = true;
 
                         // Classify free vs costing once the present window has settled

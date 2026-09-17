@@ -13,7 +13,7 @@
 
 use std::cell::Cell;
 
-use crate::metrics::MetricsSample;
+use crate::metrics::{MetricsSample, MonitorGeometry};
 use crate::models::OverlaySettings;
 
 // Backend selection: 0 = not chosen yet, 1 = DirectComposition, 3 = disabled.
@@ -116,6 +116,24 @@ pub(crate) fn build_rows(cfg: &OverlaySettings, m: &MetricsSample) -> (Option<St
     (title, rows)
 }
 
+/// Top-left corner of a `w`×`h` HUD placed in `position` on `mon`, in virtual-desktop
+/// coordinates.
+///
+/// Monitor coordinates are not zero-based: a display left of or above the primary
+/// has a negative origin, one to the right starts at the primary's width. The old
+/// math worked in `[0, mon_w)` and so always drew on the primary monitor.
+pub(crate) fn hud_origin(position: &str, mon: MonitorGeometry, w: i32, h: i32, margin: i32) -> (i32, i32) {
+    let (right, bottom) = (mon.left + mon.width, mon.top + mon.height);
+    let (x, y) = match position {
+        "top-right" => (right - w - margin, mon.top + margin),
+        "bottom-left" => (mon.left + margin, bottom - h - margin),
+        "bottom-right" => (right - w - margin, bottom - h - margin),
+        _ => (mon.left + margin, mon.top + margin),
+    };
+    // Never start outside the monitor when the HUD is wider/taller than it.
+    (x.max(mon.left), y.max(mon.top))
+}
+
 fn current() -> u8 {
     BACKEND.with(|b| b.get())
 }
@@ -123,7 +141,7 @@ fn current() -> u8 {
 /// Draw + present the HUD via DirectComposition. If DComp can't init (or fails at
 /// runtime) the HUD is disabled for the session — no GDI fallback, so we never
 /// force composition on the game (see the BACKEND comment).
-pub fn render(cfg: &OverlaySettings, m: &MetricsSample, mon_w: i32, mon_h: i32, scale: f64) {
+pub fn render(cfg: &OverlaySettings, m: &MetricsSample, monitor: MonitorGeometry) {
     let mut b = current();
     if b == 0 {
         b = if crate::overlay_dcomp::try_init() {
@@ -137,7 +155,7 @@ pub fn render(cfg: &OverlaySettings, m: &MetricsSample, mon_w: i32, mon_h: i32, 
         };
         BACKEND.with(|c| c.set(b));
     }
-    if b == 1 && !crate::overlay_dcomp::render(cfg, m, mon_w, mon_h, scale) {
+    if b == 1 && !crate::overlay_dcomp::render(cfg, m, monitor) {
         // Runtime failure: disable the HUD for the rest of the session.
         crate::overlay_dcomp::hide();
         BACKEND.with(|c| c.set(3));
@@ -209,6 +227,35 @@ pub fn foreground_pid() -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn primary() -> MonitorGeometry {
+        MonitorGeometry { left: 0, top: 0, width: 1920, height: 1080, scale: 1.0 }
+    }
+
+    #[test]
+    fn hud_is_placed_on_the_game_monitor_not_the_primary() {
+        // Regression (W3): a game on a secondary monitor got its HUD on the primary.
+        let right_of_primary = MonitorGeometry { left: 1920, top: 0, width: 2560, height: 1440, scale: 1.0 };
+        assert_eq!(hud_origin("top-left", right_of_primary, 160, 100, 12), (1932, 12));
+        assert_eq!(hud_origin("bottom-right", right_of_primary, 160, 100, 12), (4480 - 172, 1440 - 112));
+
+        let left_of_primary = MonitorGeometry { left: -1280, top: -200, width: 1280, height: 1024, scale: 1.0 };
+        assert_eq!(hud_origin("top-right", left_of_primary, 160, 100, 12), (-172, -188));
+        assert_eq!(hud_origin("bottom-left", left_of_primary, 160, 100, 12), (-1268, 824 - 112));
+    }
+
+    #[test]
+    fn hud_on_the_primary_keeps_its_old_position() {
+        assert_eq!(hud_origin("top-left", primary(), 160, 100, 12), (12, 12));
+        assert_eq!(hud_origin("top-right", primary(), 160, 100, 12), (1748, 12));
+        assert_eq!(hud_origin("unknown", primary(), 160, 100, 12), (12, 12));
+    }
+
+    #[test]
+    fn an_oversized_hud_stays_inside_its_monitor() {
+        let m = MonitorGeometry { left: 1920, top: 0, width: 100, height: 50, scale: 1.0 };
+        assert_eq!(hud_origin("bottom-right", m, 400, 300, 12), (1920, 0));
+    }
 
     fn sample(cpu: Option<f32>) -> MetricsSample {
         MetricsSample {

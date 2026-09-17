@@ -58,7 +58,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
     WS_EX_NOREDIRECTIONBITMAP, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_POPUP,
 };
 
-use crate::metrics::MetricsSample;
+use crate::metrics::{MetricsSample, MonitorGeometry};
 use crate::models::OverlaySettings;
 
 /// All DirectComposition/D3D/D2D state. Lives only on the sampler thread.
@@ -498,11 +498,11 @@ enum DrawItem {
 }
 
 /// Render the HUD. Returns false on a hard failure so the facade can fall back to GDI.
-pub fn render(cfg: &OverlaySettings, m: &MetricsSample, mon_w: i32, mon_h: i32, scale: f64) -> bool {
+pub fn render(cfg: &OverlaySettings, m: &MetricsSample, monitor: MonitorGeometry) -> bool {
     STATE.with(|s| {
         let mut guard = s.borrow_mut();
         let Some(d) = guard.as_mut() else { return false };
-        match unsafe { render_inner(d, cfg, m, mon_w, mon_h, scale) } {
+        match unsafe { render_inner(d, cfg, m, monitor) } {
             Ok(()) => true,
             Err(e) => {
                 eprintln!("Overlay DComp render falló: {e}");
@@ -516,10 +516,9 @@ unsafe fn render_inner(
     d: &mut Dcomp,
     cfg: &OverlaySettings,
     m: &MetricsSample,
-    mon_w: i32,
-    mon_h: i32,
-    scale: f64,
+    monitor: MonitorGeometry,
 ) -> Result<()> {
+    let scale = monitor.scale;
     let (title_str, rows) = crate::overlay::build_rows(cfg, m);
     if rows.is_empty() {
         hide();
@@ -543,7 +542,7 @@ unsafe fn render_inner(
         cfg.bg_opacity.hash(&mut h);
         cfg.accent_color.hash(&mut h);
         cfg.label_color.hash(&mut h);
-        (mon_w, mon_h).hash(&mut h);
+        (monitor.left, monitor.top, monitor.width, monitor.height).hash(&mut h);
         (scale.to_bits()).hash(&mut h);
         h.finish()
     };
@@ -612,14 +611,7 @@ unsafe fn render_inner(
 
     // Position the window in the chosen corner.
     let margin = (12.0 * s).round() as i32;
-    let (x, yy) = match cfg.position.as_str() {
-        "top-right" => (mon_w - w - margin, margin),
-        "bottom-left" => (margin, mon_h - h - margin),
-        "bottom-right" => (mon_w - w - margin, mon_h - h - margin),
-        _ => (margin, margin),
-    };
-    let x = x.max(0);
-    let yy = yy.max(0);
+    let (x, yy) = crate::overlay::hud_origin(&cfg.position, monitor, w, h, margin);
     if x != d.last_x || yy != d.last_y || w != d.sw_w || h != d.sw_h {
         let _ = SetWindowPos(d.hwnd, Some(HWND_TOPMOST), x, yy, w, h, SWP_NOACTIVATE);
         d.last_x = x;

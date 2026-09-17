@@ -45,6 +45,10 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
 - **Frametime inventado en AMD.** Con ADLX el frametime se calculaba dividiendo
   1000 entre un FPS entero y se mostraba con un decimal, como si fuera medido. Esa
   fila ya no aparece en AMD; el FPS sí.
+- **HUD en el monitor equivocado.** Con varios monitores, el overlay tomaba el
+  tamaño y la escala del monitor del juego pero se colocaba en el principal.
+  Ahora se posiciona dentro del monitor del juego, también si está a la izquierda
+  o por encima del principal.
 - **Sensor de temperatura de CPU equivocado en Ryzen con varios CCD.** Ganaba el
   último sensor que cuadrara por nombre, así que un CCD podía desplazar al valor
   de paquete según el orden. Ahora hay un orden de preferencia fijo (paquete,
