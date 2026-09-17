@@ -40,6 +40,10 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
   de paquete según el orden. Ahora hay un orden de preferencia fijo (paquete,
   Tdie, Tctl, máximo de CCD, máximo de núcleo, núcleo más caliente) y se ignoran
   medias y distancias a TjMax.
+- **El sidecar de temperatura se relanzaba cada medio segundo** cuando no podía
+  cargar su driver (HVCI, lista de bloqueo de drivers): un proceso elevado de
+  13 MB arrancando dos veces por segundo toda la partida. Ahora espera 30 s antes
+  de reintentar.
 
 ---
 

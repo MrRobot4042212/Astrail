@@ -24,6 +24,12 @@ static LAST_UPDATE_MS: AtomicU64 = AtomicU64::new(0);
 /// The sidecar prints once a second; three missed lines mean it is wedged.
 const MAX_AGE_MS: u64 = 3000;
 
+/// After the sidecar exits on its own while still wanted (driver blocked by HVCI or
+/// the vulnerable-driver blocklist, LHM crash), wait this long before respawning.
+/// Without it the controller relaunched a 13 MB elevated .NET process every 500 ms
+/// for the whole play session.
+const RESPAWN_BACKOFF: Duration = Duration::from_secs(30);
+
 /// The running sidecar, shared with `shutdown()` so a clean app exit can release
 /// the kernel driver before the Job Object resorts to terminating the process.
 static CHILD: Mutex<Option<Child>> = Mutex::new(None);
@@ -57,6 +63,11 @@ fn reset() {
 /// Parse one sidecar line: an integer °C, rejecting obviously bogus values.
 fn parse_temp(line: &str) -> Option<u32> {
     line.trim().parse::<u32>().ok().filter(|v| *v > 0 && *v < 200)
+}
+
+/// Whether a sidecar that died on its own may be started again at `now`.
+fn respawn_allowed(last_unexpected_exit: Option<Instant>, now: Instant) -> bool {
+    last_unexpected_exit.map_or(true, |t| now.saturating_duration_since(t) >= RESPAWN_BACKOFF)
 }
 
 /// Locate the sidecar: bundled resource, next to our exe, or the dev `binaries/`.
@@ -165,6 +176,7 @@ pub fn start(app: AppHandle) {
 
         let mut bin_missing_logged = false;
         let mut seen: u64 = 0;
+        let mut last_unexpected_exit: Option<Instant> = None;
 
         loop {
             // Park until the overlay config or the running game changes; only
@@ -178,11 +190,14 @@ pub fn start(app: AppHandle) {
 
             let want = crate::metrics::want_cpu_temp() && crate::metrics::has_game();
 
-            if want && child_lock().is_none() {
+            if want && child_lock().is_none() && respawn_allowed(last_unexpected_exit, Instant::now()) {
                 match find_binary(&app) {
                     Some(bin) => match spawn(&bin) {
                         Ok(c) => *child_lock() = Some(c),
-                        Err(e) => eprintln!("cputemp no pudo iniciarse: {e}"),
+                        Err(e) => {
+                            eprintln!("cputemp no pudo iniciarse: {e}");
+                            last_unexpected_exit = Some(Instant::now());
+                        }
                     },
                     None => {
                         if !bin_missing_logged {
@@ -199,6 +214,8 @@ pub fn start(app: AppHandle) {
                     stop(child);
                 }
                 reset();
+                // A fresh request (next game / setting re-enabled) gets a try at once.
+                last_unexpected_exit = None;
             }
 
             // Reap a sidecar that exited on its own (driver blocked, no admin, …).
@@ -209,6 +226,9 @@ pub fn start(app: AppHandle) {
             if exited {
                 *child_lock() = None;
                 reset();
+                if want {
+                    last_unexpected_exit = Some(Instant::now());
+                }
             }
         }
     });
@@ -226,6 +246,17 @@ mod tests {
         assert_eq!(parse_temp("200"), None);
         assert_eq!(parse_temp("-3"), None);
         assert_eq!(parse_temp("cputemp: open failed"), None);
+    }
+
+    #[test]
+    fn a_sidecar_that_keeps_dying_is_not_respawned_every_poll() {
+        // Regression (MT9): a blocked driver made the sidecar exit at once and the
+        // controller relaunched it on every 500 ms poll.
+        let t0 = Instant::now();
+        assert!(respawn_allowed(None, t0));
+        assert!(!respawn_allowed(Some(t0), t0 + Duration::from_millis(500)));
+        assert!(!respawn_allowed(Some(t0), t0 + RESPAWN_BACKOFF - Duration::from_millis(1)));
+        assert!(respawn_allowed(Some(t0), t0 + RESPAWN_BACKOFF));
     }
 
     #[test]
