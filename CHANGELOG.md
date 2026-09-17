@@ -32,6 +32,12 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
   único fichero sin bibliotecas nativas que extraer; el desinstalador limpia la
   carpeta que dejaban las versiones anteriores.
 
+### Corregido
+- **Las apps manuales con el mismo nombre que un juego detectado ya no
+  desaparecen**, y los favoritos, categorías, carátulas y tipo asignados a una
+  copia duplicada (por ejemplo la del registro) se conservan cuando la copia de
+  la tienda pasa a ser la mostrada.
+
 ## [0.1.3] — 2026-09-17
 
 ### Cambiado

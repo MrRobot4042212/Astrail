@@ -19,6 +19,7 @@ mod jsonstore;
 #[cfg(windows)]
 mod jobobj;
 mod launcher;
+mod library;
 mod metrics;
 mod models;
 mod perf;
@@ -44,7 +45,6 @@ mod windows_apps;
 mod xbox;
 
 use models::{Category, Game, GameSource, AppSettings};
-use std::collections::HashSet;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -133,11 +133,13 @@ fn get_library_inner(app: AppHandle) -> Result<Vec<Game>, String> {
     games.extend(win);
     games.extend(storage::load_manual(&app)?);
 
-    // Deduplicate by name, keeping the first (highest-priority) occurrence.
-    let mut seen = HashSet::new();
-    games.retain(|g| seen.insert(g.name.to_lowercase()));
+    // Collapse same-name entries (the store copy beats the generic registry
+    // copy) and remember which ids were folded, so overlays the user stored
+    // under a dropped id still apply. Manual entries are never dropped.
+    let library::Merged { mut games, aliases } = library::merge_duplicates(games);
 
     // Drop entries the user has hidden (false positives from the generic scan).
+    // Strictly by id: see `library.rs` for why hidden ids are not aliased.
     let hidden = storage::load_hidden(&app);
     if !hidden.is_empty() {
         let (visible, hidden_games): (Vec<Game>, Vec<Game>) = games.into_iter().partition(|g| !hidden.iter().any(|h| h == &g.id));
@@ -147,46 +149,15 @@ fn get_library_inner(app: AppHandle) -> Result<Vec<Game>, String> {
         let _ = storage::save_hidden_cache(&app, &[]);
     }
 
-    // User-set cover overrides win over whatever each source provided.
-    let overrides = storage::load_cover_overrides(&app);
-    if !overrides.is_empty() {
-        for game in &mut games {
-            if let Some(url) = overrides.get(&game.id) {
-                game.cover_url = Some(url.clone());
-            }
-        }
-    }
-
-    // User overlays: favorites and manual categories, keyed by game id.
-    let favorites = storage::load_favorites(&app);
-    let categories = storage::load_categories(&app);
-    if !favorites.is_empty() || !categories.is_empty() {
-        for game in &mut games {
-            if favorites.iter().any(|f| f == &game.id) {
-                game.favorite = true;
-            }
-            if let Some(cats) = categories.get(&game.id) {
-                game.categories = cats.clone();
-            }
-        }
-    }
-
-    // User override: reclassify an entry as app/game (fixes mis-detection). Since
-    // the library is re-scanned each call, "game" only needs to undo an App
-    // detection (store sources are already games), so the real source is kept
-    // whenever possible and removing the override self-heals on the next scan.
-    let type_overrides = storage::load_type_overrides(&app);
-    if !type_overrides.is_empty() {
-        for game in &mut games {
-            match type_overrides.get(&game.id).map(String::as_str) {
-                Some("app") => game.source = GameSource::App,
-                Some("game") if game.source == GameSource::App => {
-                    game.source = GameSource::Windows;
-                }
-                _ => {}
-            }
-        }
-    }
+    // User overlays (cover overrides, favorites, categories, app/game
+    // reclassification) win over whatever each source provided.
+    let overlays = library::Overlays {
+        favorites: storage::load_favorites(&app),
+        categories: storage::load_categories(&app),
+        covers: storage::load_cover_overrides(&app),
+        types: storage::load_type_overrides(&app),
+    };
+    library::apply_overlays(&mut games, &aliases, &overlays);
 
     // Fill in covers we already downloaded. Without this the frontend re-queued
     // every non-Steam entry through `resolve_cover` on *every* refresh, even
