@@ -42,6 +42,9 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
 - **FPS inflados en juegos con varias ventanas de render** (interfaces Chromium
   incrustadas, ventanas secundarias): los frames de todas se sumaban. Ahora se
   mide cada swapchain por separado y se muestra la más activa.
+- **Frametime inventado en AMD.** Con ADLX el frametime se calculaba dividiendo
+  1000 entre un FPS entero y se mostraba con un decimal, como si fuera medido. Esa
+  fila ya no aparece en AMD; el FPS sí.
 - **Sensor de temperatura de CPU equivocado en Ryzen con varios CCD.** Ganaba el
   último sensor que cuadrara por nombre, así que un CCD podía desplazar al valor
   de paquete según el orden. Ahora hay un orden de preferencia fijo (paquete,

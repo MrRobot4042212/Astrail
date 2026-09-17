@@ -110,7 +110,7 @@ pub struct MetricsSample {
     pub gpu_power_w: Option<f32>,
     // CPU temperature from the LibreHardwareMonitor sidecar (admin + driver).
     pub cpu_temp_c: Option<u32>,
-    // Filled by the PresentMon integration in a later phase.
+    // PresentMon (per-process, measured) or ADLX (focused app, FPS only).
     pub fps: Option<f32>,
     pub frametime_ms: Option<f32>,
 }
@@ -355,6 +355,18 @@ fn monitor_geometry(hwnd: isize) -> (i32, i32, f64) {
         let _ = GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &mut dpi_x, &mut dpi_y);
         (width, height, dpi_x as f64 / 96.0)
     }
+}
+
+/// Put an ADLX FPS reading on the sample.
+///
+/// ADLX reports an **integer** FPS for the focused application, so `1000 / fps` is
+/// not a frametime measurement: at 143 fps it cannot tell 6.9 ms from 7.0 ms and it
+/// hides every stutter inside the second. Showing it as `Frame x.x ms` next to
+/// PresentMon-grade values presented a derived number as a measured one, so the
+/// frametime row is left empty on this path.
+fn apply_adlx_fps(sample: &mut MetricsSample, fps: f32) {
+    sample.fps = Some(fps);
+    sample.frametime_ms = None;
 }
 
 /// Start the sampler thread. Spawned once from `setup`.
@@ -636,8 +648,7 @@ pub fn start(app: AppHandle) {
                     // targeting / admin); prefer it over PresentMon when present and
                     // flag it so the PresentMon controller stays idle (no ETW session).
                     if let Some(f) = g.fps {
-                        sample.fps = Some(f);
-                        sample.frametime_ms = Some(1000.0 / f);
+                        apply_adlx_fps(&mut sample, f);
                         ADLX_FPS_ACTIVE.store(true, Ordering::Relaxed);
                     } else {
                         ADLX_FPS_ACTIVE.store(false, Ordering::Relaxed);
@@ -789,6 +800,35 @@ mod tests {
         INTERVAL_MS.store(5_000, Ordering::Relaxed);
         assert_eq!(fps_max_age_ms(), 10_000);
         INTERVAL_MS.store(prev, Ordering::Relaxed);
+    }
+
+    fn empty_sample() -> MetricsSample {
+        MetricsSample {
+            game: None,
+            cpu_usage: None,
+            ram_used_mb: 0,
+            ram_total_mb: 0,
+            gpu_usage: None,
+            gpu_temp_c: None,
+            vram_used_mb: None,
+            vram_total_mb: None,
+            gpu_clock_mhz: None,
+            gpu_power_w: None,
+            cpu_temp_c: None,
+            fps: None,
+            frametime_ms: None,
+        }
+    }
+
+    #[test]
+    fn adlx_fps_does_not_invent_a_frametime() {
+        // Regression (MT5): `1000 / integer fps` was drawn as a measured frametime,
+        // and it also overwrote a stale PresentMon frametime from another source.
+        let mut s = empty_sample();
+        s.frametime_ms = Some(4.2);
+        apply_adlx_fps(&mut s, 143.0);
+        assert_eq!(s.fps, Some(143.0));
+        assert_eq!(s.frametime_ms, None);
     }
 
     #[test]

@@ -175,8 +175,9 @@ export interface MetricsSample {
   gpu_power_w?: number | null;
   /** CPU temperature from the LibreHardwareMonitor sidecar (admin + driver). */
   cpu_temp_c?: number | null;
-  /** FPS / frametime arrive from the PresentMon integration (later phase). */
+  /** PresentMon (per swapchain) or ADLX. Null when no fresh frame arrived. */
   fps?: number | null;
+  /** PresentMon only; ADLX reports an integer FPS, so no frametime is derived from it. */
   frametime_ms?: number | null;
 }
 
