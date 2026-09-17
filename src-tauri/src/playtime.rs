@@ -238,19 +238,15 @@ fn library_cache_mtime(app: &AppHandle) -> Option<SystemTime> {
 /// processes) are skipped, exactly as before.
 #[cfg(windows)]
 fn running_processes() -> Vec<(u32, String)> {
-    use windows::Win32::Foundation::{CloseHandle, MAX_PATH};
+    use windows::Win32::Foundation::CloseHandle;
     use windows::Win32::System::Diagnostics::ToolHelp::{
         CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W,
         TH32CS_SNAPPROCESS,
     };
-    use windows::Win32::System::Threading::{
-        OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_FORMAT,
-        PROCESS_QUERY_LIMITED_INFORMATION,
-    };
 
     let mut out = Vec::new();
-    // SAFETY: every handle opened here is closed on all paths; the entry struct
-    // carries its own dwSize as the API requires.
+    // SAFETY: the snapshot handle is closed on all paths; the entry struct carries
+    // its own dwSize as the API requires.
     unsafe {
         let Ok(snapshot) = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) else {
             return out;
@@ -262,23 +258,8 @@ fn running_processes() -> Vec<(u32, String)> {
         if Process32FirstW(snapshot, &mut entry).is_ok() {
             loop {
                 let pid = entry.th32ProcessID;
-                if pid != 0 {
-                    if let Ok(handle) = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) {
-                        let mut buf = [0u16; MAX_PATH as usize];
-                        let mut len = buf.len() as u32;
-                        if QueryFullProcessImageNameW(
-                            handle,
-                            PROCESS_NAME_FORMAT(0),
-                            windows::core::PWSTR(buf.as_mut_ptr()),
-                            &mut len,
-                        )
-                        .is_ok()
-                        {
-                            let path = String::from_utf16_lossy(&buf[..len as usize]);
-                            out.push((pid, path.to_lowercase()));
-                        }
-                        let _ = CloseHandle(handle);
-                    }
+                if let Some(path) = process_path(pid) {
+                    out.push((pid, path));
                 }
                 if Process32NextW(snapshot, &mut entry).is_err() {
                     break;
@@ -288,6 +269,36 @@ fn running_processes() -> Vec<(u32, String)> {
         let _ = CloseHandle(snapshot);
     }
     out
+}
+
+/// Lowercased executable path of one process, or `None` when it cannot be read
+/// (pid 0, protected/system processes, already exited).
+#[cfg(windows)]
+fn process_path(pid: u32) -> Option<String> {
+    use windows::Win32::Foundation::{CloseHandle, MAX_PATH};
+    use windows::Win32::System::Threading::{
+        OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_FORMAT,
+        PROCESS_QUERY_LIMITED_INFORMATION,
+    };
+    if pid == 0 {
+        return None;
+    }
+    // SAFETY: the handle is closed before returning on every path; `buf` outlives
+    // the call and `len` carries its capacity in, the written length out.
+    unsafe {
+        let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid).ok()?;
+        let mut buf = [0u16; MAX_PATH as usize];
+        let mut len = buf.len() as u32;
+        let ok = QueryFullProcessImageNameW(
+            handle,
+            PROCESS_NAME_FORMAT(0),
+            windows::core::PWSTR(buf.as_mut_ptr()),
+            &mut len,
+        )
+        .is_ok();
+        let _ = CloseHandle(handle);
+        ok.then(|| String::from_utf16_lossy(&buf[..len as usize]).to_lowercase())
+    }
 }
 
 #[cfg(not(windows))]
@@ -310,32 +321,77 @@ fn relative_to_dir<'a>(path: &'a str, dir: &str) -> Option<&'a str> {
     path.strip_prefix(dir)?.strip_prefix(['\\', '/'])
 }
 
+/// Whether `path` is a candidate game process under `dir` (both lowercased).
+///
+/// The whole relative path is tested, not just the file name: anti-cheat services
+/// and redistributables live in their own subdirectory (`BattlEye\BEService.exe`,
+/// `_CommonRedist\vc_redist.x64.exe`), and their file name on its own carries no
+/// hint of what they are.
+fn under_install_dir(path: &str, dir: &str) -> bool {
+    relative_to_dir(path, dir).is_some_and(|rest| !EXCLUDE.iter().any(|x| rest.contains(x)))
+}
+
 /// PID of a running process belonging to this entry (for matching + the metrics
 /// overlay / PresentMon). `procs` is the `(pid, lowercased exe path)` list captured
 /// once per full scan; a `Some` result doubles as "this entry is running".
+/// `foreground` is the pid owning the foreground window (0 = unknown).
 ///
 /// The known executable is matched across the whole list first. With both checks in
 /// a single pass, process enumeration order decided the winner: a loose install-dir
 /// hit early in the list beat the exact executable further down it.
-fn find_pid(procs: &[(u32, String)], install_dir: Option<&str>, exe: Option<&str>) -> Option<u32> {
+///
+/// Within each tier the foreground process wins over snapshot order. Without that,
+/// a launcher or helper started before the game (`launcher.exe` next to `game.exe`)
+/// became the tracked pid: PresentMon attached to a process that never presents,
+/// and the overlay's foreground gate hid the whole HUD.
+fn find_pid(
+    procs: &[(u32, String)],
+    install_dir: Option<&str>,
+    exe: Option<&str>,
+    foreground: u32,
+) -> Option<u32> {
+    let pick = |matches: &dyn Fn(&str) -> bool| -> Option<u32> {
+        let mut first = None;
+        for (pid, path) in procs {
+            if matches(path) {
+                if foreground != 0 && *pid == foreground {
+                    return Some(*pid);
+                }
+                first.get_or_insert(*pid);
+            }
+        }
+        first
+    };
+
     if let Some(exe) = exe.map(|s| s.to_lowercase()).filter(|e| !e.is_empty()) {
-        if let Some((pid, _)) = procs.iter().find(|(_, path)| *path == exe) {
-            return Some(*pid);
+        if let Some(pid) = pick(&|path| path == exe) {
+            return Some(pid);
         }
     }
 
     let dir = install_dir.map(|s| s.to_lowercase())?;
-    procs
-        .iter()
-        .find(|(_, path)| {
-            // The whole relative path is tested, not just the file name: anti-cheat
-            // services and redistributables live in their own subdirectory
-            // (`BattlEye\BEService.exe`, `_CommonRedist\vc_redist.x64.exe`), and their
-            // file name on its own carries no hint of what they are.
-            relative_to_dir(path, &dir)
-                .is_some_and(|rest| !EXCLUDE.iter().any(|x| rest.contains(x)))
-        })
-        .map(|(pid, _)| *pid)
+    pick(&|path| under_install_dir(path, &dir))
+}
+
+/// Whether the foreground process (`fg_path`) should replace the tracked pid
+/// (`tracked_path`, `None` when unreadable) between full scans. Mirrors `find_pid`'s
+/// tiers: the exact executable is never displaced by a mere install-dir hit.
+fn prefer_foreground(
+    tracked_path: Option<&str>,
+    fg_path: &str,
+    install_dir: Option<&str>,
+    exe: Option<&str>,
+) -> bool {
+    let exe = exe.map(|s| s.to_lowercase()).filter(|e| !e.is_empty());
+    if exe.as_deref() == Some(fg_path) {
+        return true;
+    }
+    if exe.is_some() && exe.as_deref() == tracked_path {
+        return false;
+    }
+    install_dir
+        .map(|d| d.to_lowercase())
+        .is_some_and(|dir| under_install_dir(fg_path, &dir))
 }
 
 /// Whether a process with this PID is still alive, via a single cheap Win32 query, so
@@ -452,11 +508,46 @@ pub fn start(app: AppHandle) {
             // tracked PID is enough. Off-Windows there is no cheap liveness
             // primitive, so always scan.
             #[cfg(windows)]
-            let do_full = pending_launch || since_full >= FULL_SCAN_SECS;
+            let mut do_full = pending_launch || since_full >= FULL_SCAN_SECS;
             #[cfg(not(windows))]
             let do_full = true;
 
+            let foreground = crate::overlay::foreground_pid();
             let mut running: HashSet<String> = HashSet::new();
+
+            #[cfg(windows)]
+            if !do_full {
+                since_full += POLL_SECS;
+                // Cheap path: confirm each tracked game's PID is still alive (1 syscall
+                // each) instead of enumerating every process on the system.
+                let mut fg_path: Option<Option<String>> = None;
+                for (id, v) in active.iter_mut() {
+                    if !proc_alive(v.2) {
+                        // The tracked pid can be a launcher that exits once the game is
+                        // up. Closing the session here ended playtime for a game that is
+                        // still running, so re-resolve with a full scan instead.
+                        do_full = true;
+                        break;
+                    }
+                    v.1 = ts;
+                    running.insert(id.clone());
+                    if foreground == 0 || foreground == v.2 {
+                        continue;
+                    }
+                    let Some(fg) = fg_path.get_or_insert_with(|| process_path(foreground)).as_deref() else {
+                        continue;
+                    };
+                    let Some(e) = index.iter().find(|e| &e.id == id) else { continue };
+                    let tracked = process_path(v.2);
+                    if prefer_foreground(tracked.as_deref(), fg, e.install_dir.as_deref(), e.executable.as_deref()) {
+                        v.2 = foreground;
+                    }
+                }
+                if do_full {
+                    running.clear();
+                }
+            }
+
             if do_full {
                 since_full = 0;
                 // (pid, lowercased exe path) captured once, reused for matching + pid.
@@ -469,9 +560,12 @@ pub fn start(app: AppHandle) {
                     if !is_active && !was_launched {
                         continue;
                     }
-                    if let Some(pid) =
-                        find_pid(&procs, e.install_dir.as_deref(), e.executable.as_deref())
-                    {
+                    if let Some(pid) = find_pid(
+                        &procs,
+                        e.install_dir.as_deref(),
+                        e.executable.as_deref(),
+                        foreground,
+                    ) {
                         running.insert(e.id.clone());
                         active
                             .entry(e.id.clone())
@@ -480,17 +574,6 @@ pub fn start(app: AppHandle) {
                                 v.2 = pid;
                             })
                             .or_insert((ts, ts, pid));
-                    }
-                }
-            } else {
-                since_full += POLL_SECS;
-                // Cheap path: confirm each tracked game's PID is still alive (1 syscall
-                // each) instead of enumerating every process on the system.
-                #[cfg(windows)]
-                for (id, v) in active.iter_mut() {
-                    if proc_alive(v.2) {
-                        v.1 = ts;
-                        running.insert(id.clone());
                     }
                 }
             }
@@ -605,13 +688,13 @@ mod tests {
     #[test]
     fn exact_executable_path_matches_regardless_of_case() {
         let p = procs(&[(7, r"C:\Windows\explorer.exe"), (10, r"C:\Games\Foo\foo.exe")]);
-        assert_eq!(find_pid(&p, None, Some(r"C:\GAMES\Foo\FOO.exe")), Some(10));
+        assert_eq!(find_pid(&p, None, Some(r"C:\GAMES\Foo\FOO.exe"), 0), Some(10));
     }
 
     #[test]
     fn install_dir_prefix_matches_when_the_executable_is_unknown() {
         let p = procs(&[(7, r"C:\Windows\explorer.exe"), (42, r"C:\Games\Foo\bin\foo.exe")]);
-        assert_eq!(find_pid(&p, Some(r"C:\Games\Foo"), None), Some(42));
+        assert_eq!(find_pid(&p, Some(r"C:\Games\Foo"), None, 0), Some(42));
     }
 
     #[test]
@@ -623,7 +706,7 @@ mod tests {
             (14, r"C:\Games\Foo\bin\foo.exe"),
         ]);
         // The three helpers are skipped and the real executable wins.
-        assert_eq!(find_pid(&p, Some(r"C:\Games\Foo"), None), Some(14));
+        assert_eq!(find_pid(&p, Some(r"C:\Games\Foo"), None, 0), Some(14));
     }
 
     #[test]
@@ -635,13 +718,13 @@ mod tests {
             (12, r"C:\Games\Foo\BattlEye\BEService.exe"),
             (13, r"C:\Games\Foo\bin\foo.exe"),
         ]);
-        assert_eq!(find_pid(&p, Some(r"C:\Games\Foo"), None), Some(13));
+        assert_eq!(find_pid(&p, Some(r"C:\Games\Foo"), None, 0), Some(13));
     }
 
     #[test]
     fn a_trailing_separator_on_the_install_dir_is_tolerated() {
         let p = procs(&[(42, r"C:\Games\Foo\bin\foo.exe")]);
-        assert_eq!(find_pid(&p, Some(r"C:\Games\Foo\"), None), Some(42));
+        assert_eq!(find_pid(&p, Some(r"C:\Games\Foo\"), None, 0), Some(42));
     }
 
     #[test]
@@ -649,7 +732,7 @@ mod tests {
         // Only entries *inside* the directory count; the directory path on its own
         // has no process behind it.
         let p = procs(&[(42, r"C:\Games\Foo")]);
-        assert_eq!(find_pid(&p, Some(r"C:\Games\Foo"), None), None);
+        assert_eq!(find_pid(&p, Some(r"C:\Games\Foo"), None, 0), None);
     }
 
     #[test]
@@ -657,15 +740,15 @@ mod tests {
         // Without the `is_empty` guard every running process would prefix-match "",
         // so any game with no InstallLocation would look permanently running.
         let p = procs(&[(7, r"C:\Windows\explorer.exe")]);
-        assert_eq!(find_pid(&p, Some(""), None), None);
-        assert_eq!(find_pid(&p, Some(""), Some("")), None);
+        assert_eq!(find_pid(&p, Some(""), None, 0), None);
+        assert_eq!(find_pid(&p, Some(""), Some(""), 0), None);
     }
 
     #[test]
     fn returns_none_when_nothing_matches() {
         let p = procs(&[(7, r"C:\Windows\explorer.exe")]);
-        assert_eq!(find_pid(&p, Some(r"C:\Games\Foo"), Some(r"C:\Games\Foo\foo.exe")), None);
-        assert_eq!(find_pid(&[], Some(r"C:\Games\Foo"), Some(r"C:\Games\Foo\foo.exe")), None);
+        assert_eq!(find_pid(&p, Some(r"C:\Games\Foo"), Some(r"C:\Games\Foo\foo.exe"), 0), None);
+        assert_eq!(find_pid(&[], Some(r"C:\Games\Foo"), Some(r"C:\Games\Foo\foo.exe"), 0), None);
     }
 
     // --- Regression tests for the three matching defects fixed on 2026-09-08. ---
@@ -676,7 +759,7 @@ mod tests {
         // dir of "C:\Games\Foo" claimed everything under "C:\Games\FooBar" and the
         // playtime clock and HUD attached to a different game.
         let p = procs(&[(99, r"C:\Games\FooBar\bin\foobar.exe")]);
-        assert_eq!(find_pid(&p, Some(r"C:\Games\Foo"), None), None);
+        assert_eq!(find_pid(&p, Some(r"C:\Games\Foo"), None, 0), None);
     }
 
     #[test]
@@ -688,7 +771,7 @@ mod tests {
             (20, r"C:\Games\Foo\bin\helper_ui.exe"),
             (21, r"C:\Games\Foo\bin\foo.exe"),
         ]);
-        assert_eq!(find_pid(&p, Some(r"C:\Games\Foo"), Some(r"C:\Games\Foo\bin\foo.exe")), Some(21));
+        assert_eq!(find_pid(&p, Some(r"C:\Games\Foo"), Some(r"C:\Games\Foo\bin\foo.exe"), 0), Some(21));
     }
 
     #[test]
@@ -697,9 +780,53 @@ mod tests {
         // "EasyAntiCheat.exe" (the 'y' breaks the substring), and "battleye" was
         // tested against the file name "BEService.exe" instead of the directory.
         let eac = procs(&[(30, r"C:\Games\Foo\EasyAntiCheat\EasyAntiCheat.exe")]);
-        assert_eq!(find_pid(&eac, Some(r"C:\Games\Foo"), None), None);
+        assert_eq!(find_pid(&eac, Some(r"C:\Games\Foo"), None, 0), None);
 
         let be = procs(&[(31, r"C:\Games\Foo\BattlEye\BEService.exe")]);
-        assert_eq!(find_pid(&be, Some(r"C:\Games\Foo"), None), None);
+        assert_eq!(find_pid(&be, Some(r"C:\Games\Foo"), None, 0), None);
+    }
+
+    // --- MT1 / P1 (2026-09-17). ---
+
+    #[test]
+    fn the_foreground_game_wins_over_a_launcher_started_before_it() {
+        // Regression (MT1): with no known executable the first process under the
+        // install dir won, so the launcher became the HUD/PresentMon target.
+        let p = procs(&[
+            (40, r"C:\Games\Foo\launcher.exe"),
+            (41, r"C:\Games\Foo\bin\game.exe"),
+        ]);
+        assert_eq!(find_pid(&p, Some(r"C:\Games\Foo"), None, 41), Some(41));
+        // No foreground information: snapshot order, as before.
+        assert_eq!(find_pid(&p, Some(r"C:\Games\Foo"), None, 0), Some(40));
+        // Foreground is another app entirely: it is not adopted.
+        assert_eq!(find_pid(&p, Some(r"C:\Games\Foo"), None, 7), Some(40));
+    }
+
+    #[test]
+    fn a_foreground_install_dir_process_never_beats_the_exact_executable() {
+        let p = procs(&[
+            (50, r"C:\Games\Foo\bin\foo.exe"),
+            (51, r"C:\Games\Foo\launcher.exe"),
+        ]);
+        assert_eq!(
+            find_pid(&p, Some(r"C:\Games\Foo"), Some(r"C:\Games\Foo\bin\foo.exe"), 51),
+            Some(50)
+        );
+    }
+
+    #[test]
+    fn the_tracked_pid_follows_the_foreground_between_full_scans() {
+        let dir = Some(r"C:\Games\Foo");
+        let launcher = r"c:\games\foo\launcher.exe";
+        let game = r"c:\games\foo\bin\game.exe";
+        assert!(prefer_foreground(Some(launcher), game, dir, None));
+        assert!(!prefer_foreground(Some(launcher), r"c:\windows\explorer.exe", dir, None));
+        assert!(!prefer_foreground(Some(launcher), r"c:\games\foo\easyanticheat\easyanticheat.exe", dir, None));
+        // An exact-executable pid is kept against a mere install-dir hit…
+        let exe = Some(r"C:\Games\Foo\bin\game.exe");
+        assert!(!prefer_foreground(Some(game), launcher, dir, exe));
+        // …but a foreground exact match is always adopted.
+        assert!(prefer_foreground(Some(launcher), game, dir, exe));
     }
 }

@@ -58,6 +58,12 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
   cargar su driver (HVCI, lista de bloqueo de drivers): un proceso elevado de
   13 MB arrancando dos veces por segundo toda la partida. Ahora espera 30 s antes
   de reintentar.
+- **El HUD o el FPS desaparecían en juegos con launcher propio.** Si el juego no
+  coincidía exactamente con su ejecutable, se elegía el primer proceso de la
+  carpeta de instalación, a menudo el launcher, y el overlay se ocultaba porque
+  ese proceso no está en primer plano. Ahora gana el proceso en primer plano, el
+  seguimiento cambia a él en unos 5 s, y cerrar el launcher ya no da por
+  terminada la sesión de juego.
 - **Reintentos de NVML/ADLX en cada refresco.** En un equipo sin GPU NVIDIA (o sin
   AMD) se intentaba cargar la librería que falta en cada tick del HUD. Ahora el
   fallo se recuerda hasta que el overlay se libera por inactividad.
