@@ -38,6 +38,15 @@ jobs:
     permissions:
       contents: write
     steps:
+      # A manual run is only a re-run of a publish, so it must sit on the
+      # same ref a push would: anything else would publish an unmerged tree.
+      - name: Refuse to publish from a ref other than deploy
+        if: github.ref != 'refs/heads/deploy'
+        shell: pwsh
+        run: |
+          Write-Error "Releases are published from the deploy branch only (got '${{ github.ref }}')."
+          exit 1
+
       # Actions pinned by commit SHA: these steps see the updater signing key.
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
