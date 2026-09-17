@@ -163,7 +163,8 @@ export interface SystemInfo {
  *  kept for the settings-panel live preview (mock data) and the shared `OverlayPanel`. */
 export interface MetricsSample {
   game?: string | null;
-  cpu_usage: number;
+  /** Null on the first tick after a wake: CPU % needs two samples. */
+  cpu_usage?: number | null;
   ram_used_mb: number;
   ram_total_mb: number;
   gpu_usage?: number | null;

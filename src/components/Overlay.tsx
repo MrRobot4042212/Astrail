@@ -93,7 +93,7 @@ export function OverlayPanel({
   if (cfg.show_vram && sample.vram_used_mb != null && sample.vram_total_mb != null) {
     rows.push({ label: 'VRAM', value: `${gb(sample.vram_used_mb)}/${gb(sample.vram_total_mb)} GB`, color: valueColor });
   }
-  if (cfg.show_cpu) {
+  if (cfg.show_cpu && sample.cpu_usage != null) {
     rows.push({ label: 'CPU', value: `${sample.cpu_usage.toFixed(0)}%`, color: accentColor });
   }
   if (cfg.show_cpu_temp && sample.cpu_temp_c != null) {

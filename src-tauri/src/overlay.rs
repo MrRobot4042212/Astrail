@@ -95,7 +95,9 @@ pub(crate) fn build_rows(cfg: &OverlaySettings, m: &MetricsSample) -> (Option<St
         }
     }
     if cfg.show_cpu {
-        rows.push(HudRow { label: "CPU", value: format!("{:.0}%", m.cpu_usage), rgb: accent });
+        if let Some(c) = m.cpu_usage {
+            rows.push(HudRow { label: "CPU", value: format!("{:.0}%", c), rgb: accent });
+        }
     }
     if cfg.show_cpu_temp {
         if let Some(t) = m.cpu_temp_c {
@@ -207,6 +209,35 @@ pub fn foreground_pid() -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn sample(cpu: Option<f32>) -> MetricsSample {
+        MetricsSample {
+            game: None,
+            cpu_usage: cpu,
+            ram_used_mb: 0,
+            ram_total_mb: 0,
+            gpu_usage: None,
+            gpu_temp_c: None,
+            vram_used_mb: None,
+            vram_total_mb: None,
+            gpu_clock_mhz: None,
+            gpu_power_w: None,
+            cpu_temp_c: None,
+            fps: None,
+            frametime_ms: None,
+        }
+    }
+
+    #[test]
+    fn cpu_row_is_hidden_until_there_is_a_real_reading() {
+        // Regression (MT6): the priming tick drew `CPU 0%`.
+        let cfg = OverlaySettings { show_cpu: true, ..OverlaySettings::default() };
+        let (_, rows) = build_rows(&cfg, &sample(None));
+        assert!(rows.iter().all(|r| r.label != "CPU"));
+        let (_, rows) = build_rows(&cfg, &sample(Some(37.4)));
+        let cpu = rows.iter().find(|r| r.label == "CPU").expect("cpu row");
+        assert_eq!(cpu.value, "37%");
+    }
 
     #[test]
     fn parses_hex_colors() {

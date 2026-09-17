@@ -21,9 +21,10 @@ fn ft_to_u64(ft: FILETIME) -> u64 {
 }
 
 /// Stateful global-CPU% meter. Each `pct()` returns the busy percentage over the
-/// interval since the previous call, computed from `GetSystemTimes` deltas. The first
-/// call has no previous sample to diff against and returns 0 (same as the old
-/// path, whose first reading also settled on the next tick).
+/// interval since the previous call, computed from `GetSystemTimes` deltas.
+///
+/// The first call after `new()`/`reset()` has nothing to diff against and returns
+/// `None`, so the HUD hides the row instead of showing a fabricated `CPU 0%`.
 #[derive(Default)]
 pub struct CpuMeter {
     prev_idle: u64,
@@ -37,40 +38,47 @@ impl CpuMeter {
         Self::default()
     }
 
-    /// Global CPU usage in 0..=100 since the last call.
-    pub fn pct(&mut self) -> f32 {
+    /// Forget the previous sample. Called while the sampler is parked, so the first
+    /// reading after a game comes back is not averaged over the whole idle period.
+    pub fn reset(&mut self) {
+        self.primed = false;
+    }
+
+    /// Global CPU usage in 0..=100 since the last call, or `None` when there is no
+    /// valid interval to report (priming call, failed query, zero elapsed time).
+    pub fn pct(&mut self) -> Option<f32> {
         let mut idle = FILETIME::default();
         let mut kernel = FILETIME::default();
         let mut user = FILETIME::default();
-        // `kernel` time already INCLUDES idle time, so busy = (kernel+user) - idle.
+        // SAFETY: three valid out-parameters for a plain system query.
         if unsafe { GetSystemTimes(Some(&mut idle), Some(&mut kernel), Some(&mut user)) }.is_err() {
-            return 0.0;
+            return None;
         }
-        let idle = ft_to_u64(idle);
-        let kernel = ft_to_u64(kernel);
-        let user = ft_to_u64(user);
+        self.update(ft_to_u64(idle), ft_to_u64(kernel), ft_to_u64(user))
+    }
 
-        if !self.primed {
-            self.prev_idle = idle;
-            self.prev_kernel = kernel;
-            self.prev_user = user;
-            self.primed = true;
-            return 0.0;
-        }
-
-        let d_idle = idle.saturating_sub(self.prev_idle);
-        let d_kernel = kernel.saturating_sub(self.prev_kernel);
-        let d_user = user.saturating_sub(self.prev_user);
+    /// Pure delta step behind `pct`, split out so it can be tested without the OS.
+    fn update(&mut self, idle: u64, kernel: u64, user: u64) -> Option<f32> {
+        let primed = std::mem::replace(&mut self.primed, true);
+        let (d_idle, d_kernel, d_user) = (
+            idle.saturating_sub(self.prev_idle),
+            kernel.saturating_sub(self.prev_kernel),
+            user.saturating_sub(self.prev_user),
+        );
         self.prev_idle = idle;
         self.prev_kernel = kernel;
         self.prev_user = user;
+        if !primed {
+            return None;
+        }
 
-        let total = d_kernel + d_user; // includes idle
+        // `kernel` time already INCLUDES idle time, so busy = (kernel+user) - idle.
+        let total = d_kernel + d_user;
         if total == 0 {
-            return 0.0;
+            return None;
         }
         let busy = total.saturating_sub(d_idle);
-        ((busy as f64 / total as f64) * 100.0) as f32
+        Some(((busy as f64 / total as f64) * 100.0) as f32)
     }
 }
 
@@ -221,4 +229,35 @@ pub fn drives() -> Vec<(String, String, u64, u64)> {
         }
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_priming_call_reports_nothing_instead_of_zero() {
+        // Regression (MT6): the first tick drew `CPU 0%` on the HUD.
+        let mut m = CpuMeter::new();
+        assert_eq!(m.update(100, 200, 100), None);
+        // +100 idle out of +400 total (kernel 300 incl. idle, user 100) → 75 % busy.
+        assert_eq!(m.update(200, 500, 200), Some(75.0));
+    }
+
+    #[test]
+    fn reset_re_primes_instead_of_averaging_over_the_idle_gap() {
+        let mut m = CpuMeter::new();
+        m.update(0, 0, 0);
+        assert!(m.update(10, 20, 20).is_some());
+        m.reset();
+        assert_eq!(m.update(1_000_000, 2_000_000, 1_000_000), None);
+        assert_eq!(m.update(1_000_050, 2_000_100, 1_000_100), Some(75.0));
+    }
+
+    #[test]
+    fn no_elapsed_time_is_not_reported_as_idle() {
+        let mut m = CpuMeter::new();
+        m.update(5, 5, 5);
+        assert_eq!(m.update(5, 5, 5), None);
+    }
 }

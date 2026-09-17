@@ -35,6 +35,10 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
   responder, el overlay seguía mostrando el último valor como si fuera actual.
   Ahora las lecturas caducan (FPS a los 2 s o dos intervalos, temperatura a los
   3 s) y la fila desaparece en lugar de mentir.
+- **`CPU 0%` en el primer refresco.** La primera lectura de CPU no tiene con qué
+  compararse y salía como 0 %; tras un rato sin juego, la primera medía toda la
+  pausa. Ahora la fila no aparece hasta tener una medición real, y la medición se
+  reinicia al volver de reposo.
 - **FPS inflados en juegos con varias ventanas de render** (interfaces Chromium
   incrustadas, ventanas secundarias): los frames de todas se sumaban. Ahora se
   mide cada swapchain por separado y se muestra la más activa.

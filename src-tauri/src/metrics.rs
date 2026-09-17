@@ -98,7 +98,8 @@ fn set_health(app: &AppHandle, published: &mut u8, health: u8) {
 #[derive(Clone, Serialize)]
 pub struct MetricsSample {
     pub game: Option<String>,
-    pub cpu_usage: f32,
+    /// `None` until the meter has a real interval to report (see `CpuMeter`).
+    pub cpu_usage: Option<f32>,
     pub ram_used_mb: u64,
     pub ram_total_mb: u64,
     pub gpu_usage: Option<u32>,
@@ -488,6 +489,10 @@ pub fn start(app: AppHandle) {
                 }
             }
             if game.is_none() {
+                // Re-prime on the way back so the first CPU% after a pause is not
+                // averaged over the whole time the sampler was parked.
+                #[cfg(windows)]
+                cpu_meter.reset();
                 if shown {
                     #[cfg(windows)]
                     overlay::hide();
@@ -550,8 +555,8 @@ pub fn start(app: AppHandle) {
                 nvml = Nvml::init().ok();
             }
 
-            // CPU + RAM. The first reading after init may be 0%; it settles on the
-            // next tick (the CPU% meter has no previous delta yet).
+            // CPU + RAM. The first reading after a (re)prime is `None` and the HUD
+            // omits the row for that tick rather than drawing a made-up 0 %.
             #[cfg(windows)]
             let (cpu_usage, ram_used_mb, ram_total_mb) = {
                 let (used, total) = crate::sysstat::mem_mb();
@@ -560,7 +565,7 @@ pub fn start(app: AppHandle) {
             // Non-Windows builds have no telemetry source (the whole overlay is
             // Win32); the sampler still runs so the module compiles and tests.
             #[cfg(not(windows))]
-            let (cpu_usage, ram_used_mb, ram_total_mb) = (0.0f32, 0u64, 0u64);
+            let (cpu_usage, ram_used_mb, ram_total_mb) = (None::<f32>, 0u64, 0u64);
 
             // GPU (NVIDIA via NVML), all best-effort.
             let mut sample = MetricsSample {
@@ -742,7 +747,7 @@ pub fn start(app: AppHandle) {
                     {
                         diag_heartbeat = std::time::Instant::now();
                         crate::overlay_diag::log(&format!(
-                            "muestra: fps={:?} frame={:?}ms gpu={:?}% gpuTemp={:?}°C cpu={:.0}% cpuTemp={:?}°C ram={}/{}MB",
+                            "muestra: fps={:?} frame={:?}ms gpu={:?}% gpuTemp={:?}°C cpu={:?}% cpuTemp={:?}°C ram={}/{}MB",
                             sample.fps,
                             sample.frametime_ms,
                             sample.gpu_usage,
