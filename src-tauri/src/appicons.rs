@@ -7,15 +7,29 @@
 //! it via `convertFileSrc` (WebView2/Chromium displays `.ico` in `<img>`). Used
 //! by the frontend as a fallback when an entry has neither a cover nor a known
 //! brand logo.
+//!
+//! The cache follows the same rules as `covers/`: filenames are FNV-1a
+//! (`art::cache_key`, stable across toolchains), files are written atomically,
+//! and the directory is kept under `ICONS_MAX_BYTES` by `maintain`.
 
-use std::collections::hash_map::DefaultHasher;
 use std::fs;
-use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 use tauri::{AppHandle, Manager};
 
+const ICONS_DIR: &str = "app_icons";
+
+/// Marker written once the directory holds FNV-1a names only. Its absence means
+/// the files were named by `DefaultHasher`, which cannot be mapped back without
+/// the source paths — and an icon is a 100 KB local PE read, so they are simply
+/// dropped and re-extracted on demand.
+const NAMING_MARKER: &str = ".fnv1a";
+
+/// Size cap for `app_icons/`. A typical icon group is 20–300 KB, so this holds
+/// several hundred apps; beyond it the least recently used are dropped.
+const ICONS_MAX_BYTES: u64 = 64 * 1024 * 1024;
+
 fn cache_dir(app: &AppHandle) -> Option<PathBuf> {
-    let dir = app.path().app_data_dir().ok()?.join("app_icons");
+    let dir = app.path().app_data_dir().ok()?.join(ICONS_DIR);
     fs::create_dir_all(&dir).ok()?;
     Some(dir)
 }
@@ -31,10 +45,9 @@ fn icon_source(raw: &str) -> String {
         .to_string()
 }
 
-fn hashed(s: &str) -> String {
-    let mut h = DefaultHasher::new();
-    s.to_lowercase().hash(&mut h);
-    format!("{:x}", h.finish())
+/// Cache filename stem for an executable path (case-insensitive, stable).
+fn hashed(path: &str) -> String {
+    crate::art::cache_key(&path.to_lowercase())
 }
 
 /// Extract (or reuse the cached) icon for an executable/icon path. Returns a
@@ -73,7 +86,8 @@ pub fn extract(app: &AppHandle, source: &str) -> Option<String> {
         if !wrote {
             return None;
         }
-        fs::write(&out, &ico).ok()?;
+        // Atomic: a half-written .ico would be served as a broken image forever.
+        crate::jsonstore::write_atomic(&out, &ico).ok()?;
     }
 
     // Authorize every call (cached too) so it survives restarts.
@@ -84,4 +98,50 @@ pub fn extract(app: &AppHandle, source: &str) -> Option<String> {
 #[cfg(not(windows))]
 pub fn extract(_app: &AppHandle, _source: &str) -> Option<String> {
     None
+}
+
+/// Startup maintenance, off the main thread: drop icons named by the old
+/// unstable hash once, then keep the directory under its size cap.
+pub fn maintain(app: &AppHandle) {
+    let Some(dir) = cache_dir(app) else { return };
+    let marker = dir.join(NAMING_MARKER);
+    if !marker.exists() {
+        if let Ok(entries) = fs::read_dir(&dir) {
+            for entry in entries.flatten() {
+                let name = entry.file_name();
+                if name.to_string_lossy().ends_with(".ico") {
+                    let _ = fs::remove_file(entry.path());
+                }
+            }
+        }
+        let _ = fs::write(&marker, b"");
+    }
+    let freed = crate::art::prune_lru(&dir, ICONS_MAX_BYTES);
+    if freed > 0 {
+        eprintln!(
+            "[appicons] pruned {} MB of cached icons (cap {} MB)",
+            freed / (1024 * 1024),
+            ICONS_MAX_BYTES / (1024 * 1024)
+        );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn icon_filenames_use_the_stable_hash() {
+        // Regression (A21): `DefaultHasher` names changed with the toolchain, so
+        // every Rust bump orphaned the whole icon cache.
+        assert_eq!(hashed(r"C:\Apps\Foo\foo.exe"), crate::art::cache_key(r"c:\apps\foo\foo.exe"));
+        assert_eq!(hashed(r"C:\Apps\Foo\FOO.EXE"), hashed(r"c:\apps\foo\foo.exe"));
+        assert_eq!(hashed("x").len(), 16);
+    }
+
+    #[test]
+    fn the_icon_index_suffix_is_dropped_from_the_source() {
+        assert_eq!(icon_source(r#""C:\app\app.exe",0"#), r"C:\app\app.exe");
+        assert_eq!(icon_source(r"C:\app\app.exe"), r"C:\app\app.exe");
+    }
 }

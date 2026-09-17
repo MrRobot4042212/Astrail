@@ -19,6 +19,10 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
   la clave `Run` del usuario, con la ruta entre comillas, y respeta la casilla
   de "Aplicaciones de inicio" del Administrador de tareas. El desinstalador
   borra ambas entradas.
+- **La caché de iconos de apps usa nombres estables y tiene tope.** Los `.ico`
+  extraídos se nombran con el mismo hash que las carátulas, se escriben de forma
+  atómica y `app_icons/` se mantiene por debajo de 64 MB; los iconos con el
+  nombre antiguo se descartan una vez y se vuelven a extraer al vuelo.
 - **El sidecar de temperatura ya no deja restos en `%TEMP%`.** Se publica como un
   único fichero sin bibliotecas nativas que extraer; el desinstalador limpia la
   carpeta que dejaban las versiones anteriores.

@@ -1165,14 +1165,16 @@ pub fn run() {
             }
 
             // One-off cache maintenance, off the main thread: rename cover files
-            // from the old unstable hash to FNV-1a, then keep `covers/` under its
-            // size cap (it had none before, so it grew forever); and rewrite an
-            // unquoted autostart command line left by the old plugin.
+            // from the old unstable hash to FNV-1a, then keep `covers/` and
+            // `app_icons/` under their size caps (they had none before, so they
+            // grew forever); and rewrite an unquoted autostart command line left
+            // by the old plugin.
             {
                 let maintenance = handle.clone();
                 std::thread::spawn(move || {
                     crate::art::migrate_filenames(&maintenance);
                     crate::art::prune_covers(&maintenance);
+                    crate::appicons::maintain(&maintenance);
                     if let Err(e) = autostart::repair() {
                         eprintln!("[autostart] could not repair the Run value: {e}");
                     }

@@ -431,8 +431,22 @@ pub fn migrate_filenames(app: &AppHandle) {
 /// this the directory grew without any bound at all.
 pub fn prune_covers(app: &AppHandle) {
     let Ok(dir) = covers_dir(app) else { return };
-    let Ok(entries) = fs::read_dir(&dir) else {
-        return;
+    let freed = prune_lru(&dir, COVERS_MAX_BYTES);
+    if freed > 0 {
+        eprintln!(
+            "[art] pruned {} MB of cached covers (cap {} MB)",
+            freed / (1024 * 1024),
+            COVERS_MAX_BYTES / (1024 * 1024)
+        );
+    }
+}
+
+/// Keep the files directly under `dir` at or below `cap` bytes, deleting the
+/// least recently used first. Returns the bytes freed. Shared by every
+/// re-creatable cache directory (`covers/`, `app_icons/`).
+pub(crate) fn prune_lru(dir: &Path, cap: u64) -> u64 {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return 0;
     };
     let mut files: Vec<(PathBuf, u64, SystemTime)> = entries
         .flatten()
@@ -446,24 +460,20 @@ pub fn prune_covers(app: &AppHandle) {
         })
         .collect();
     let total: u64 = files.iter().map(|(_, len, _)| len).sum();
-    if total <= COVERS_MAX_BYTES {
-        return;
+    if total <= cap {
+        return 0;
     }
     files.sort_by_key(|(_, _, used)| *used); // oldest first
     let mut freed = 0u64;
     for (path, len, _) in files {
-        if total - freed <= COVERS_MAX_BYTES {
+        if total - freed <= cap {
             break;
         }
         if fs::remove_file(&path).is_ok() {
             freed += len;
         }
     }
-    eprintln!(
-        "[art] pruned {} MB of cached covers (cap {} MB)",
-        freed / (1024 * 1024),
-        COVERS_MAX_BYTES / (1024 * 1024)
-    );
+    freed
 }
 
 #[cfg(test)]
@@ -533,5 +543,33 @@ mod tests {
             format!("{}.jpg", cache_key("halo")),
             format!("{}@2x.jpg", cache_key("halo"))
         );
+    }
+
+    #[test]
+    fn prune_lru_drops_the_least_recently_used_files_down_to_the_cap() {
+        use std::fs::{File, FileTimes};
+        use std::time::Duration;
+        let dir = std::env::temp_dir().join("meteor-prune-lru-test");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let base = SystemTime::now() - Duration::from_secs(3600);
+        // Three 100-byte files, oldest first; "new" is the most recently used.
+        for (i, name) in ["old", "mid", "new"].iter().enumerate() {
+            let path = dir.join(format!("{name}.ico"));
+            fs::write(&path, [0u8; 100]).unwrap();
+            let t = base + Duration::from_secs(60 * i as u64);
+            File::options()
+                .write(true)
+                .open(&path)
+                .unwrap()
+                .set_times(FileTimes::new().set_accessed(t).set_modified(t))
+                .unwrap();
+        }
+        assert_eq!(prune_lru(&dir, 300), 0, "under the cap nothing is touched");
+        assert_eq!(prune_lru(&dir, 150), 200);
+        assert!(!dir.join("old.ico").exists());
+        assert!(!dir.join("mid.ico").exists());
+        assert!(dir.join("new.ico").exists());
+        let _ = fs::remove_dir_all(&dir);
     }
 }
