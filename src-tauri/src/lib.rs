@@ -3,6 +3,7 @@ mod amd;
 mod appicons;
 mod apps_db;
 mod art;
+mod autostart;
 mod cputemp;
 #[cfg(windows)]
 mod elevation;
@@ -582,33 +583,22 @@ fn show_main(app: &AppHandle) {
 
 /// Whether Meteor is set to launch on Windows login (the autostart `Run` key).
 #[tauri::command(async)]
-fn get_autostart(app: AppHandle) -> Result<bool, String> {
-    use tauri_plugin_autostart::ManagerExt;
-    app.autolaunch()
-        .is_enabled()
-        .map_err(|e| format!("Failed to read autostart: {e}"))
+fn get_autostart() -> Result<bool, String> {
+    autostart::is_enabled().map_err(|e| format!("Failed to read autostart: {e}"))
 }
 
 /// Autostart is the `Run` key only, elevated or not: Meteor never starts itself
-/// elevated at logon (see `elevation::remove_legacy_logon_task`).
+/// elevated at logon (see `elevation::remove_legacy_logon_task`). Both branches
+/// are idempotent — enabling rewrites the quoted path, disabling ignores a
+/// missing value — so no state check is needed first.
 #[tauri::command(async)]
-fn set_autostart(app: AppHandle, enabled: bool) -> Result<(), String> {
-    use tauri_plugin_autostart::ManagerExt;
-    let auto = app.autolaunch();
-
-    // Idempotente: si ya está en el estado pedido no hacemos nada. Evita que
-    // `disable()` falle con "el sistema no puede encontrar el archivo
-    // especificado (os error 2)" al borrar la clave Run del registro cuando
-    // nunca estuvo activado (y lo simétrico al activar uno ya activo).
-    let already = auto.is_enabled().unwrap_or(false);
-    if enabled == already {
-        return Ok(());
-    }
-    if enabled {
-        auto.enable().map_err(|e| e.to_string())
+fn set_autostart(enabled: bool) -> Result<(), String> {
+    let result = if enabled {
+        autostart::enable()
     } else {
-        auto.disable().map_err(|e| e.to_string())
-    }
+        autostart::disable()
+    };
+    result.map_err(|e| format!("Failed to update autostart: {e}"))
 }
 
 #[tauri::command]
@@ -1058,12 +1048,6 @@ pub fn run() {
             show_main(app);
         }))
         .plugin(tauri_plugin_dialog::init())
-        // Launch on login (Windows registry Run key). The MacosLauncher arg is
-        // ignored on Windows; no launch args needed.
-        .plugin(tauri_plugin_autostart::init(
-            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
-            None,
-        ))
         // In-app auto-update (checks GitHub Releases) + relaunch after install.
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
@@ -1169,13 +1153,11 @@ pub fn run() {
             // launches Meteor elevated, so a normal launch spawns nothing here.
             #[cfg(windows)]
             if elevation::is_elevated() {
-                let migrate = handle.clone();
                 std::thread::spawn(move || {
-                    use tauri_plugin_autostart::ManagerExt;
                     if elevation::remove_legacy_logon_task()
-                        && !migrate.autolaunch().is_enabled().unwrap_or(false)
+                        && !autostart::is_enabled().unwrap_or(false)
                     {
-                        if let Err(e) = migrate.autolaunch().enable() {
+                        if let Err(e) = autostart::enable() {
                             eprintln!("[autostart] could not move autostart to the Run key: {e}");
                         }
                     }
@@ -1184,12 +1166,16 @@ pub fn run() {
 
             // One-off cache maintenance, off the main thread: rename cover files
             // from the old unstable hash to FNV-1a, then keep `covers/` under its
-            // size cap (it had none before, so it grew forever).
+            // size cap (it had none before, so it grew forever); and rewrite an
+            // unquoted autostart command line left by the old plugin.
             {
                 let maintenance = handle.clone();
                 std::thread::spawn(move || {
                     crate::art::migrate_filenames(&maintenance);
                     crate::art::prune_covers(&maintenance);
+                    if let Err(e) = autostart::repair() {
+                        eprintln!("[autostart] could not repair the Run value: {e}");
+                    }
                 });
             }
 

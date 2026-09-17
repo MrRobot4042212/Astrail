@@ -19,6 +19,10 @@
   ; Best effort: remove the elevated logon task older versions could create.
   nsExec::ExecToLog '"$SYSDIR\schtasks.exe" /Delete /TN MeteorAutostart /F'
   Pop $0
+  ; "Start with Windows": the Run value and the enable/disable state Task
+  ; Manager keeps next to it, so an uninstall leaves no dangling startup entry.
+  DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "Meteor"
+  DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run" "Meteor"
   ; Single-file .NET sidecar builds before 0.1.4 self-extracted native libraries
   ; here; nothing else uses the directory.
   RMDir /r "$TEMP\.net\cputemp"

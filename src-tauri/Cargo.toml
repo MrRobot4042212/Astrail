@@ -33,9 +33,6 @@ tauri = { version = "2", features = ["protocol-asset", "tray-icon"] }
 sha2 = "0.10"
 tauri-plugin-dialog = "2"
 tauri-plugin-global-shortcut = "2"
-# Launch Meteor on Windows login so the playtime/Discord watcher runs in the
-# background without the user opening the window first.
-tauri-plugin-autostart = "2"
 # In-app auto-update: check GitHub Releases for a newer signed build, download
 # and install it, then relaunch (process plugin) — no manual reinstall.
 tauri-plugin-updater = "2"

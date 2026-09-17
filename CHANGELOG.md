@@ -11,6 +11,10 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
 ## [No publicado] — Trabajo en curso
 
 ### Cambiado
+- **Iniciar con Windows sin el plugin de autoarranque.** Meteor escribe él mismo
+  la clave `Run` del usuario, con la ruta entre comillas, y respeta la casilla
+  de "Aplicaciones de inicio" del Administrador de tareas. El desinstalador
+  borra ambas entradas.
 - **El sidecar de temperatura ya no deja restos en `%TEMP%`.** Se publica como un
   único fichero sin bibliotecas nativas que extraer; el desinstalador limpia la
   carpeta que dejaban las versiones anteriores.
