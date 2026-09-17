@@ -15,16 +15,16 @@ export function NotificationsPanel({ onClose }: { onClose: () => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Reflect the user's real Spotlight binding (custom or our default).
-  const [spotlight, setSpotlight] = useState(formatShortcut(DEFAULT_SHORTCUTS.spotlight).join('+'));
+  const [spotlight, setSpotlight] = useState(DEFAULT_SHORTCUTS.spotlight);
   useEffect(() => {
     getAppSettings()
-      .then((s) => s.shortcuts?.spotlight && setSpotlight(formatShortcut(s.shortcuts.spotlight).join('+')))
+      .then((s) => s.shortcuts?.spotlight && setSpotlight(s.shortcuts.spotlight))
       .catch(() => {});
   }, []);
 
   const tutorials: Tutorial[] = [
     { title: t('notifications.welcomeTitle'), description: t('notifications.welcomeBody') },
-    { title: t('notifications.spotlightTitle'), description: t('notifications.spotlightBody', { shortcut: spotlight }) },
+    { title: t('notifications.spotlightTitle'), description: t('notifications.spotlightBody', { shortcut: formatShortcut(spotlight, t('common.keySpace')).join('+') }) },
     { title: t('notifications.coversTitle'), description: t('notifications.coversBody') },
     { title: t('notifications.manualTitle'), description: t('notifications.manualBody') },
   ];

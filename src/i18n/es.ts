@@ -15,6 +15,7 @@ export const es = {
     loading: 'Cargando…',
     add: 'Añadir',
     never: 'Nunca',
+    keySpace: 'Espacio',
   },
   app: {
     tagline: 'Biblioteca unificada',

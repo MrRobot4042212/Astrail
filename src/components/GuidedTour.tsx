@@ -182,9 +182,10 @@ export function GuidedTour({
   // Rebuilt only when the shortcuts load. The enter() closures don't depend on
   // them, and the step effect keys on `idx`, so this never re-drives a step.
   const steps = useMemo<Step[]>(() => {
-    const spotKeys = formatShortcut(sc.spotlight);
-    const overlayToggleKeys = formatShortcut(sc.overlay_toggle);
-    const overlaySettingsKeys = formatShortcut(sc.overlay_settings);
+    const space = t('common.keySpace');
+    const spotKeys = formatShortcut(sc.spotlight, space);
+    const overlayToggleKeys = formatShortcut(sc.overlay_toggle, space);
+    const overlaySettingsKeys = formatShortcut(sc.overlay_settings, space);
     return [
     {
       id: 'welcome',

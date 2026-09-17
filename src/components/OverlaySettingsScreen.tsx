@@ -30,14 +30,14 @@ export function OverlaySettingsScreen({ onClose }: { onClose: () => void }) {
   const { t } = useTranslation();
   const [overlay, setOverlay] = useState<OverlaySettings | null>(null);
   // Shortcut that returns to the game (overlay settings toggle); custom or default.
-  const [settingsKey, setSettingsKey] = useState(formatShortcut(DEFAULT_SHORTCUTS.overlay_settings).join('+'));
+  const [settingsShortcut, setSettingsShortcut] = useState(DEFAULT_SHORTCUTS.overlay_settings);
 
   useEffect(() => {
     getAppSettings()
       .then((s) => {
         setOverlay(s.overlay);
         if (s.shortcuts?.overlay_settings) {
-          setSettingsKey(formatShortcut(s.shortcuts.overlay_settings).join('+'));
+          setSettingsShortcut(s.shortcuts.overlay_settings);
         }
       })
       .catch(() => {});
@@ -80,7 +80,7 @@ export function OverlaySettingsScreen({ onClose }: { onClose: () => void }) {
         <p className="mb-6 text-sm text-muted">
           <Trans
             i18nKey="overlayScreen.subtitle"
-            values={{ shortcut: settingsKey }}
+            values={{ shortcut: formatShortcut(settingsShortcut, t('common.keySpace')).join('+') }}
             components={{ k: <kbd className="bg-elevated px-1 font-mono text-xs" /> }}
           />
         </p>

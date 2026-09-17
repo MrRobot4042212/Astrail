@@ -16,6 +16,7 @@ export const en = {
     loading: 'Loading…',
     add: 'Add',
     never: 'Never',
+    keySpace: 'Space',
   },
   app: {
     tagline: 'Unified library',

@@ -101,6 +101,8 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
 - **Arrancar PresentMon para nada en AMD con Meteor elevado.** En cada partida se
   abría y cerraba una sesión ETW antes de que ADLX diera su primer FPS; ahora se
   espera a ADLX.
+- **La tecla Espacio salía como «Espacio» en inglés** en los atajos, y el idioma
+  de la página no seguía al elegido en ajustes.
 
 ---
 

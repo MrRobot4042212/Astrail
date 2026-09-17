@@ -375,7 +375,7 @@ function MetricsTab({
   shortcuts: ShortcutsSettings | null;
 }) {
   const { t } = useTranslation();
-  const toggleKey = formatShortcut(shortcuts?.overlay_toggle ?? DEFAULT_SHORTCUTS.overlay_toggle).join('+');
+  const toggleKey = formatShortcut(shortcuts?.overlay_toggle ?? DEFAULT_SHORTCUTS.overlay_toggle, t('common.keySpace')).join('+');
   // Admin is only actually needed for CPU temp (and NVIDIA FPS via PresentMon).
   const needsAdmin = !!overlay?.show_cpu_temp;
   return (

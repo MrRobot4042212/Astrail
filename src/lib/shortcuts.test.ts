@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { recordShortcut, type ShortcutKey } from './shortcuts';
+import { formatShortcut, recordShortcut, type ShortcutKey } from './shortcuts';
 
 function key(partial: Partial<ShortcutKey> & Pick<ShortcutKey, 'key' | 'code'>): ShortcutKey {
   return { ctrlKey: false, shiftKey: false, altKey: false, metaKey: false, ...partial };
@@ -28,5 +28,18 @@ describe('recordShortcut', () => {
     expect(recordShortcut(key({ key: 'o', code: 'KeyO', altKey: true }))).toEqual({ kind: 'combo', value: 'Alt+O' });
     expect(recordShortcut(key({ key: '5', code: 'Digit5', metaKey: true }))).toEqual({ kind: 'combo', value: 'Super+5' });
     expect(recordShortcut(key({ key: 'F5', code: 'F5', shiftKey: true }))).toEqual({ kind: 'combo', value: 'Shift+F5' });
+  });
+});
+
+describe('formatShortcut', () => {
+  it('shows the Space key in the language it is given, not a fixed Spanish word', () => {
+    expect(formatShortcut('Control+Shift+Space', 'Espacio')).toEqual(['Ctrl', 'Shift', 'Espacio']);
+    expect(formatShortcut('Control+Shift+Space')).toEqual(['Ctrl', 'Shift', 'Space']);
+  });
+
+  it('turns key codes into the bare character', () => {
+    expect(formatShortcut('Control+Shift+KeyO')).toEqual(['Ctrl', 'Shift', 'O']);
+    expect(formatShortcut('Alt+Digit5')).toEqual(['Alt', '5']);
+    expect(formatShortcut(undefined)).toEqual([]);
   });
 });

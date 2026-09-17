@@ -19,7 +19,12 @@ import i18n, { resolveLanguage } from './config';
  */
 export function I18nProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
-    let unlisten: (() => void) | undefined;
+    // `<html lang>` is static in the exported layout; keep it on the active
+    // language so screen readers and hyphenation use the right one.
+    const syncLang = (lng: string) => {
+      document.documentElement.lang = lng;
+    };
+    i18n.on('languageChanged', syncLang);
 
     // Immediate best guess, then the saved preference when it arrives.
     i18n.changeLanguage(resolveLanguage('system'));
@@ -32,11 +37,13 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
         });
 
     apply();
-    listen('settings-updated', apply).then((f) => {
-      unlisten = f;
-    });
+    const un = listen('settings-updated', apply);
+    un.catch(() => {});
 
-    return () => unlisten?.();
+    return () => {
+      i18n.off('languageChanged', syncLang);
+      un.then((f) => f()).catch(() => {});
+    };
   }, []);
 
   return <I18nextProvider i18n={i18n}>{children}</I18nextProvider>;

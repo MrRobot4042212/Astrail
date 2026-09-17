@@ -31,14 +31,14 @@ function Shortcut({ keys, label }: { keys: React.ReactNode[]; label: string }) {
 /** Footer toolbar listing the app's keyboard/interaction shortcuts. */
 export function Footer() {
   const { t } = useTranslation();
-  const [spotlightShortcut, setSpotlightShortcut] = useState<string[]>(formatShortcut(DEFAULT_SHORTCUTS.spotlight));
+  const [spotlightShortcut, setSpotlightShortcut] = useState(DEFAULT_SHORTCUTS.spotlight);
 
   useEffect(() => {
     const fetchSettings = async () => {
       try {
         const settings = await getAppSettings();
         if (settings.shortcuts?.spotlight) {
-          setSpotlightShortcut(formatShortcut(settings.shortcuts.spotlight));
+          setSpotlightShortcut(settings.shortcuts.spotlight);
         }
       } catch {
         // ignore
@@ -48,13 +48,13 @@ export function Footer() {
     fetchSettings();
     const un = listen('settings-updated', fetchSettings);
     return () => {
-      un.then(f => f());
+      un.then((f) => f()).catch(() => {});
     };
   }, []);
 
   return (
     <footer data-tour="footer" className="flex shrink-0 items-center gap-5 overflow-x-auto border-t border-line bg-sidebar px-4 py-2 text-[11px] text-muted">
-      <Shortcut keys={spotlightShortcut} label={t('footer.spotlight')} />
+      <Shortcut keys={formatShortcut(spotlightShortcut, t('common.keySpace'))} label={t('footer.spotlight')} />
       <Shortcut keys={[t('footer.rightClick')]} label={t('footer.actions')} />
       <Shortcut keys={['Ctrl', t('footer.click')]} label={t('footer.selectMultiple')} />
       <Shortcut keys={[t('footer.drag')]} label={t('footer.categorizeReorder')} />
