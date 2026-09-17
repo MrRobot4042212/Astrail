@@ -57,6 +57,16 @@
     <RestoreLockedMode>true</RestoreLockedMode>
   </PropertyGroup>
 
+  <!-- PublishTrimmed adds an implicit Microsoft.NET.ILLink.Tasks reference whose
+       version comes from whichever SDK runs the restore (8.0.23 from SDK 10.0.102,
+       8.0.31 from SDK 8.0.425), so locked mode failed with NU1004 on any machine
+       whose SDK differed from the one that wrote the lock file. Pin it here; this
+       project only targets net8.0, so replacing the SDK's per-TFM list is safe. -->
+  <ItemGroup>
+    <KnownILLinkPack Remove="Microsoft.NET.ILLink.Tasks" />
+    <KnownILLinkPack Include="Microsoft.NET.ILLink.Tasks" TargetFramework="net8.0" ILLinkPackVersion="8.0.31" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="LibreHardwareMonitorLib" Version="0.9.7-pre704" />
   </ItemGroup>
