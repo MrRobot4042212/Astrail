@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Diego Alfonso Chicoma Ibañez (Dalfon.dev)
+// SPDX-License-Identifier: GPL-3.0-only
+// Additional terms under GPL-3.0 section 7 apply: see ADDITIONAL-TERMS.md
+
 //! One JSON file per concern in the app data dir.
 //!
 //! All reads and writes go through `jsonstore`, which makes every write atomic

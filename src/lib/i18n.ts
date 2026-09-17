@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Diego Alfonso Chicoma Ibañez (Dalfon.dev)
+// SPDX-License-Identifier: GPL-3.0-only
+// Additional terms under GPL-3.0 section 7 apply: see ADDITIONAL-TERMS.md
+
 /** Spanish labels for IGDB genre and game-mode names (a finite set). Unknown
  *  values fall back to the original so nothing ever shows blank. */
 

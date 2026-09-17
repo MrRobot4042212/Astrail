@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Diego Alfonso Chicoma Ibañez (Dalfon.dev)
+// SPDX-License-Identifier: GPL-3.0-only
+// Additional terms under GPL-3.0 section 7 apply: see ADDITIONAL-TERMS.md
+
 //! Cheap global CPU% and RAM via direct Win32, for the per-second metrics sampler.
 //!
 //! The overlay only shows **global CPU usage** and **used/total physical RAM**, so the

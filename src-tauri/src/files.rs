@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Diego Alfonso Chicoma Ibañez (Dalfon.dev)
+// SPDX-License-Identifier: GPL-3.0-only
+// Additional terms under GPL-3.0 section 7 apply: see ADDITIONAL-TERMS.md
+
 //! Filesystem helpers for the detail page (folder size, "open folder").
 //!
 //! Everything here takes a path that Rust resolved itself — the commands in

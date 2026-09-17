@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Diego Alfonso Chicoma Ibañez (Dalfon.dev)
+// SPDX-License-Identifier: GPL-3.0-only
+// Additional terms under GPL-3.0 section 7 apply: see ADDITIONAL-TERMS.md
+
 //! Hardware readings via the LibreHardwareMonitor sidecar (`binaries/cputemp.exe`,
 //! built from `sidecar/cputemp/`; the name predates its GPU mode).
 //!

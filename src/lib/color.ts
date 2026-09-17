@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Diego Alfonso Chicoma Ibañez (Dalfon.dev)
+// SPDX-License-Identifier: GPL-3.0-only
+// Additional terms under GPL-3.0 section 7 apply: see ADDITIONAL-TERMS.md
+
 /**
  * The color to persist when a native color picker settles on `next`, or `null` when
  * nothing changed (`<input type="color">` reports lowercase hex, stored values may

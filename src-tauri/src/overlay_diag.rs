@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Diego Alfonso Chicoma Ibañez (Dalfon.dev)
+// SPDX-License-Identifier: GPL-3.0-only
+// Additional terms under GPL-3.0 section 7 apply: see ADDITIONAL-TERMS.md
+
 //! Deep, opt-in diagnostics for the in-game overlay (Windows only).
 //!
 //! Everything here is gated behind the `METEOR_OVERLAY_DEBUG` env var, so in normal

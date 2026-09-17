@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Diego Alfonso Chicoma Ibañez (Dalfon.dev)
+// SPDX-License-Identifier: GPL-3.0-only
+// Additional terms under GPL-3.0 section 7 apply: see ADDITIONAL-TERMS.md
+
 //! FPS / frametime via **PresentMon** (Intel/Microsoft, ETW-based — no DLL
 //! injection, so anti-cheat safe). A controller thread spawns `PresentMon.exe`
 //! targeting the running game's PID, streams its CSV from stdout, and keeps a

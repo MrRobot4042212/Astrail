@@ -10,7 +10,8 @@
     "app": "tauri dev",
     "app:build": "tauri build",
     "test": "vitest run",
-    "check": "npm run lint && npx tsc --noEmit && npm run test && npm run check:rust",
+    "check": "npm run lint && npx tsc --noEmit && npm run test && npm run check:legal && npm run check:rust",
+    "check:legal": "node scripts/check-headers.mjs && node scripts/third-party-notices.mjs --check",
     "check:rust": "cd src-tauri && cargo clippy --all-targets -- -D warnings && cargo test"
   },
   "dependencies": {

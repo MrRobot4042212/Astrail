@@ -64,6 +64,11 @@ jobs:
       - name: Frontend tests
         run: npm run test
 
+      # The SPDX headers and THIRD-PARTY-NOTICES.txt are what keeps the GPL and
+      # the licenses of the bundled code satisfied, so a stale file fails here.
+      - name: Licensing (SPDX headers and third-party notices)
+        run: npm run check:legal
+
       - name: Build frontend
         run: npm run build
 
