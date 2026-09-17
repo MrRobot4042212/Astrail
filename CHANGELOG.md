@@ -98,6 +98,11 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
 - **Se podían abrir dos Meteor a la vez**, duplicando icono de bandeja, atajos y
   vigilancia de juegos, y el segundo cortaba el FPS del primero. Ahora abrir
   Meteor otra vez trae al frente la ventana existente.
+- **Los juegos heredaban permisos de administrador.** Con Meteor elevado (para las
+  métricas que lo requieren), cualquier juego o tienda lanzado desde él arrancaba
+  también como administrador. Ahora el lanzamiento se delega en el escritorio de
+  Windows y el juego arranca con los permisos normales del usuario; si eso no es
+  posible, el lanzamiento falla en lugar de elevarlo.
 - **Lanzar un juego congelaba Meteor un instante**, también el HUD y los atajos:
   la biblioteca se leía entera en el hilo principal. Ahora se resuelve en segundo
   plano.

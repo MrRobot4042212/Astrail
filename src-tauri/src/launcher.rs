@@ -14,6 +14,14 @@
 //! The `Game` handed to `launch` is always re-resolved in Rust from the library
 //! cache or the manual store (`lib.rs::launch_game` takes an **id**), so the
 //! webview cannot fabricate a target.
+//!
+//! **Elevation.** When Meteor itself runs as administrator (the admin-only
+//! metrics), anything it starts with `CreateProcess` or `ShellExecuteW` inherits
+//! that admin token: the game, and a store client that was not already running.
+//! In that state every launch is handed to the desktop Explorer instead
+//! (`desktop_shell`), which starts it with the user's normal token. If that is not
+//! possible the launch fails; it never falls back to starting the game elevated.
+//! Runs on the main thread (`lib.rs::launch_game`), an STA.
 
 use crate::models::{Game, GameSource};
 use std::path::{Path, PathBuf};
@@ -124,7 +132,11 @@ fn open_uri(uri: &str) -> Result<(), String> {
         // only Explorer resolves. Absolute path: never resolve a system binary
         // through PATH (this process may be elevated).
         if uri.to_ascii_lowercase().starts_with(APPS_FOLDER_PREFIX) {
-            Command::new(crate::files::system_exe("explorer.exe"))
+            let explorer = crate::files::system_exe("explorer.exe");
+            if crate::elevation::is_elevated() {
+                return desktop_shell::open(&explorer.to_string_lossy(), Some(uri), None);
+            }
+            Command::new(explorer)
                 .arg(uri)
                 .spawn()
                 .map_err(|e| format!("No se pudo abrir «{uri}»: {e}"))?;
@@ -151,6 +163,9 @@ fn shell_execute(target: &str, dir: Option<&Path>) -> Result<(), String> {
     use windows::Win32::UI::Shell::ShellExecuteW;
     use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
 
+    if crate::elevation::is_elevated() {
+        return desktop_shell::open(target, None, dir);
+    }
     let target_w = HSTRING::from(target);
     let dir_w = dir.map(|d| HSTRING::from(d.as_os_str()));
     // SAFETY: both HSTRINGs outlive the call, and ShellExecuteW only reads them.
@@ -218,15 +233,12 @@ fn spawn_exe(game: &Game, exe: &str) -> Result<(), String> {
     let dir = path.parent().map(|p| p.to_path_buf());
 
     #[cfg(target_os = "windows")]
-    {
-        // `.lnk` shortcuts are resolved by the shell, not by CreateProcess.
-        let is_lnk = path
-            .extension()
-            .and_then(|e| e.to_str())
-            .is_some_and(|e| e.eq_ignore_ascii_case("lnk"));
-        if is_lnk {
-            return shell_execute(&path.to_string_lossy(), dir.as_deref());
+    match exe_route(&path, crate::elevation::is_elevated()) {
+        ExeRoute::DesktopShell => {
+            return desktop_shell::open(&path.to_string_lossy(), None, dir.as_deref())
         }
+        ExeRoute::ShellExecute => return shell_execute(&path.to_string_lossy(), dir.as_deref()),
+        ExeRoute::CreateProcess => {}
     }
 
     let mut cmd = Command::new(&path);
@@ -238,9 +250,136 @@ fn spawn_exe(game: &Game, exe: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// How a validated executable is started.
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+#[derive(Debug, PartialEq, Eq)]
+enum ExeRoute {
+    /// `Command::spawn` (CreateProcess): inherits Meteor's token.
+    CreateProcess,
+    /// `ShellExecuteW`: `.lnk` shortcuts, which CreateProcess cannot start.
+    ShellExecute,
+    /// The desktop Explorer: the only route while Meteor is elevated.
+    DesktopShell,
+}
+
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+fn exe_route(path: &Path, elevated: bool) -> ExeRoute {
+    if elevated {
+        return ExeRoute::DesktopShell;
+    }
+    let is_lnk = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|e| e.eq_ignore_ascii_case("lnk"));
+    if is_lnk {
+        ExeRoute::ShellExecute
+    } else {
+        ExeRoute::CreateProcess
+    }
+}
+
+/// Start something through the desktop Explorer's `IShellDispatch2::ShellExecute`
+/// so it runs with Explorer's (the user's, unelevated) token. The chain is
+/// `ShellWindows` -> desktop window -> top-level browser -> active view -> its
+/// `Application` object.
+#[cfg(target_os = "windows")]
+mod desktop_shell {
+    use std::path::Path;
+    use windows::core::{Interface, BSTR};
+    use windows::Win32::System::Com::{
+        CoCreateInstance, CoInitializeEx, CoUninitialize, IDispatch, IServiceProvider,
+        CLSCTX_LOCAL_SERVER, COINIT_APARTMENTTHREADED,
+    };
+    use windows::Win32::System::Variant::VARIANT;
+    use windows::Win32::UI::Shell::{
+        IShellBrowser, IShellDispatch2, IShellFolderViewDual, IShellWindows, SID_STopLevelBrowser,
+        ShellWindows, SVGIO_BACKGROUND, SWC_DESKTOP, SWFO_NEEDDISPATCH,
+    };
+    use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+
+    /// Balances a successful `CoInitializeEx` on this thread.
+    pub(super) struct ComScope(bool);
+
+    impl ComScope {
+        pub(super) fn enter() -> Self {
+            // SAFETY: plain apartment initialisation of the current thread. S_OK and
+            // S_FALSE must be balanced; RPC_E_CHANGED_MODE (already MTA) must not,
+            // and out-of-process calls to Explorer work from either apartment.
+            Self(unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) }.is_ok())
+        }
+    }
+
+    impl Drop for ComScope {
+        fn drop(&mut self) {
+            if self.0 {
+                // SAFETY: paired with the successful CoInitializeEx in `enter`.
+                unsafe { CoUninitialize() };
+            }
+        }
+    }
+
+    pub(super) fn dispatch() -> windows::core::Result<IShellDispatch2> {
+        // SAFETY: every call receives live COM pointers owned by this function and
+        // VARIANTs that outlive the call; `hwnd` is a valid out pointer.
+        unsafe {
+            let windows: IShellWindows = CoCreateInstance(&ShellWindows, None, CLSCTX_LOCAL_SERVER)?;
+            let (loc, root) = (VARIANT::default(), VARIANT::default());
+            let mut hwnd = 0i32;
+            let desktop =
+                windows.FindWindowSW(&loc, &root, SWC_DESKTOP, &mut hwnd, SWFO_NEEDDISPATCH)?;
+            let browser: IShellBrowser =
+                desktop.cast::<IServiceProvider>()?.QueryService(&SID_STopLevelBrowser)?;
+            let view = browser.QueryActiveShellView()?;
+            let folder_view: IShellFolderViewDual =
+                view.GetItemObject::<IDispatch>(SVGIO_BACKGROUND)?.cast()?;
+            folder_view.Application()?.cast()
+        }
+    }
+
+    /// Open `file` (an exe, a shortcut or a protocol URI) with optional arguments
+    /// and working directory, unelevated.
+    pub(super) fn open(file: &str, args: Option<&str>, dir: Option<&Path>) -> Result<(), String> {
+        let _com = ComScope::enter();
+        let shell = dispatch().map_err(|e| {
+            format!(
+                "Meteor is running as administrator and could not hand the launch to the \
+                 desktop shell, so it was not started with admin rights ({e})"
+            )
+        })?;
+        let dir = dir.map(|d| d.to_string_lossy().into_owned()).unwrap_or_default();
+        let args = VARIANT::from(args.unwrap_or_default());
+        let dir = VARIANT::from(dir.as_str());
+        let verb = VARIANT::from("open");
+        let show = VARIANT::from(SW_SHOWNORMAL.0);
+        // SAFETY: `shell` is a live interface and every argument outlives the call.
+        unsafe { shell.ShellExecute(&BSTR::from(file), &args, &dir, &verb, &show) }
+            .map_err(|e| format!("Could not open {file} through the desktop shell ({e})"))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_elevated_meteor_never_starts_an_executable_itself() {
+        // Regression (W1): games inherited the admin token of an elevated Meteor.
+        for exe in ["C:\\Games\\x\\game.exe", "C:\\Games\\x\\start.bat", "C:\\x\\Game.LNK"] {
+            assert_eq!(exe_route(Path::new(exe), true), ExeRoute::DesktopShell, "{exe}");
+        }
+        assert_eq!(exe_route(Path::new("C:\\g\\game.exe"), false), ExeRoute::CreateProcess);
+        assert_eq!(exe_route(Path::new("C:\\g\\Game.LNK"), false), ExeRoute::ShellExecute);
+    }
+
+    /// Needs an interactive desktop with Explorer as the shell, which CI runners
+    /// do not have. Run with `cargo test -- --ignored`.
+    #[cfg(target_os = "windows")]
+    #[test]
+    #[ignore]
+    fn the_desktop_shell_dispatch_is_reachable() {
+        let _com = desktop_shell::ComScope::enter();
+        desktop_shell::dispatch().unwrap();
+    }
 
     #[test]
     fn scheme_is_lowercased_and_validated() {

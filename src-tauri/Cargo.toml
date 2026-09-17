@@ -96,6 +96,11 @@ windows = { version = "0.61", features = [
     # Native layered HUD window (lightweight overlay): module handle for the window class.
     "Win32_System_LibraryLoader",
     "Win32_UI_Shell",
+    # Launching games through the desktop Explorer when Meteor is elevated, so they
+    # get the user's normal token (launcher.rs `desktop_shell`).
+    "Win32_System_Com",
+    "Win32_System_Ole",
+    "Win32_System_Variant",
     # Per-monitor DPI for the HUD (GetDpiForMonitor), read on the sampler thread
     # instead of hopping to the main thread for primary_monitor().
     "Win32_UI_HiDpi",
