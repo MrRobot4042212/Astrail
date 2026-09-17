@@ -30,11 +30,18 @@ param(
     [string]$Label = 'baseline',
     [double]$Minutes = 10,
     [string]$Compare,
-    [string]$OutDir = "$PSScriptRoot"
+    [string]$OutDir
 )
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+
+# `$PSScriptRoot` is empty in some invocation shapes (dot-sourcing, `-Command`
+# with a relative path); fall back to the script's own location so `New-Item`
+# never receives an empty path at the very end of a multi-minute capture.
+if (-not $OutDir) {
+    $OutDir = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
+}
 
 function Get-MeteorProcess {
     $p = Get-Process -Name meteor -ErrorAction SilentlyContinue
@@ -54,6 +61,27 @@ function Get-WebViewTree($parentId) {
     return @($all | Where-Object { $ids.Contains([int]$_.ProcessId) })
 }
 
+# Performance-counter paths are LOCALIZED: on a Spanish Windows the object is
+# "Proceso" and the counter "% de tiempo de procesador", so the English literal
+# `\Process(meteor)\% Processor Time` returns nothing (and under StrictMode the
+# `.CounterSamples` access throws). Perflib assigns every object/counter a
+# language-neutral index; resolve the names through the current-language table.
+$script:PerfNames = $null
+function Resolve-CounterName([int]$index) {
+    if (-not $script:PerfNames) {
+        $raw = (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Perflib\CurrentLanguage').Counter
+        $script:PerfNames = @{}
+        for ($i = 0; $i -lt $raw.Count - 1; $i += 2) { $script:PerfNames[[int]$raw[$i]] = $raw[$i + 1] }
+    }
+    $name = $script:PerfNames[$index]
+    if (-not $name) { throw "Perflib index $index has no name in the current language table." }
+    return $name
+}
+$objProcess  = Resolve-CounterName 230   # Process
+$ctrCpu      = Resolve-CounterName 6     # % Processor Time
+$objThread   = Resolve-CounterName 232   # Thread
+$ctrCtx      = Resolve-CounterName 146   # Context Switches/sec
+
 $dataDir = Join-Path $env:APPDATA 'com.alfonso.meteor'
 $proc = Get-MeteorProcess
 Write-Host "Sampling meteor.exe (pid $($proc.Id)) for $Minutes min. Leave it idle in the tray."
@@ -64,14 +92,21 @@ if (Test-Path $dataDir) {
 }
 
 $samples = [int][math]::Max(2, ($Minutes * 60) / 5)
-$cpu = (Get-Counter '\Process(meteor)\% Processor Time' -SampleInterval 5 -MaxSamples $samples -ErrorAction SilentlyContinue).CounterSamples
+$cpu = (Get-Counter "\$objProcess(meteor)\$ctrCpu" -SampleInterval 5 -MaxSamples $samples).CounterSamples
 $cpuValues = @($cpu | ForEach-Object { $_.CookedValue })
 $cores = (Get-CimInstance Win32_ComputerSystem).NumberOfLogicalProcessors
 
 # Context switches per second across meteor's threads = how often it wakes up.
-$ctx = (Get-Counter '\Thread(meteor/*)\Context Switches/sec' -SampleInterval 5 -MaxSamples 3 -ErrorAction SilentlyContinue).CounterSamples
+# The `meteor/*` instance set changes between samples (short-lived tokio
+# workers), and Get-Counter throws on any invalid sample unless told not to;
+# keep only samples with Status 0 and average over the samples we did get.
+$ctxRaw = Get-Counter "\$objThread(meteor/*)\$ctrCtx" -SampleInterval 5 -MaxSamples 3 -ErrorAction SilentlyContinue
 $ctxTotal = 0
-if ($ctx) { $ctxTotal = [math]::Round((($ctx | Measure-Object CookedValue -Sum).Sum) / 3, 1) }
+if ($ctxRaw) {
+    $ctx = @($ctxRaw | ForEach-Object { $_.CounterSamples } | Where-Object { $_.Status -eq 0 })
+    $rounds = @($ctxRaw).Count
+    if ($ctx -and $rounds -gt 0) { $ctxTotal = [math]::Round((($ctx | Measure-Object CookedValue -Sum).Sum) / $rounds, 1) }
+}
 
 $after = @{}
 if (Test-Path $dataDir) {
