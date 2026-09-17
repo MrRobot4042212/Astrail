@@ -10,6 +10,27 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
 
 ## [No publicado] — Trabajo en curso
 
+### Añadido
+- **Meteor es software libre: GPL-3.0-only.** Se publica el texto de la licencia
+  ([LICENSE](LICENSE)) y los términos adicionales de la sección 7
+  ([ADDITIONAL-TERMS.md](ADDITIONAL-TERMS.md)): conservar la atribución de autoría
+  en «Acerca de», marcar las versiones modificadas como no oficiales, y sin
+  derechos sobre el nombre ni el logo. No hay CLA.
+- **Nueva pestaña «Acerca de» en Ajustes.** Muestra la versión, la autoría con el
+  enlace al repositorio y el texto íntegro de la licencia, de los términos
+  adicionales y de los avisos de terceros, que van embebidos en el ejecutable. Si
+  la compilación no sale del workflow de publicación del proyecto, lo advierte.
+- **`THIRD-PARTY-NOTICES.txt`**: los avisos de todo el código de terceros que
+  Meteor incluye (313 crates de Rust, 30 paquetes npm, 11 de NuGet, además de
+  PresentMon, el runtime de .NET, los módulos de PawnIO y las tipografías). Lo
+  genera `scripts/third-party-notices.mjs` a partir de los ficheros de bloqueo, y
+  la CI falla si se queda desactualizado.
+- **Cabecera SPDX en todos los ficheros de código.** `scripts/check-headers.mjs`
+  la verifica (y la añade con `--fix`); `npm run check:legal` corre ambas
+  comprobaciones y forma parte de `npm run check` y de la CI.
+- **[GOVERNANCE.md](GOVERNANCE.md) y `.github/CODEOWNERS`**: quién decide, quién
+  publica y dónde se reportan los fallos de seguridad.
+
 ### Cambiado
 - **Las métricas de GPU AMD ya no usan el SDK de ADLX.** El sidecar `cputemp`
   (LibreHardwareMonitor) lee uso, temperatura, potencia, reloj, VRAM y FPS de la

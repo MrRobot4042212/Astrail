@@ -104,3 +104,39 @@ src-tauri/                # Núcleo Rust
   capabilities/           # permisos (core + dialog)
   tauri.conf.json
 ```
+
+
+## Licencia
+
+Meteor es software libre bajo la **GNU General Public License v3** —
+[LICENSE](LICENSE) — con los términos adicionales de la sección 7 recogidos en
+[ADDITIONAL-TERMS.md](ADDITIONAL-TERMS.md):
+
+1. Conservar la atribución de autoría en *Ajustes → Acerca de* (GPL 7b).
+2. Marcar las versiones modificadas como no oficiales (GPL 7c).
+3. Sin derechos sobre el nombre «Meteor», «Dalfon.dev» ni el logo (GPL 7e).
+
+Copyright (C) 2026 Diego Alfonso Chicoma Ibañez (Dalfon.dev).
+
+Cómo se decide qué entra y quién publica: [GOVERNANCE.md](GOVERNANCE.md). Cómo
+contribuir (sin CLA): [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Créditos
+
+Meteor incluye código de otras personas, cada uno con su licencia. La lista
+completa y los textos íntegros están en
+[THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt), y la app también los muestra en
+*Ajustes → Acerca de*. Lo más visible:
+
+- [PresentMon](https://github.com/GameTechDev/PresentMon) (Intel, MIT) — FPS y
+  frametime por swapchain.
+- [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor)
+  (MPL-2.0) — temperaturas y telemetría, dentro del sidecar `cputemp`.
+- [Tauri](https://tauri.app) (MIT/Apache-2.0), [Next.js](https://nextjs.org) y
+  [React](https://react.dev) (MIT).
+- Tipografías [Oxanium](https://github.com/sevmeyer/oxanium) y
+  [Source Code Pro](https://github.com/adobe-fonts/source-code-pro) (OFL-1.1).
+
+Los nombres y logos de Steam, Epic Games, GOG, EA, Ubisoft, Xbox, Battle.net y
+demás tiendas pertenecen a sus dueños y se usan solo para identificarlas. Meteor no
+está afiliado a ninguna de ellas.

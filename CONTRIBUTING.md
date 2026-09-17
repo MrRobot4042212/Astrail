@@ -3,6 +3,32 @@
 Meteor es una app de escritorio **solo para Windows**: Tauri 2 (Rust) como núcleo
 nativo y Next.js 16 (export estático) como interfaz. No hay servidor.
 
+## Licencia de lo que aportas
+
+Meteor es **GPL-3.0-only** con los términos adicionales de
+[ADDITIONAL-TERMS.md](ADDITIONAL-TERMS.md). Al abrir un PR aceptas que tu código
+se publique bajo esa misma licencia y esos mismos términos.
+
+**No hay CLA**: conservas el copyright de lo que escribas. Quien decide qué entra
+es el mantenedor ([GOVERNANCE.md](GOVERNANCE.md)).
+
+Todo fichero de código escrito a mano empieza con esta cabecera, con el prefijo de
+comentario que toque en cada lenguaje:
+
+```
+// SPDX-FileCopyrightText: 2026 Diego Alfonso Chicoma Ibañez (Dalfon.dev)
+// SPDX-License-Identifier: GPL-3.0-only
+// Additional terms under GPL-3.0 section 7 apply: see ADDITIONAL-TERMS.md
+```
+
+`node scripts/check-headers.mjs --fix` la añade donde falte, y `npm run check` la
+verifica. La línea de copyright identifica la obra completa, no la autoría de cada
+fichero: no la cambies al enviar un PR.
+
+Si añades, quitas o actualizas una dependencia, regenera los avisos de terceros con
+`node scripts/third-party-notices.mjs` y commitea el `THIRD-PARTY-NOTICES.txt`
+resultante; la CI falla si está desactualizado.
+
 ## Preparar el entorno
 
 Requisitos en el README. Una vez instalados:
