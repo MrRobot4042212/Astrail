@@ -2,9 +2,11 @@
 name = "meteor"
 version = "0.1.3"
 description = "Meteor - biblioteca unificada de juegos y apps"
-authors = ["Alfonso"]
+authors = ["Diego Alfonso Chicoma Ibañez (Dalfon.dev)"]
 edition = "2021"
 rust-version = "1.88"
+license = "GPL-3.0-only"
+repository = "https://github.com/MrRobot4042212/Meteor"
 
 # The library is what main.rs calls into. Only `rlib` is needed: `staticlib` and
 # `cdylib` are the iOS/Android entry points, and building them made cargo link
