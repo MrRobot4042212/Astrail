@@ -891,8 +891,9 @@ fn ensure_overlay_window(app: &AppHandle) -> Option<tauri::WebviewWindow> {
     // entry made the overlay download and evaluate the entire launcher bundle
     // (~854 KB of eager JS, the grid and both catalogs included) to draw one
     // settings panel while a game is running. Next code-splits per route, so this
-    // loads only the overlay tree.
-    WebviewWindowBuilder::new(app, "overlay", WebviewUrl::App("overlay.html".into()))
+    // loads only the overlay tree. No `.html`: the dev server only knows the route
+    // `/overlay`, and the bundled app resolves `overlay` to `overlay.html` itself.
+    WebviewWindowBuilder::new(app, "overlay", WebviewUrl::App("overlay".into()))
         .title("Meteor Overlay")
         .decorations(false)
         .transparent(true)
