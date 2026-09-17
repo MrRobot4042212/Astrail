@@ -10,6 +10,11 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
 
 ## [No publicado] — Trabajo en curso
 
+### Cambiado
+- **El sidecar de temperatura ya no deja restos en `%TEMP%`.** Se publica como un
+  único fichero sin bibliotecas nativas que extraer; el desinstalador limpia la
+  carpeta que dejaban las versiones anteriores.
+
 ## [0.1.3] — 2026-09-17
 
 ### Cambiado

@@ -19,4 +19,7 @@
   ; Best effort: remove the elevated logon task older versions could create.
   nsExec::ExecToLog '"$SYSDIR\schtasks.exe" /Delete /TN MeteorAutostart /F'
   Pop $0
+  ; Single-file .NET sidecar builds before 0.1.4 self-extracted native libraries
+  ; here; nothing else uses the directory.
+  RMDir /r "$TEMP\.net\cputemp"
 !macroend

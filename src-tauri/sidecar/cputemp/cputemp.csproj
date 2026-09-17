@@ -21,7 +21,12 @@
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <SelfContained>true</SelfContained>
     <PublishSingleFile>true</PublishSingleFile>
-    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <!-- No native library may be bundled: a bundled one is self-extracted into
+         %TEMP%\.net\cputemp\ at every start and survives uninstall. The only
+         candidate, Mono.Posix's MonoPosixHelper (a transitive dependency of
+         LibreHardwareMonitorLib, Linux-only code), is dropped from the publish
+         below, so the published output is exactly one file. -->
+    <IncludeNativeLibrariesForSelfExtract>false</IncludeNativeLibrariesForSelfExtract>
     <DebugType>none</DebugType>
     <!-- 72 lines of C# shipped as ~69 MB because the whole .NET runtime was
          embedded uncompressed. Compression alone roughly halves the installer;
@@ -70,5 +75,16 @@
   <ItemGroup>
     <PackageReference Include="LibreHardwareMonitorLib" Version="0.9.7-pre704" />
   </ItemGroup>
+
+  <!-- Drop the Mono.Posix native helper from the publish set (see
+       IncludeNativeLibrariesForSelfExtract above). The single-file bundler
+       refuses a native library that is neither bundled nor excluded, so this
+       target is what keeps the publish at one file. -->
+  <Target Name="DropMonoPosixNative" AfterTargets="ComputeResolvedFilesToPublishList">
+    <ItemGroup>
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)"
+        Condition="'%(Filename)%(Extension)' == 'MonoPosixHelper.dll' Or '%(Filename)%(Extension)' == 'libMonoPosixHelper.dll'" />
+    </ItemGroup>
+  </Target>
 
 </Project>
