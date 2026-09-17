@@ -92,6 +92,9 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
 - **Se podían abrir dos Meteor a la vez**, duplicando icono de bandeja, atajos y
   vigilancia de juegos, y el segundo cortaba el FPS del primero. Ahora abrir
   Meteor otra vez trae al frente la ventana existente.
+- **Arrancar PresentMon para nada en AMD con Meteor elevado.** En cada partida se
+  abría y cerraba una sesión ETW antes de que ADLX diera su primer FPS; ahora se
+  espera a ADLX.
 
 ---
 

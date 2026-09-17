@@ -40,6 +40,13 @@ static CPU_TEMP_WANTED: AtomicBool = AtomicBool::new(false);
 /// true the PresentMon controller stays idle — running an ETW session per frame for
 /// a number we'd only discard is pure overhead (and needs admin).
 static ADLX_FPS_ACTIVE: AtomicBool = AtomicBool::new(false);
+/// Whether the sampler has decided the FPS source for the running game. Until the
+/// first sample of a session it has not, and PresentMon waits: on an AMD machine
+/// it used to start an ETW session and tear it down one tick later.
+static FPS_SOURCE_KNOWN: AtomicBool = AtomicBool::new(false);
+/// How long ADLX keeps the FPS row to itself before its first reading. Past this
+/// with no reading (driver without the FPS counter), PresentMon takes over.
+const ADLX_FPS_GRACE: Duration = Duration::from_secs(3);
 /// Sampling interval in milliseconds.
 static INTERVAL_MS: AtomicU64 = AtomicU64::new(1000);
 /// PID of the running game's main process (for PresentMon). 0 = none.
@@ -249,9 +256,30 @@ pub fn current_pid() -> u32 {
 pub fn want_fps() -> bool {
     sidecar_wanted(
         OVERLAY_ENABLED.load(Ordering::Relaxed),
-        FPS_WANTED.load(Ordering::Relaxed) && !ADLX_FPS_ACTIVE.load(Ordering::Relaxed),
+        FPS_WANTED.load(Ordering::Relaxed)
+            && FPS_SOURCE_KNOWN.load(Ordering::Relaxed)
+            && !ADLX_FPS_ACTIVE.load(Ordering::Relaxed),
         SIDECARS_SUSPENDED.load(Ordering::Relaxed),
     )
+}
+
+/// Whether ADLX supplies FPS this tick: its backend was the one sampled, and it has
+/// either produced a reading this session or is still inside the grace window.
+/// Without the grace, a first tick with no reading yet would hand FPS to
+/// PresentMon and take it back on the next one.
+fn adlx_owns_fps(adlx_sampled: bool, adlx_fps_seen: bool, session_age: Duration) -> bool {
+    adlx_sampled && (adlx_fps_seen || session_age < ADLX_FPS_GRACE)
+}
+
+/// Publish the FPS source decision, waking the PresentMon controller only when it
+/// changed. Both atomics are written once per tick, never cleared and re-set inside
+/// one, so the controller cannot observe a transient "PresentMon wanted".
+fn publish_fps_source(known: bool, adlx: bool) {
+    let was_adlx = ADLX_FPS_ACTIVE.swap(adlx, Ordering::Relaxed);
+    let was_known = FPS_SOURCE_KNOWN.swap(known, Ordering::Relaxed);
+    if was_adlx != adlx || was_known != known {
+        wake_sidecars();
+    }
 }
 
 /// Whether the CPU-temp sidecar should run: overlay on and CPU temp enabled.
@@ -498,6 +526,9 @@ pub fn start(app: AppHandle) {
         let mut cfg_gen: u64 = u64::MAX;
         let mut cfg: Option<crate::models::OverlaySettings> = None;
         let mut sel = String::from("auto");
+        // FPS source state for the running game (see `adlx_owns_fps`).
+        let mut fps_session_start: Option<Instant> = None;
+        let mut adlx_fps_seen = false;
 
         loop {
             // Idle (overlay off, no game, or the settings screen open) → wait with
@@ -564,6 +595,13 @@ pub fn start(app: AppHandle) {
                 }
             }
             if game.is_none() {
+                // The game is gone (not just alt-tabbed): decide the FPS source
+                // afresh for the next one.
+                if !HAS_GAME.load(Ordering::Relaxed) {
+                    fps_session_start = None;
+                    adlx_fps_seen = false;
+                    publish_fps_source(false, false);
+                }
                 // Re-prime on the way back so the first CPU% after a pause is not
                 // averaged over the whole time the sampler was parked.
                 #[cfg(windows)]
@@ -694,10 +732,9 @@ pub fn start(app: AppHandle) {
 
             // Sample the chosen backend. ADLX wins when explicitly picked or when
             // there's no NVIDIA; otherwise NVML (default index 0, or the picked one).
-            // Re-armed below only if the ADLX path actually supplies FPS this tick;
-            // cleared otherwise so PresentMon takes over (e.g. NVML selected).
-            ADLX_FPS_ACTIVE.store(false, Ordering::Relaxed);
             let mut gpu_filled = false;
+            #[cfg_attr(not(windows), allow(unused_mut))]
+            let mut adlx_sampled = false;
             #[cfg(windows)]
             let fps_wanted = FPS_WANTED.load(Ordering::Relaxed);
             #[cfg(windows)]
@@ -714,10 +751,9 @@ pub fn start(app: AppHandle) {
                     // flag it so the PresentMon controller stays idle (no ETW session).
                     if let Some(f) = g.fps {
                         apply_adlx_fps(&mut sample, f);
-                        ADLX_FPS_ACTIVE.store(true, Ordering::Relaxed);
-                    } else {
-                        ADLX_FPS_ACTIVE.store(false, Ordering::Relaxed);
+                        adlx_fps_seen = true;
                     }
+                    adlx_sampled = true;
                     gpu_filled = true;
                 }
             }
@@ -743,6 +779,8 @@ pub fn start(app: AppHandle) {
                     }
                 }
             }
+            let session_age = fps_session_start.get_or_insert_with(Instant::now).elapsed();
+            publish_fps_source(true, adlx_owns_fps(adlx_sampled, adlx_fps_seen, session_age));
 
             // Draw the native HUD via the overlay facade: a content-sized window backed
             // by a DirectComposition flip swapchain (MPO-friendly → the game keeps its
@@ -844,6 +882,20 @@ pub fn start(app: AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn adlx_keeps_fps_through_its_first_ticks_so_presentmon_is_not_started_and_killed() {
+        // Regression (MT7): the first AMD tick had no ADLX reading yet, so PresentMon
+        // was spawned (ETW session) and torn down one tick later on every launch.
+        let early = Duration::from_millis(500);
+        assert!(adlx_owns_fps(true, false, early));
+        assert!(adlx_owns_fps(true, true, Duration::from_secs(60)));
+        // A driver without the FPS counter hands over after the grace window.
+        assert!(!adlx_owns_fps(true, false, ADLX_FPS_GRACE));
+        // NVML sampled (ADLX not the backend): always PresentMon.
+        assert!(!adlx_owns_fps(false, false, early));
+        assert!(!adlx_owns_fps(false, true, early));
+    }
 
     #[test]
     fn a_reading_is_fresh_only_within_its_max_age() {
