@@ -11,7 +11,7 @@ import {
   getAutostart,
   setAutostart,
   getAppSettings,
-  setAppSettings,
+  patchAppSettings,
   systemInfo,
   isElevated,
   restartAsAdmin,
@@ -138,37 +138,23 @@ export function SettingsDialog({
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  // Patch the overlay config: optimistic local update, then persist (merging onto
-  // the freshest settings so we don't clobber other fields like minimize_to_tray).
+  // Optimistic local update, then send only the changed fields; Rust merges them.
   function updateOverlay(patch: Partial<OverlaySettings>) {
-    setOverlay((prev) => {
-      if (!prev) return prev;
-      const nextOverlay = { ...prev, ...patch };
-      getAppSettings()
-        .then((current) => setAppSettings({ ...current, overlay: nextOverlay }))
-        .catch((e) => setError(String(e)));
-      return nextOverlay;
-    });
+    setOverlay((prev) => (prev ? { ...prev, ...patch } : prev));
+    patchAppSettings({ overlay: patch }).catch((e) => setError(String(e)));
   }
 
   function updateShortcuts(patch: Partial<ShortcutsSettings>) {
-    setShortcuts((prev) => {
-      if (!prev) return prev;
-      const nextShortcuts = { ...prev, ...patch };
-      getAppSettings()
-        .then((current) => setAppSettings({ ...current, shortcuts: nextShortcuts }))
-        .catch((e) => setError(String(e)));
-      return nextShortcuts;
-    });
+    setShortcuts((prev) => (prev ? { ...prev, ...patch } : prev));
+    patchAppSettings({ shortcuts: patch }).catch((e) => setError(String(e)));
   }
 
   async function saveLanguage(lang: string) {
     setLanguageState(lang); // optimistic
     try {
-      const current = await getAppSettings();
-      // set_app_settings emits "settings-updated", which the I18nProvider listens
+      // patch_app_settings emits "settings-updated", which the I18nProvider listens
       // to and applies the new language across every window.
-      await setAppSettings({ ...current, language: lang });
+      await patchAppSettings({ language: lang });
     } catch (e) {
       setError(String(e));
     }
@@ -191,8 +177,7 @@ export function SettingsDialog({
     const next = !tray;
     setTray(next); // optimistic
     try {
-      const current = await getAppSettings();
-      await setAppSettings({ ...current, minimize_to_tray: next });
+      await patchAppSettings({ minimize_to_tray: next });
     } catch (e) {
       setTray(!next); // revert
       setError(String(e));
@@ -204,8 +189,7 @@ export function SettingsDialog({
     const next = !discordEnabled;
     setDiscordEnabled(next); // optimistic
     try {
-      const current = await getAppSettings();
-      await setAppSettings({ ...current, discord_enabled: next });
+      await patchAppSettings({ discord_enabled: next });
     } catch (e) {
       setDiscordEnabled(!next); // revert
       setError(String(e));

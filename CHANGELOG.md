@@ -95,6 +95,11 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
 - **Lanzar un juego congelaba Meteor un instante**, también el HUD y los atajos:
   la biblioteca se leía entera en el hilo principal. Ahora se resuelve en segundo
   plano.
+- **Cambios de ajustes perdidos entre ventanas.** Cada cambio reescribía todos los
+  ajustes a partir de una copia que podía estar desfasada, así que tocar algo en
+  la pantalla del overlay deshacía lo cambiado en la ventana principal. Ahora cada
+  cambio sólo modifica su campo, y la pantalla del overlay se refresca al cambiar
+  los ajustes.
 - **La pantalla de ajustes del overlay se abría en el monitor principal** aunque
   el juego estuviera en otro. Ahora cubre el monitor del juego, y ya no difumina
   el fondo encima de la partida.

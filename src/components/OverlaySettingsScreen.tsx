@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { useTranslation, Trans } from 'react-i18next';
-import { getAppSettings, setAppSettings } from '@/lib/tauri';
+import { listen } from '@tauri-apps/api/event';
+import { getAppSettings, patchAppSettings } from '@/lib/tauri';
 import type { OverlaySettings, OverlayPosition } from '@/lib/types';
 import { DEFAULT_SHORTCUTS, formatShortcut } from '@/lib/shortcuts';
 import { CloseIcon } from './icons';
@@ -32,26 +33,29 @@ export function OverlaySettingsScreen({ onClose }: { onClose: () => void }) {
   // Shortcut that returns to the game (overlay settings toggle); custom or default.
   const [settingsShortcut, setSettingsShortcut] = useState(DEFAULT_SHORTCUTS.overlay_settings);
 
+  // Re-read on every settings change, so a change made in the launcher (or with
+  // the overlay hotkey) while this screen is open is shown instead of reverted.
   useEffect(() => {
-    getAppSettings()
-      .then((s) => {
-        setOverlay(s.overlay);
-        if (s.shortcuts?.overlay_settings) {
-          setSettingsShortcut(s.shortcuts.overlay_settings);
-        }
-      })
-      .catch(() => {});
+    const load = () =>
+      getAppSettings()
+        .then((s) => {
+          setOverlay(s.overlay);
+          if (s.shortcuts?.overlay_settings) {
+            setSettingsShortcut(s.shortcuts.overlay_settings);
+          }
+        })
+        .catch(() => {});
+    load();
+    const un = listen('settings-updated', load);
+    un.catch(() => {});
+    return () => {
+      un.then((f) => f()).catch(() => {});
+    };
   }, []);
 
   function updateOverlay(patch: Partial<OverlaySettings>) {
-    setOverlay((prev) => {
-      if (!prev) return prev;
-      const nextOverlay = { ...prev, ...patch };
-      getAppSettings()
-        .then((current) => setAppSettings({ ...current, overlay: nextOverlay }))
-        .catch(console.error);
-      return nextOverlay;
-    });
+    setOverlay((prev) => (prev ? { ...prev, ...patch } : prev));
+    patchAppSettings({ overlay: patch }).catch(console.error);
   }
 
   // Handle Esc to close

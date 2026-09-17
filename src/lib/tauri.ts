@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import type { Game, Category, PlayStat, AppSettings, SystemInfo, MpoDiagnostics } from './types';
+import type { Game, Category, PlayStat, AppSettings, AppSettingsPatch, SystemInfo, MpoDiagnostics } from './types';
 
 /** Unified library across every source (Steam, Epic, GOG, EA, Ubisoft, Xbox, manual). */
 export const getLibrary = () => invoke<Game[]>('get_library');
@@ -139,9 +139,10 @@ export const userScreenshots = (id: string) =>
 /** Get application settings. */
 export const getAppSettings = () => invoke<AppSettings>('get_app_settings');
 
-/** Set application settings. */
-export const setAppSettings = (settings: AppSettings) =>
-  invoke<void>('set_app_settings', { settings });
+/** Change only the given settings. The merge happens in Rust under the settings
+ *  lock, so two windows saving at once cannot overwrite each other. */
+export const patchAppSettings = (patch: AppSettingsPatch) =>
+  invoke<void>('patch_app_settings', { patch });
 
 /** Hardware/system info for the "Mi equipo" settings panel. */
 export const systemInfo = () => invoke<SystemInfo>('system_info');

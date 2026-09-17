@@ -718,24 +718,71 @@ fn restart_as_admin(app: AppHandle) -> Result<(), String> {
     }
 }
 
+/// Change only the settings named in `patch`, atomically.
+///
+/// There is deliberately no whole-struct setter. A window that reads the settings,
+/// spreads its change over them and writes everything back loses a write made by
+/// another window in between (the launcher and the in-game screen can both be
+/// open). The merge happens here, under the settings lock, and only the parts
+/// that changed are re-applied: a HUD color does not re-register the hotkeys.
 #[tauri::command(async)]
-fn set_app_settings(
+fn patch_app_settings(
     app: AppHandle,
     state: tauri::State<'_, std::sync::Mutex<AppSettings>>,
-    settings: AppSettings,
+    patch: serde_json::Value,
 ) -> Result<(), String> {
-    storage::save_settings(&app, &settings);
-    *state.lock().unwrap() = settings.clone();
-    apply_overlay_settings(&app, &settings);
-    discord::set_enabled(settings.discord_enabled);
-    // This command now runs on the async pool (it writes to disk), but the
-    // global-shortcut registration is a window-manager operation: keep it on the
-    // main thread.
-    let handle = app.clone();
-    let shortcuts = settings.shortcuts.clone();
-    let _ = app.run_on_main_thread(move || register_shortcuts(&handle, &shortcuts));
-    let _ = app.emit("settings-updated", ());
+    let (previous, next) = {
+        let mut current = state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let next = apply_settings_patch(&current, patch)?;
+        storage::save_settings(&app, &next);
+        (std::mem::replace(&mut *current, next.clone()), next)
+    };
+    settings_changed(&app, &previous, &next);
     Ok(())
+}
+
+/// Merge a partial settings object into `current`. Nested objects merge key by
+/// key; any key the settings do not have is an error rather than silently ignored.
+fn apply_settings_patch(current: &AppSettings, patch: serde_json::Value) -> Result<AppSettings, String> {
+    fn merge(target: &mut serde_json::Value, patch: serde_json::Value, path: &str) -> Result<(), String> {
+        let serde_json::Value::Object(fields) = patch else {
+            return Err(format!("Settings patch at `{path}` must be an object"));
+        };
+        let serde_json::Value::Object(target) = target else {
+            return Err(format!("Setting `{path}` is not an object"));
+        };
+        for (key, value) in fields {
+            let at = if path.is_empty() { key.clone() } else { format!("{path}.{key}") };
+            let slot = target.get_mut(&key).ok_or_else(|| format!("Unknown setting `{at}`"))?;
+            if slot.is_object() && value.is_object() {
+                merge(slot, value, &at)?;
+            } else {
+                *slot = value;
+            }
+        }
+        Ok(())
+    }
+    let mut merged = serde_json::to_value(current).map_err(|e| e.to_string())?;
+    merge(&mut merged, patch, "")?;
+    serde_json::from_value(merged).map_err(|e| format!("Invalid settings patch: {e}"))
+}
+
+/// Re-apply what changed between two settings snapshots and notify every window.
+fn settings_changed(app: &AppHandle, previous: &AppSettings, next: &AppSettings) {
+    fn same<T: serde::Serialize>(a: &T, b: &T) -> bool {
+        matches!((serde_json::to_value(a), serde_json::to_value(b)), (Ok(a), Ok(b)) if a == b)
+    }
+    if !same(&previous.overlay, &next.overlay) {
+        apply_overlay_settings(app, next);
+    }
+    discord::set_enabled(next.discord_enabled);
+    if !same(&previous.shortcuts, &next.shortcuts) {
+        // A window-manager operation: keep it on the main thread.
+        let handle = app.clone();
+        let shortcuts = next.shortcuts.clone();
+        let _ = app.run_on_main_thread(move || register_shortcuts(&handle, &shortcuts));
+    }
+    let _ = app.emit("settings-updated", ());
 }
 
 /// Parse a stored combination into a global shortcut, refusing unsafe ones.
@@ -840,11 +887,17 @@ fn apply_overlay_settings(_app: &AppHandle, settings: &AppSettings) {
 /// Toggle the overlay on/off (the global hotkey). Persists and applies live.
 fn toggle_overlay(app: &AppHandle) {
     if let Some(state) = app.try_state::<std::sync::Mutex<AppSettings>>() {
-        let mut s = state.lock().unwrap().clone();
-        s.overlay.enabled = !s.overlay.enabled;
-        storage::save_settings(app, &s);
+        // One lock for the whole read-modify-write, so a settings save landing
+        // between the read and the write is not overwritten.
+        let s = {
+            let mut current = state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+            current.overlay.enabled = !current.overlay.enabled;
+            storage::save_settings(app, &current);
+            current.clone()
+        };
         apply_overlay_settings(app, &s);
-        *state.lock().unwrap() = s;
+        // An open settings screen shows the toggle too.
+        let _ = app.emit("settings-updated", ());
     }
 }
 
@@ -1229,7 +1282,7 @@ pub fn run() {
             get_autostart,
             set_autostart,
             get_app_settings,
-            set_app_settings,
+            patch_app_settings,
             system_info,
             overlay_mpo_diagnostics,
             username,
@@ -1256,6 +1309,37 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn settings() -> AppSettings {
+        serde_json::from_str("{}").expect("every settings field has a default")
+    }
+
+    #[test]
+    fn a_settings_patch_changes_only_the_fields_it_names() {
+        // Regression (FE3): windows read-modify-wrote the whole struct and a
+        // concurrent write from another window was lost. A patch leaves the rest.
+        let mut current = settings();
+        current.minimize_to_tray = false;
+        current.overlay.show_ram = true;
+        let next = apply_settings_patch(
+            &current,
+            serde_json::json!({ "overlay": { "show_fps": false }, "language": "en" }),
+        )
+        .unwrap();
+        assert!(!next.overlay.show_fps);
+        assert!(next.overlay.show_ram, "sibling overlay field kept");
+        assert!(!next.minimize_to_tray, "top-level field kept");
+        assert_eq!(next.language, "en");
+        assert_eq!(next.shortcuts.spotlight, current.shortcuts.spotlight);
+    }
+
+    #[test]
+    fn a_settings_patch_refuses_unknown_keys_and_wrong_types() {
+        let current = settings();
+        assert!(apply_settings_patch(&current, serde_json::json!({ "overlay": { "show_fsp": true } })).is_err());
+        assert!(apply_settings_patch(&current, serde_json::json!({ "minimize_to_tray": "yes" })).is_err());
+        assert!(apply_settings_patch(&current, serde_json::json!(true)).is_err());
+    }
 
     #[test]
     fn the_escape_that_cancels_recording_is_never_a_global_hotkey() {

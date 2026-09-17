@@ -108,6 +108,11 @@ export interface ShortcutsSettings {
   overlay_settings: string;
 }
 
+/** A partial `AppSettings` for `patchAppSettings`: nested objects merge key by key. */
+export type AppSettingsPatch = {
+  [K in keyof AppSettings]?: AppSettings[K] extends object ? Partial<AppSettings[K]> : AppSettings[K];
+};
+
 export interface AppSettings {
   setup_completed: boolean;
   minimize_to_tray: boolean;

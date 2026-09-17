@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { getAutostart, setAutostart, getAppSettings, setAppSettings } from '@/lib/tauri';
+import { getAutostart, setAutostart, getAppSettings, patchAppSettings } from '@/lib/tauri';
 
 export function Onboarding({
   onComplete,
@@ -47,12 +47,10 @@ export function Onboarding({
     setError(null);
     try {
       await setAutostart(auto);
-      const current = await getAppSettings();
-      await setAppSettings({
-        ...current,
+      await patchAppSettings({
         setup_completed: true,
         minimize_to_tray: tray,
-        overlay: { ...current.overlay, enabled: metrics },
+        overlay: { enabled: metrics },
       });
       onComplete();
     } catch (e) {
