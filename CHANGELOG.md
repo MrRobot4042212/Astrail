@@ -10,14 +10,9 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
 
 ## [No publicado] — Trabajo en curso
 
+## [0.1.3] — 2026-09-17
+
 ### Cambiado
-- **Publicar es ahora mergear en la rama `deploy`** (`release.yml`): antes se
-  publicaba empujando una etiqueta `v*` a mano. Ahora la versión se lee del
-  proyecto, la etiqueta la crea la automatización — así no puede discrepar de lo
-  que se ha compilado — y la publicación se niega a salir si los cinco ficheros
-  de versión no coinciden entre sí o si esa versión ya está publicada. Esto
-  último es la red contra mergear sin subir la versión: republicar la misma
-  versión no llega a nadie, porque el actualizador nunca va hacia atrás.
 - **Iniciar con Windows usa siempre la clave `Run` del usuario.** Con Meteor
   abierto como administrador se intentaba crear una tarea programada elevada, que
   en la instalación normal fallaba siempre y dejaba el interruptor roto. Ahora no
@@ -33,16 +28,6 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
   temperatura falla si no coincide con el fichero de bloqueo.
 
 ### Corregido
-- **La detección de cambios en la biblioteca no funcionaba en perfiles sin
-  instalaciones por usuario.** La huella que decide si hace falta un rescaneo
-  trataba una clave de registro *inexistente* (`HKCU\...\Uninstall`, que sólo
-  aparece tras instalar algo por usuario) como si fuera ilegible y metía la hora
-  actual en el hash, así que nunca coincidía consigo misma y Meteor rescaneaba
-  las ocho tiendas cada 15 minutos aunque no hubiera cambiado nada. Ahora una
-  clave ausente es un estado estable, igual que una carpeta ausente; sólo un
-  error real de permisos sigue forzando el rescaneo. Fue lo que hizo fallar
-  `fingerprint_is_stable_between_calls` en los runners de GitHub y bloqueó la
-  publicación.
 - **FPS y temperatura congelados en el HUD.** Si el juego dejaba de presentar
   frames (pausa, cambio de ventana) o el sidecar de temperatura dejaba de
   responder, el overlay seguía mostrando el último valor como si fuera actual.
@@ -123,6 +108,27 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
 ---
 
 ## [0.1.2] — 2026-09-09
+
+### Cambiado
+- **Publicar es ahora mergear en la rama `deploy`** (`release.yml`): antes se
+  publicaba empujando una etiqueta `v*` a mano. Ahora la versión se lee del
+  proyecto, la etiqueta la crea la automatización — así no puede discrepar de lo
+  que se ha compilado — y la publicación se niega a salir si los cinco ficheros
+  de versión no coinciden entre sí o si esa versión ya está publicada. Esto
+  último es la red contra mergear sin subir la versión: republicar la misma
+  versión no llega a nadie, porque el actualizador nunca va hacia atrás.
+
+### Corregido
+- **La detección de cambios en la biblioteca no funcionaba en perfiles sin
+  instalaciones por usuario.** La huella que decide si hace falta un rescaneo
+  trataba una clave de registro *inexistente* (`HKCU\...\Uninstall`, que sólo
+  aparece tras instalar algo por usuario) como si fuera ilegible y metía la hora
+  actual en el hash, así que nunca coincidía consigo misma y Meteor rescaneaba
+  las ocho tiendas cada 15 minutos aunque no hubiera cambiado nada. Ahora una
+  clave ausente es un estado estable, igual que una carpeta ausente; sólo un
+  error real de permisos sigue forzando el rescaneo. Fue lo que hizo fallar
+  `fingerprint_is_stable_between_calls` en los runners de GitHub y bloqueó la
+  publicación.
 
 ### Rendimiento
 - **Instalador 1,8 MB más pequeño** (`tauri.conf.json`): incrustaba el instalador
