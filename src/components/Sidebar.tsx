@@ -12,7 +12,7 @@ import { CATEGORY_ICONS } from '@/lib/categoryIcons';
 import {
   GearIcon,
   EyeOffIcon,
-  GridIcon, StarIcon, TagIcon, PlusIcon, AppIcon, HomeIcon
+  GridIcon, StarIcon, TagIcon, PlusIcon, AppIcon, HomeIcon, MeteorIcon
 } from './icons';
 
 export type Filter = 'home' | 'all' | 'favorites' | GameSource | `cat:${string}`;
@@ -149,10 +149,7 @@ export function Sidebar({
   return (
     <aside data-tour="sidebar" className="flex w-[208px] shrink-0 flex-col overflow-y-auto border-r border-line bg-sidebar px-3 py-5">
       <div className="mb-3 flex items-center gap-2.5 px-2">
-        <svg xmlns="http://www.w3.org/2000/svg" width="24px" height="24px" viewBox="0 0 256 251">
-          <path d="M0 0h256v251H0z" fill="none" />
-          <path fill="#df4f4f" d="M.439.438L219.3 232.266s7.457 5.259 13.158-.877c5.702-6.135 1.316-12.27 1.316-12.27zM69.738 22.35l166.668 179.677s7.456 5.26 13.158-.876c5.702-6.135 1.316-12.27 1.316-12.27zM21.053 69.242L187.72 248.919s7.456 5.259 13.158-.877c5.702-6.135 1.316-12.27 1.316-12.27zM128.32 41.194l116.442 125.53s5.21 3.674 9.193-.612c3.983-4.287.9１９-8．５７３．９１９-8．５７３zm-9１．２２８ 8２．３８９l１１６．４４１ １２５．５３s５．２１ ３．６７４ ９．１９３-.６１３c３．９８３-４．２８６．９１９-８．５７２．９１９-８．５７２zM１８８．１６ ６８．３６５l５２．７７５ ５７．０６７s２．５７７ １．７２２ ４．５４７-.２８７s．４５５-４．０１７．４５５-４．０１７zM６６．２２９ １８１．４３l５２．７７５ ５７．０６７s２．５７７ １．７２２ ４．５４７-.２８６s．４５５-４．０１７．４５５-４．０１７z" />
-        </svg>
+        <MeteorIcon className="h-6 w-6 text-accent" />
         <span className="font-display text-lg font-semibold tracking-tight text-ink">
           Meteor
         </span>

@@ -7,6 +7,7 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getAutostart, setAutostart, getAppSettings, patchAppSettings } from '@/lib/tauri';
+import { MeteorIcon } from './icons';
 
 export function Onboarding({
   onComplete,
@@ -72,9 +73,7 @@ export function Onboarding({
       <div className="relative w-full max-w-lg">
         {/* Header Icon */}
         <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-accent to-accent-soft shadow-[0_0_40px_rgba(223,79,79,0.3)] transition-all duration-500">
-          <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 256 251">
-            <path fill="#fff" d="M.439.438L219.3 232.266s7.457 5.259 13.158-.877c5.702-6.135 1.316-12.27 1.316-12.27zM69.738 22.35l166.668 179.677s7.456 5.26 13.158-.876c5.702-6.135 1.316-12.27 1.316-12.27zM21.053 69.242L187.72 248.919s7.456 5.259 13.158-.877c5.702-6.135 1.316-12.27 1.316-12.27zM128.32 41.194l116.442 125.53s5.21 3.674 9.193-.612c3.983-4.287.919-8.573.919-8.573zm-91.228 82.389l116.441 125.53s5.21 3.674 9.193-.613c3.983-4.286.919-8.572.919-8.572zM188.16 68.365l52.775 57.067s2.577 1.722 4.547-.287s.455-4.017.455-4.017zM66.229 181.43l52.775 57.067s2.577 1.722 4.547-.286s.455-4.017.455-4.017z" />
-          </svg>
+          <MeteorIcon className="h-10 w-10 text-white" />
         </div>
 
         {/* Carousel Content */}
