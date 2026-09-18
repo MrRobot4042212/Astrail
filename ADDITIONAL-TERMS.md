@@ -1,6 +1,6 @@
-# Additional terms — Meteor
+# Additional terms — Astrail
 
-Meteor: a unified library for the games and applications installed on a Windows PC.
+Astrail: a unified library for the games and applications installed on a Windows PC.
 
 Copyright (C) 2026 Diego Alfonso Chicoma Ibañez (Dalfon.dev)
 
@@ -29,11 +29,11 @@ rest stay in force and the work remains under the GPL.
 
 ### 1. Keep the author attribution (GPL v3, section 7b)
 
-Meteor displays its Appropriate Legal Notices in **Settings → About**. That screen,
+Astrail displays its Appropriate Legal Notices in **Settings → About**. That screen,
 and the equivalent screen of any work you build from this one, must keep this
 attribution:
 
-> Meteor was created by Diego Alfonso Chicoma Ibañez (Dalfon.dev)
+> Astrail was created by Diego Alfonso Chicoma Ibañez (Dalfon.dev)
 > — https://github.com/MrRobot4042212/Astrail
 
 You may translate it, as long as the name and the link stay intact. You may add your
@@ -46,22 +46,22 @@ If you distribute a modified version, mark it in reasonable ways as different fr
 the original:
 
 - Say in the About screen (or the equivalent) that the build is modified and is not
-  an official Meteor release, and say who modified it.
+  an official Astrail release, and say who modified it.
 - Do not present it, or its installers, updates and release notes, as coming from the
   original author or from the original project.
 - Do not point a modified build at the update endpoint of the original project.
 
 ### 3. No rights over names or logos (GPL v3, section 7e)
 
-This license grants no permission to use the name **Meteor**, the name **Dalfon.dev**,
+This license grants no permission to use the name **Astrail**, the name **Dalfon.dev**,
 the project's logo or any other brand feature of the project or its author, whether as
 a trade name, a trademark or a service mark. Referring to the project descriptively —
-"based on Meteor", "a fork of Meteor" — is fine, as long as it does not suggest
+"based on Astrail", "a fork of Astrail" — is fine, as long as it does not suggest
 endorsement or official status.
 
-Third-party names and logos that appear inside Meteor (Steam, Epic Games, GOG,
+Third-party names and logos that appear inside Astrail (Steam, Epic Games, GOG,
 Battle.net, Xbox, EA, Ubisoft, Riot, Rockstar, Amazon and others) belong to their
-respective owners and are used only to identify each store. Meteor is not affiliated
+respective owners and are used only to identify each store. Astrail is not affiliated
 with any of them.
 
 ## Contributions
@@ -72,7 +72,7 @@ there is no CLA: you keep the copyright over what you write. See
 
 ## Third-party components
 
-Meteor ships code written by other people, under their own licenses. They are listed
+Astrail ships code written by other people, under their own licenses. They are listed
 in [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt), which the app also shows in
 Settings → About.
 
@@ -83,7 +83,7 @@ Settings → About.
 Este apartado es una traducción de cortesía; en caso de discrepancia manda el texto en
 inglés.
 
-Meteor es software libre: puedes redistribuirlo y modificarlo bajo los términos de la
+Astrail es software libre: puedes redistribuirlo y modificarlo bajo los términos de la
 GNU General Public License, **versión 3**, publicada por la Free Software Foundation.
 Se distribuye con la esperanza de que sea útil, pero **SIN NINGUNA GARANTÍA**; ni
 siquiera la garantía implícita de COMERCIABILIDAD o IDONEIDAD PARA UN PROPÓSITO
@@ -92,7 +92,7 @@ PARTICULAR. El texto de la licencia está en [LICENSE](LICENSE).
 Términos adicionales, al amparo de la sección 7 de la GPL v3:
 
 1. **Conservar la atribución de autoría (7b).** La pantalla *Ajustes → Acerca de*, y
-   su equivalente en cualquier obra derivada, debe seguir mostrando «Meteor fue creado
+   su equivalente en cualquier obra derivada, debe seguir mostrando «Astrail fue creado
    por Diego Alfonso Chicoma Ibañez (Dalfon.dev) — https://github.com/MrRobot4042212/Astrail».
    Puedes traducirla, pero no sustituir el nombre ni el enlace, y puedes añadir tu
    propia autoría junto a ella.
@@ -101,9 +101,9 @@ Términos adicionales, al amparo de la sección 7 de la GPL v3:
    presentes como procedente del autor o del proyecto original y no la apuntes al
    endpoint de actualizaciones del proyecto original.
 3. **Sin derechos sobre los nombres ni el logo (7e).** Esta licencia no concede
-   permiso para usar el nombre «Meteor», el nombre «Dalfon.dev», el logo ni ninguna
+   permiso para usar el nombre «Astrail», el nombre «Dalfon.dev», el logo ni ninguna
    otra seña de identidad del proyecto o de su autor. Las referencias descriptivas
-   («basado en Meteor») sí están permitidas mientras no sugieran respaldo oficial.
+   («basado en Astrail») sí están permitidas mientras no sugieran respaldo oficial.
 
-Los nombres y logos de terceros que aparecen en Meteor pertenecen a sus dueños y solo
-se usan para identificar cada tienda; Meteor no está afiliado a ninguna de ellas.
+Los nombres y logos de terceros que aparecen en Astrail pertenecen a sus dueños y solo
+se usan para identificar cada tienda; Astrail no está afiliado a ninguna de ellas.

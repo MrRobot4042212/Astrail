@@ -1,4 +1,4 @@
-# Meteor
+# Astrail
 
 Biblioteca unificada de juegos y aplicaciones para Windows. Detecta automáticamente
 tus juegos de **Steam, Epic, GOG, EA, Ubisoft y Xbox (Game Pass)**, te deja añadir
@@ -74,7 +74,7 @@ aporta juegos (no rompe el resto). La lista se mezcla y se deduplica por nombre.
 ### Carátulas
 
 Todas las carátulas (de cualquier tienda, Steam incluido) se obtienen de **IGDB**.
-Meteor busca por nombre (probando variantes para absorber símbolos y ediciones),
+Astrail busca por nombre (probando variantes para absorber símbolos y ediciones),
 prefiere la coincidencia exacta y usa la portada vertical de IGDB
 
 Las imágenes se **descargan y guardan en disco** (`covers/`) la primera vez, así
@@ -108,13 +108,13 @@ src-tauri/                # Núcleo Rust
 
 ## Licencia
 
-Meteor es software libre bajo la **GNU General Public License v3** —
+Astrail es software libre bajo la **GNU General Public License v3** —
 [LICENSE](LICENSE) — con los términos adicionales de la sección 7 recogidos en
 [ADDITIONAL-TERMS.md](ADDITIONAL-TERMS.md):
 
 1. Conservar la atribución de autoría en *Ajustes → Acerca de* (GPL 7b).
 2. Marcar las versiones modificadas como no oficiales (GPL 7c).
-3. Sin derechos sobre el nombre «Meteor», «Dalfon.dev» ni el logo (GPL 7e).
+3. Sin derechos sobre el nombre «Astrail», «Dalfon.dev» ni el logo (GPL 7e).
 
 Copyright (C) 2026 Diego Alfonso Chicoma Ibañez (Dalfon.dev).
 
@@ -123,7 +123,7 @@ contribuir (sin CLA): [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Créditos
 
-Meteor incluye código de otras personas, cada uno con su licencia. La lista
+Astrail incluye código de otras personas, cada uno con su licencia. La lista
 completa y los textos íntegros están en
 [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt), y la app también los muestra en
 *Ajustes → Acerca de*. Lo más visible:
@@ -138,5 +138,5 @@ completa y los textos íntegros están en
   [Source Code Pro](https://github.com/adobe-fonts/source-code-pro) (OFL-1.1).
 
 Los nombres y logos de Steam, Epic Games, GOG, EA, Ubisoft, Xbox, Battle.net y
-demás tiendas pertenecen a sus dueños y se usan solo para identificarlas. Meteor no
+demás tiendas pertenecen a sus dueños y se usan solo para identificarlas. Astrail no
 está afiliado a ninguna de ellas.

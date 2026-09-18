@@ -1,7 +1,7 @@
-Meteor — third-party notices
+Astrail — third-party notices
 ============================
 
-Meteor is Copyright (C) 2026 Diego Alfonso Chicoma Ibañez (Dalfon.dev) and is
+Astrail is Copyright (C) 2026 Diego Alfonso Chicoma Ibañez (Dalfon.dev) and is
 distributed under the GNU General Public License version 3 with the additional
 terms in ADDITIONAL-TERMS.md. The components listed here are the work of other
 people and keep their own licenses, which are reproduced in full at the end of
@@ -24,7 +24,7 @@ Rust crates (313)
 
 The normal-dependency closure of src-tauri for x86_64-pc-windows-msvc.
 Build-time-only and test-only crates are left out because their code is not
-part of what Meteor ships.
+part of what Astrail ships.
 
   adler2 2.0.1 — 0BSD OR MIT OR Apache-2.0 — text 1
   aho-corasick 1.1.4 — Unlicense OR MIT — text 2
@@ -364,11 +364,11 @@ npm packages (30)
 -----------------
 
 The production dependency tree of the frontend, as installed on Windows.
-Meteor ships a static export, so most of these only run while the interface is
-being built and never reach a user; they are listed anyway rather than guessed
-at. Where a package declares more than one license but ships the text of only
-some of them, that is noted next to the package and the declared expression is
-reproduced above.
+Astrail ships a static export, so most of these only run while the interface
+is being built and never reach a user; they are listed anyway rather than
+guessed at. Where a package declares more than one license but ships the text
+of only some of them, that is noted next to the package and the declared
+expression is reproduced above.
 
   @babel/runtime 7.29.7 — MIT — text 150
   @img/colour 1.1.0 — MIT — text 151
@@ -436,10 +436,10 @@ so these packages and the .NET runtime itself are inside cputemp.exe.
 Bundled binaries and assets
 ---------------------------
 
-These are shipped as they are, next to the Meteor executable or inside it.
+These are shipped as they are, next to the Astrail executable or inside it.
 
   PresentMon 2.4.1 (Intel Corporation) — MIT
-      Bundled as PresentMon.exe. Meteor runs it to sample frame times; it is
+      Bundled as PresentMon.exe. Astrail runs it to sample frame times; it is
       downloaded and hash-pinned by scripts/fetch-binaries.ps1. Source:
       https://github.com/GameTechDev/PresentMon
       license: text 173
@@ -457,13 +457,13 @@ These are shipped as they are, next to the Meteor executable or inside it.
       license: text 175
 
   Oxanium (The Oxanium Project Authors) — OFL-1.1
-      Meteor's display typeface, self-hosted as a webfont by next/font.
+      Astrail's display typeface, self-hosted as a webfont by next/font.
       Copyright 2019 The Oxanium Project Authors
       (https://github.com/sevmeyer/oxanium).
       license: text 176
 
   Source Code Pro (Adobe Systems Incorporated) — OFL-1.1
-      Meteor's monospace typeface, self-hosted as a webfont by next/font.
+      Astrail's monospace typeface, self-hosted as a webfont by next/font.
       Copyright 2010, 2012 Adobe Systems Incorporated (http://www.adobe.com/),
       with Reserved Font Name 'Source'. Source is a trademark of Adobe Systems
       Incorporated in the United States and/or other countries.

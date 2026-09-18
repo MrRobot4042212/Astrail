@@ -25,7 +25,7 @@ Se pueden combinar `--cpu` y `--gpu`. Sin argumentos equivale a `--cpu`.
   compatible (series `0.9.7-pre*`).
 - **GPU:** se lee con ADL, la librería que instala el driver de AMD. El sidecar abre
   solo el grupo de GPUs AMD de LibreHardwareMonitor, no `Computer.Open()`, que
-  instalaría el driver de kernel cuando Meteor corre como admin. Las GPUs integradas
+  instalaría el driver de kernel cuando Astrail corre como admin. Las GPUs integradas
   no dan temperatura. `fps` solo aparece mientras una aplicación a pantalla completa
   exclusiva está presentando: ADL no cuenta los juegos en ventana sin bordes (probado
   con un juego sin bordes a 2560×1440 en una RX 9070 XT), y ahí el FPS lo da PresentMon.
@@ -56,9 +56,9 @@ La forma de publicación (un solo `.exe` autocontenido, comprimido y recortado) 
 el `.csproj`, así que `scripts/fetch-binaries.ps1` y el workflow de release producen el
 mismo binario. El `.exe` no se versiona.
 
-`build.rs` incrusta el SHA-256 de `binaries/cputemp.exe` al compilar Meteor y
+`build.rs` incrusta el SHA-256 de `binaries/cputemp.exe` al compilar Astrail y
 `cputemp.rs` se niega a lanzar un binario distinto. Tras recompilar el sidecar hay que
-recompilar Meteor.
+recompilar Astrail.
 
 ## Diagnóstico
 

@@ -1,11 +1,11 @@
-# Contribuir a Meteor
+# Contribuir a Astrail
 
-Meteor es una app de escritorio **solo para Windows**: Tauri 2 (Rust) como núcleo
+Astrail es una app de escritorio **solo para Windows**: Tauri 2 (Rust) como núcleo
 nativo y Next.js 16 (export estático) como interfaz. No hay servidor.
 
 ## Licencia de lo que aportas
 
-Meteor es **GPL-3.0-only** con los términos adicionales de
+Astrail es **GPL-3.0-only** con los términos adicionales de
 [ADDITIONAL-TERMS.md](ADDITIONAL-TERMS.md). Al abrir un PR aceptas que tu código
 se publique bajo esa misma licencia y esos mismos términos.
 
@@ -73,7 +73,7 @@ workflow de release depende de ella: un tag no puede publicar algo que no pase.
 
 ## Rendimiento
 
-Meteor vive en la bandeja del sistema y se dibuja encima de juegos: el coste en
+Astrail vive en la bandeja del sistema y se dibuja encima de juegos: el coste en
 reposo y el coste por fotograma son requisitos, no detalles.
 
 - Mide antes y después: `powershell -File docs\perf\capture.ps1 -Label antes`

@@ -25,10 +25,10 @@ que añadirlo aquí.
 
 ## Requisito de permisos
 
-ETW en tiempo real **exige ejecutar Meteor como administrador**. Sin elevación,
+ETW en tiempo real **exige ejecutar Astrail como administrador**. Sin elevación,
 PresentMon no puede abrir la sesión ETW y el overlay simplemente **omite FPS/frametime**
 (el resto de métricas —GPU/CPU/temperaturas— funcionan sin admin). No forzamos elevación
-de toda la app a propósito; quien quiera FPS ejecuta Meteor como admin.
+de toda la app a propósito; quien quiera FPS ejecuta Astrail como admin.
 
 ## Detalles de integración
 -

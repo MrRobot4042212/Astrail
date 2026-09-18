@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Additional terms under GPL-3.0 section 7 apply: see ADDITIONAL-TERMS.md
 //
-// Regenerates THIRD-PARTY-NOTICES.txt, the file Meteor shows in Settings →
+// Regenerates THIRD-PARTY-NOTICES.txt, the file Astrail shows in Settings →
 // About to satisfy the attribution clauses of the code it ships.
 //
 //   node scripts/third-party-notices.mjs           rewrite the file
@@ -26,7 +26,7 @@ const STATIC = path.join(REPO, 'scripts', 'notices-static.txt')
 const LICENSE_FILE = /^(licen[sc]es?|copying|copyright|unlicense)([-_. ].*)?$/i
 const NOTICE_FILE = /^notice([-_. ].*)?$/i
 
-// Which side of an `OR` to reproduce. Meteor is GPL-3.0-only, so anything here
+// Which side of an `OR` to reproduce. Astrail is GPL-3.0-only, so anything here
 // is compatible; the order just prefers the shortest, least demanding text.
 const PREFERENCE = [
   'MIT', '0BSD', 'ISC', 'BSD-2-Clause', 'BSD-3-Clause', 'Zlib', 'MIT-0',
@@ -84,7 +84,7 @@ const NUGET = {
 // Locked NuGet packages whose code never reaches a user's machine.
 const NUGET_SKIP = [
   ['Microsoft.NET.ILLink.Tasks', 'trimmer, runs during the build'],
-  [/^runtime\.(android|linux|maccatalyst|osx)-/, 'native assets for platforms Meteor does not target'],
+  [/^runtime\.(android|linux|maccatalyst|osx)-/, 'native assets for platforms Astrail does not target'],
 ]
 
 const CANONICAL = {
@@ -415,7 +415,7 @@ function renderNuget(packages) {
 
 function renderBundled() {
   const lines = [heading('Bundled binaries and assets'), wrap(
-    'These are shipped as they are, next to the Meteor executable or inside it.', 78, ''), '']
+    'These are shipped as they are, next to the Astrail executable or inside it.', 78, ''), '']
   const item = (title, body, texts) => {
     lines.push(`  ${title}`)
     lines.push('      ' + wrap(body, 72, '      '))
@@ -423,7 +423,7 @@ function renderBundled() {
     lines.push('')
   }
   item('PresentMon 2.4.1 (Intel Corporation) — MIT',
-    'Bundled as PresentMon.exe. Meteor runs it to sample frame times; it is '
+    'Bundled as PresentMon.exe. Astrail runs it to sample frame times; it is '
     + 'downloaded and hash-pinned by scripts/fetch-binaries.ps1. '
     + 'Source: https://github.com/GameTechDev/PresentMon',
     [['license', 'presentmon']])
@@ -438,12 +438,12 @@ function renderBundled() {
     + 'cputemp.exe. Source: https://github.com/namazso/PawnIO.Modules',
     [['license', 'lgpl-2.1']])
   item('Oxanium (The Oxanium Project Authors) — OFL-1.1',
-    'Meteor\'s display typeface, self-hosted as a webfont by next/font. '
+    'Astrail\'s display typeface, self-hosted as a webfont by next/font. '
     + 'Copyright 2019 The Oxanium Project Authors '
     + '(https://github.com/sevmeyer/oxanium).',
     [['license', 'ofl-1.1']])
   item('Source Code Pro (Adobe Systems Incorporated) — OFL-1.1',
-    'Meteor\'s monospace typeface, self-hosted as a webfont by next/font. '
+    'Astrail\'s monospace typeface, self-hosted as a webfont by next/font. '
     + 'Copyright 2010, 2012 Adobe Systems Incorporated (http://www.adobe.com/), '
     + 'with Reserved Font Name \'Source\'. Source is a trademark of Adobe Systems '
     + 'Incorporated in the United States and/or other countries.',
@@ -476,12 +476,12 @@ const body = [
     title: 'Rust crates',
     body: 'The normal-dependency closure of src-tauri for x86_64-pc-windows-msvc. '
       + 'Build-time-only and test-only crates are left out because their code is '
-      + 'not part of what Meteor ships.',
+      + 'not part of what Astrail ships.',
   }),
   renderTree('npm', npm, {
     title: 'npm packages',
     body: 'The production dependency tree of the frontend, as installed on Windows. '
-      + 'Meteor ships a static export, so most of these only run while the '
+      + 'Astrail ships a static export, so most of these only run while the '
       + 'interface is being built and never reach a user; they are listed anyway '
       + 'rather than guessed at. Where a package declares more than one license '
       + 'but ships the text of only some of them, that is noted next to the '
@@ -492,10 +492,10 @@ const body = [
   renderTexts(),
 ]
 
-const header = `Meteor — third-party notices
+const header = `Astrail — third-party notices
 ============================
 
-Meteor is Copyright (C) 2026 Diego Alfonso Chicoma Ibañez (Dalfon.dev) and is
+Astrail is Copyright (C) 2026 Diego Alfonso Chicoma Ibañez (Dalfon.dev) and is
 distributed under the GNU General Public License version 3 with the additional
 terms in ADDITIONAL-TERMS.md. The components listed here are the work of other
 people and keep their own licenses, which are reproduced in full at the end of

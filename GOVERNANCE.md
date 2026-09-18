@@ -1,6 +1,6 @@
-# Gobernanza de Meteor
+# Gobernanza de Astrail
 
-Meteor es un proyecto de un solo mantenedor. Este documento dice quién decide qué,
+Astrail es un proyecto de un solo mantenedor. Este documento dice quién decide qué,
 para que quien contribuye sepa a qué atenerse y para que cualquier tercero que
 firme o distribuya las versiones oficiales sepa de dónde salen.
 
@@ -36,7 +36,7 @@ suyo.
    `CONTRIBUTING.md`, en los comentarios del código o en `docs/`), no solo en el
    hilo.
 
-Hay decisiones que no se revisan porque son parte de lo que Meteor es: sin
+Hay decisiones que no se revisan porque son parte de lo que Astrail es: sin
 inyección de DLL en procesos de juegos, sin componentes propietarios, y sin
 telemetría.
 
