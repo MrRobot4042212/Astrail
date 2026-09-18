@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Additional terms under GPL-3.0 section 7 apply: see ADDITIONAL-TERMS.md
 
-// Hardware sidecar for Meteor's metrics overlay (built as cputemp.exe).
+// Hardware sidecar for Astrail's metrics overlay (built as cputemp.exe).
 //
 //   --cpu        CPU package temperature. LibreHardwareMonitor reads it (Ryzen
 //                Tctl/Tdie, Intel core) through a kernel driver it loads at runtime,
@@ -275,7 +275,7 @@ static class GpuSensors
 // Opens only LibreHardwareMonitor's AMD GPU group. Computer.Open() would also run
 // Ring0.Open(), SMBIOS parsing and the CPU probes of the Intel GPU group, and
 // Ring0.Open() installs LHM's kernel driver whenever the process is elevated
-// (Meteor run as admin) — for numbers ADL gives without it. The group type is
+// (Astrail run as admin) — for numbers ADL gives without it. The group type is
 // internal, hence the reflection; --self-test resolves it, so a
 // LibreHardwareMonitorLib update that renames it fails CI instead of the HUD.
 static class AmdGpus

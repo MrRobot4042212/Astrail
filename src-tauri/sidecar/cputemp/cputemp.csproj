@@ -14,7 +14,7 @@
     <LangVersion>latest</LangVersion>
     <InvariantGlobalization>true</InvariantGlobalization>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
-    <Product>Meteor</Product>
+    <Product>Astrail</Product>
     <Authors>Diego Alfonso Chicoma Ibañez (Dalfon.dev)</Authors>
     <Copyright>Copyright (C) 2026 Diego Alfonso Chicoma Ibañez (Dalfon.dev). GPL-3.0-only.</Copyright>
   </PropertyGroup>

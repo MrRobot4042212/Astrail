@@ -79,7 +79,7 @@ reposo y el coste por fotograma son requisitos, no detalles.
 - Mide antes y después: `powershell -File docs\perf\capture.ps1 -Label antes`
   (ver `docs/perf/README.md`). Un PR de rendimiento sin números no se puede
   revisar.
-- Si tocas el HUD, arranca con `METEOR_OVERLAY_DEBUG=1` y comprueba que el modo
+- Si tocas el HUD, arranca con `ASTRAIL_OVERLAY_DEBUG=1` y comprueba que el modo
   de composición sigue siendo `OVERLAY`. Si baja a `COMPOSED`, el overlay le está
   costando FPS al juego y el cambio no vale.
 - Nada de inyección de DLL en procesos de juegos, por seguridad frente a

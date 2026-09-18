@@ -4,7 +4,7 @@
 
 //! Atomic JSON persistence for every store in the app data dir.
 //!
-//! Meteor keeps one JSON file per concern (manual apps, favorites, categories,
+//! Astrail keeps one JSON file per concern (manual apps, favorites, categories,
 //! settings, playtime…). Before this module each of them was a bare
 //! `fs::write`, and every loader ended in `.ok().unwrap_or_default()`. Two
 //! failure modes followed from that:
@@ -159,7 +159,7 @@ pub fn save<T: Serialize>(app: &AppHandle, file: &str, value: &T) -> Result<(), 
 /// Like `save`, but skips the write when the file already has these exact bytes.
 /// Returns whether anything was written.
 ///
-/// This is what keeps idle Meteor off the disk: the playtime watcher rewrote
+/// This is what keeps idle Astrail off the disk: the playtime watcher rewrote
 /// `active_sessions.json` every 5 seconds with the same `[]`.
 pub fn save_if_changed<T: Serialize>(
     app: &AppHandle,
@@ -213,7 +213,7 @@ mod tests {
     use super::*;
 
     fn temp(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join("meteor-jsonstore-tests");
+        let dir = std::env::temp_dir().join("astrail-jsonstore-tests");
         fs::create_dir_all(&dir).unwrap();
         dir.join(name)
     }

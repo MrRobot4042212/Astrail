@@ -647,7 +647,7 @@ mod tests {
     fn prune_lru_drops_the_least_recently_used_files_down_to_the_cap() {
         use std::fs::{File, FileTimes};
         use std::time::Duration;
-        let dir = std::env::temp_dir().join("meteor-prune-lru-test");
+        let dir = std::env::temp_dir().join("astrail-prune-lru-test");
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         let base = SystemTime::now() - Duration::from_secs(3600);
@@ -677,7 +677,7 @@ mod tests {
         // host, so `img-src https:` had to stay in the CSP.
         assert!(is_remote("https://example.com/a.jpg"));
         assert!(is_remote("HTTP://example.com/a.jpg"));
-        assert!(!is_remote(r"C:\Users\me\AppData\Local\Meteor\user_covers\x.jpg"));
+        assert!(!is_remote(r"C:\Users\me\AppData\Local\Astrail\user_covers\x.jpg"));
         assert!(!is_remote(""));
         assert!(!is_remote("https:/"));
         assert_eq!(cover_ext(Some("image/jpeg"), "https://x/y"), "jpg");

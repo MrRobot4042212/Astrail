@@ -501,7 +501,7 @@ async fn app_icon(app: AppHandle, path: String) -> Result<Option<String>, String
 }
 
 /// Seconds the main window must stay hidden before we ask WebView2 to trim its
-/// memory. Short enough to matter when Meteor lives in the tray, long enough not
+/// memory. Short enough to matter when Astrail lives in the tray, long enough not
 /// to fire on a hide/show bounce.
 #[cfg(windows)]
 const WEBVIEW_TRIM_DELAY_SECS: u64 = 10;
@@ -577,13 +577,13 @@ fn show_main(app: &AppHandle) {
     }
 }
 
-/// Whether Meteor is set to launch on Windows login (the autostart `Run` key).
+/// Whether Astrail is set to launch on Windows login (the autostart `Run` key).
 #[tauri::command(async)]
 fn get_autostart() -> Result<bool, String> {
     autostart::is_enabled().map_err(|e| format!("Failed to read autostart: {e}"))
 }
 
-/// Autostart is the `Run` key only, elevated or not: Meteor never starts itself
+/// Autostart is the `Run` key only, elevated or not: Astrail never starts itself
 /// elevated at logon (see `elevation::remove_legacy_logon_task`). Both branches
 /// are idempotent — enabling rewrites the quoted path, disabling ignores a
 /// missing value — so no state check is needed first.
@@ -646,7 +646,7 @@ fn username() -> String {
         .unwrap_or_default()
 }
 
-/// Whether Meteor is running elevated (admin). Admin is required for CPU temp and
+/// Whether Astrail is running elevated (admin). Admin is required for CPU temp and
 /// for FPS on NVIDIA (PresentMon). False on non-Windows.
 #[tauri::command]
 fn is_elevated() -> bool {
@@ -698,7 +698,7 @@ fn abort_update() {
     crate::metrics::set_sidecars_suspended(false);
 }
 
-/// Relaunch Meteor as administrator (UAC prompt), then exit this instance.
+/// Relaunch Astrail as administrator (UAC prompt), then exit this instance.
 #[tauri::command]
 fn restart_as_admin(app: AppHandle) -> Result<(), String> {
     #[cfg(windows)]
@@ -1056,7 +1056,7 @@ pub fn run() {
         // In-app auto-update (checks GitHub Releases) + relaunch after install.
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
-        // Closing the main window hides Meteor to the tray instead of quitting,
+        // Closing the main window hides Astrail to the tray instead of quitting,
         // so the playtime/Discord/Spotlight watchers keep running. Real quit is
         // the tray's "Salir" item.
         .on_window_event(|window, event| {
@@ -1099,7 +1099,7 @@ pub fn run() {
             }
         })
         .plugin(
-            // Global Spotlight hotkey: bring Meteor up and open the launcher palette
+            // Global Spotlight hotkey: bring Astrail up and open the launcher palette
             // from anywhere. The handler runs for our one registered shortcut.
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, shortcut, event| {
@@ -1144,10 +1144,10 @@ pub fn run() {
             // `ensure_overlay_window` and destroyed on close, so no WebView2 process sits
             // resident during gameplay. This is the key "lightweight overlay" change.
 
-            // Migration: older builds autostarted an elevated Meteor through a
+            // Migration: older builds autostarted the app elevated through a
             // `/RL HIGHEST` logon task. Replace it with the ordinary Run key. Only
             // an elevated process can delete that task, and the task itself only
-            // launches Meteor elevated, so a normal launch spawns nothing here.
+            // launches the app elevated, so a normal launch spawns nothing here.
             #[cfg(windows)]
             if elevation::is_elevated() {
                 std::thread::spawn(move || {
@@ -1198,7 +1198,7 @@ pub fn run() {
             // Register the global shortcuts
             register_shortcuts(&handle, &settings.shortcuts);
 
-            // System tray: Meteor lives in the tray so the watchers keep running
+            // System tray: Astrail lives in the tray so the watchers keep running
             // after the window is closed. Left-click or "Mostrar Astrail" reopens
             // the window; "Salir" really quits.
             {

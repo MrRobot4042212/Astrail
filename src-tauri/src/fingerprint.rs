@@ -193,7 +193,7 @@ mod tests {
     fn mix_path_distinguishes_missing_from_present() {
         let mut a: u64 = 0;
         let mut b: u64 = 0;
-        mix_path(&mut a, Path::new("Z:\\meteor-does-not-exist"));
+        mix_path(&mut a, Path::new("Z:\\astrail-does-not-exist"));
         mix_path(&mut b, &std::env::temp_dir());
         assert_ne!(a, b);
     }
@@ -206,7 +206,7 @@ mod tests {
     #[test]
     fn a_missing_registry_key_is_a_stable_state() {
         use winreg::enums::HKEY_CURRENT_USER;
-        const MISSING: &str = r"SOFTWARE\Meteor\fingerprint-test\does-not-exist";
+        const MISSING: &str = r"SOFTWARE\Astrail\fingerprint-test\does-not-exist";
         let mut a: u64 = 0;
         let mut b: u64 = 0;
         mix_reg_key(&mut a, HKEY_CURRENT_USER, MISSING);

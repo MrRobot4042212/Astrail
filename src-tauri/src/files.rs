@@ -22,7 +22,7 @@ const MAX_DEPTH: u32 = 24;
 const MAX_ENTRIES: u64 = 500_000;
 
 /// Absolute path to a Windows system binary. System binaries are resolved from
-/// `%SystemRoot%\System32` and never from `PATH`: Meteor can be running
+/// `%SystemRoot%\System32` and never from `PATH`: Astrail can be running
 /// elevated, and a binary planted in a writable `PATH` entry would inherit that
 /// token.
 pub fn system_exe(name: &str) -> PathBuf {
@@ -96,19 +96,19 @@ pub fn dir_size(path: &Path) -> u64 {
     total
 }
 
-/// How a shell-out from Meteor reaches the desktop.
+/// How a shell-out from Astrail reaches the desktop.
 #[derive(Debug, PartialEq, Eq)]
 pub enum OpenRoute {
-    /// Meteor runs with the user's own token: spawn/`ShellExecuteW` directly.
+    /// Astrail runs with the user's own token: spawn/`ShellExecuteW` directly.
     Direct,
-    /// Meteor is elevated: hand the request to the desktop Explorer so the
+    /// Astrail is elevated: hand the request to the desktop Explorer so the
     /// child (Explorer window, browser) gets the user's medium token instead of
     /// inheriting administrator (see `launcher::desktop_shell`).
     DesktopShell,
 }
 
 /// Route for anything opened from the detail page. Same rule as game launches:
-/// an elevated Meteor never spawns a shell-out itself.
+/// an elevated Astrail never spawns a shell-out itself.
 pub fn open_route(elevated: bool) -> OpenRoute {
     if elevated {
         OpenRoute::DesktopShell
@@ -214,7 +214,7 @@ pub fn open_external(url: &str) -> Result<(), String> {
         use windows::Win32::UI::Shell::ShellExecuteW;
         use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
 
-        // An elevated Meteor must not start the browser itself: the browser
+        // An elevated Astrail must not start the browser itself: the browser
         // would inherit the administrator token for the rest of its session.
         if open_route(elevated()) == OpenRoute::DesktopShell {
             return crate::launcher::desktop_shell::open(url, None, None);
@@ -265,10 +265,10 @@ mod tests {
     }
 
     #[test]
-    fn an_elevated_meteor_never_opens_folders_or_links_itself() {
+    fn an_elevated_astrail_never_opens_folders_or_links_itself() {
         // Regression (A2/W1 residual): `open_game_folder` and the community
         // links spawned Explorer / the browser directly, so from an elevated
-        // Meteor they inherited the administrator token.
+        // Astrail they inherited the administrator token.
         assert_eq!(open_route(true), OpenRoute::DesktopShell);
         assert_eq!(open_route(false), OpenRoute::Direct);
     }
@@ -289,9 +289,9 @@ mod tests {
     fn validate_dir_rejects_files_and_missing_paths() {
         let dir = std::env::temp_dir();
         assert!(validate_dir(&dir.to_string_lossy()).is_ok());
-        assert!(validate_dir("Z:\\definitely\\not\\here\\meteor-test").is_err());
+        assert!(validate_dir("Z:\\definitely\\not\\here\\astrail-test").is_err());
 
-        let file = dir.join("meteor-validate-dir.tmp");
+        let file = dir.join("astrail-validate-dir.tmp");
         fs::write(&file, b"x").unwrap();
         assert!(validate_dir(&file.to_string_lossy()).is_err());
         let _ = fs::remove_file(&file);
@@ -299,7 +299,7 @@ mod tests {
 
     #[test]
     fn dir_size_sums_files() {
-        let dir = std::env::temp_dir().join("meteor-dir-size-test");
+        let dir = std::env::temp_dir().join("astrail-dir-size-test");
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(dir.join("sub")).unwrap();
         fs::write(dir.join("a.bin"), vec![0u8; 1000]).unwrap();

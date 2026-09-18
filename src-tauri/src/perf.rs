@@ -4,7 +4,7 @@
 
 //! Opt-in timing spans for the performance work (`docs/perf/`).
 //!
-//! Enabled only when `METEOR_PERF` is set in the environment, so a shipped build
+//! Enabled only when `ASTRAIL_PERF` is set in the environment, so a shipped build
 //! pays one relaxed atomic load per span and nothing else. Output goes to stderr
 //! as `perf <name> <ms>` lines, which `docs/perf/capture.ps1` parses.
 //!
@@ -19,13 +19,13 @@ use std::time::Instant;
 /// 0 = not checked yet, 1 = disabled, 2 = enabled.
 static STATE: AtomicU8 = AtomicU8::new(0);
 
-/// Whether `METEOR_PERF` was set when this process started.
+/// Whether `ASTRAIL_PERF` was set when this process started.
 pub fn enabled() -> bool {
     match STATE.load(Ordering::Relaxed) {
         1 => false,
         2 => true,
         _ => {
-            let on = std::env::var_os("METEOR_PERF").is_some();
+            let on = std::env::var_os("ASTRAIL_PERF").is_some();
             STATE.store(if on { 2 } else { 1 }, Ordering::Relaxed);
             on
         }

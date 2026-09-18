@@ -619,7 +619,7 @@ pub fn start(app: AppHandle) {
         let mut perf_hidden = false;
         #[cfg(windows)]
         let mut published_health: u8 = 0;
-        // Deep diagnostics (opt-in via METEOR_OVERLAY_DEBUG). Tracks the last gating
+        // Deep diagnostics (opt-in via ASTRAIL_OVERLAY_DEBUG). Tracks the last gating
         // decision so we only log on change, plus a heartbeat timer.
         #[cfg(windows)]
         crate::overlay_diag::init(&app);

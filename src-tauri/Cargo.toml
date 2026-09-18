@@ -1,7 +1,7 @@
 [package]
-name = "meteor"
+name = "astrail"
 version = "0.1.3"
-description = "Meteor - biblioteca unificada de juegos y apps"
+description = "Astrail - biblioteca unificada de juegos y apps"
 authors = ["Diego Alfonso Chicoma Ibañez (Dalfon.dev)"]
 edition = "2021"
 rust-version = "1.88"
@@ -13,7 +13,7 @@ repository = "https://github.com/MrRobot4042212/Meteor"
 # the crate three times — with fat LTO and codegen-units=1, linking is the
 # dominant cost of a release build of a Windows-only app.
 [lib]
-name = "meteor_lib"
+name = "astrail_lib"
 crate-type = ["rlib"]
 
 [build-dependencies]
@@ -52,7 +52,7 @@ nvml-wrapper = "0.10"
 # Registry-backed scanners (GOG, EA, Ubisoft) are Windows-only.
 [target.'cfg(windows)'.dependencies]
 # Same version Tauri's runtime already links, so no duplicate crate. Used to tell
-# WebView2 to release memory while Meteor sits in the tray (see lib.rs).
+# WebView2 to release memory while Astrail sits in the tray (see lib.rs).
 webview2-com = "0.38"
 # Deliberately NOT bumped to 0.56 (which Tauri itself pulls, so `cargo tree -d`
 # reports duplicates): 0.56 changes `HKEY` from `isize` to `*mut c_void`, which
@@ -76,7 +76,7 @@ windows = { version = "0.61", features = [
     "Win32_Security_Authentication_Identity",
     "Win32_System_Threading",
     # Kill-on-close Job Object for the metrics sidecars (see jobobj.rs), so an
-    # elevated PresentMon/cputemp can never outlive Meteor.
+    # elevated PresentMon/cputemp can never outlive Astrail.
     "Win32_System_JobObjects",
     # Stop PresentMon's ETW realtime session by name (ControlTraceW). The session is
     # a kernel object that outlives the process that created it, so terminating
@@ -93,7 +93,7 @@ windows = { version = "0.61", features = [
     # Native layered HUD window (lightweight overlay): module handle for the window class.
     "Win32_System_LibraryLoader",
     "Win32_UI_Shell",
-    # Launching games through the desktop Explorer when Meteor is elevated, so they
+    # Launching games through the desktop Explorer when Astrail is elevated, so they
     # get the user's normal token (launcher.rs `desktop_shell`).
     "Win32_System_Com",
     "Win32_System_Ole",

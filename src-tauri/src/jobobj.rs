@@ -9,7 +9,7 @@
 //! session; a kernel driver). Previously they were tracked by PID and killed
 //! with `taskkill /F /PID` on exit — which loses the race against PID reuse
 //! (the PID may belong to something else by then) and, worse, does nothing at
-//! all if Meteor is killed, crashes, or aborts on panic (`panic = "abort"`),
+//! all if Astrail is killed, crashes, or aborts on panic (`panic = "abort"`),
 //! leaving an orphaned elevated process behind.
 //!
 //! A Job Object with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` makes the kernel do

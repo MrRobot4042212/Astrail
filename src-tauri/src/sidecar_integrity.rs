@@ -2,12 +2,12 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Additional terms under GPL-3.0 section 7 apply: see ADDITIONAL-TERMS.md
 
-//! Integrity check for the sidecars Meteor runs elevated (`PresentMon.exe`,
+//! Integrity check for the sidecars Astrail runs elevated (`PresentMon.exe`,
 //! `cputemp.exe`).
 //!
 //! Both are resources of a per-user install, so they live in a folder the user
 //! (and anything running as the user) can write. Starting them from an elevated
-//! Meteor without a check would run whatever was dropped there with admin
+//! Astrail without a check would run whatever was dropped there with admin
 //! rights. `build.rs` embeds the SHA-256 of the exact files that were bundled;
 //! a binary that does not match is never started.
 //!
@@ -20,8 +20,8 @@ use std::fs::File;
 use std::io::{self, Read};
 use std::path::Path;
 
-pub const PRESENTMON_SHA256: Option<&str> = option_env!("METEOR_PRESENTMON_SHA256");
-pub const CPUTEMP_SHA256: Option<&str> = option_env!("METEOR_CPUTEMP_SHA256");
+pub const PRESENTMON_SHA256: Option<&str> = option_env!("ASTRAIL_PRESENTMON_SHA256");
+pub const CPUTEMP_SHA256: Option<&str> = option_env!("ASTRAIL_CPUTEMP_SHA256");
 
 /// A verified binary. Keep it alive until the child process has been spawned.
 #[must_use = "the file can be replaced as soon as this is dropped"]
@@ -79,7 +79,7 @@ mod tests {
     const ABC_SHA256: &str = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
 
     fn temp_file(name: &str, contents: &[u8]) -> std::path::PathBuf {
-        let dir = std::env::temp_dir().join(format!("meteor-integrity-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("astrail-integrity-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join(name);
         std::fs::write(&path, contents).unwrap();

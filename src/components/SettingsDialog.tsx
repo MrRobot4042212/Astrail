@@ -871,7 +871,7 @@ function OverlayPreview({ cfg }: { cfg: OverlaySettings }) {
   );
 }
 
-/** Color picker: a native <input type="color"> styled to look like the Meteor design. */
+/** Color picker: a native <input type="color"> styled to look like the Astrail design. */
 function ColorPicker({
   label,
   value,

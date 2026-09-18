@@ -4,9 +4,9 @@
 
 //! Deep, opt-in diagnostics for the in-game overlay (Windows only).
 //!
-//! Everything here is gated behind the `METEOR_OVERLAY_DEBUG` env var, so in normal
+//! Everything here is gated behind the `ASTRAIL_OVERLAY_DEBUG` env var, so in normal
 //! use it costs nothing (no per-tick spam — that was removed on purpose). Set
-//! `METEOR_OVERLAY_DEBUG=1` before launching (`$env:METEOR_OVERLAY_DEBUG=1; npm run app`)
+//! `ASTRAIL_OVERLAY_DEBUG=1` before launching (`$env:ASTRAIL_OVERLAY_DEBUG=1; npm run app`)
 //! to get a running picture of *why* the overlay does or doesn't cost performance:
 //!
 //!  - The chosen backend and any init failure.
@@ -44,10 +44,10 @@ static ENABLED: OnceLock<bool> = OnceLock::new();
 static LOG_PATH: OnceLock<Option<PathBuf>> = OnceLock::new();
 static FILE_LOCK: Mutex<()> = Mutex::new(());
 
-/// True if `METEOR_OVERLAY_DEBUG` is set to 1/true. Evaluated once.
+/// True if `ASTRAIL_OVERLAY_DEBUG` is set to 1/true. Evaluated once.
 pub fn enabled() -> bool {
     *ENABLED.get_or_init(|| {
-        std::env::var("METEOR_OVERLAY_DEBUG")
+        std::env::var("ASTRAIL_OVERLAY_DEBUG")
             .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
             .unwrap_or(false)
     })
@@ -65,7 +65,7 @@ pub fn init(app: &tauri::AppHandle) {
         let path = dir.join("overlay-debug.log");
         Some(path)
     });
-    log("=== overlay debug iniciado (METEOR_OVERLAY_DEBUG=1) ===");
+    log("=== overlay debug iniciado (ASTRAIL_OVERLAY_DEBUG=1) ===");
     if let Some(Some(p)) = LOG_PATH.get() {
         log(&format!("log file: {}", p.display()));
     }

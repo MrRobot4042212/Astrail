@@ -10,7 +10,7 @@
 //! Requirements (both needed for FPS to appear; everything degrades silently to
 //! `None` otherwise, so the rest of the overlay always works):
 //!   1. The `PresentMon.exe` binary present (see `binaries/README.md`).
-//!   2. Meteor running **elevated** — ETW realtime sessions require admin.
+//!   2. Astrail running **elevated** — ETW realtime sessions require admin.
 
 use std::collections::VecDeque;
 use std::io::{BufRead, BufReader};
@@ -31,7 +31,7 @@ static LAST_UPDATE_MS: AtomicU64 = AtomicU64::new(0);
 /// is why `--stop_existing_session` used to be needed — and why it could tear down
 /// a session belonging to another PresentMon consumer (CapFrameX, Intel's own
 /// service, the user's own run). With a private name we only ever stop our own.
-const SESSION_NAME: &str = "Meteor-PresentMon";
+const SESSION_NAME: &str = "Astrail-PresentMon";
 
 /// The running child, shared with `shutdown()` so a clean app exit can stop the
 /// ETW session instead of leaving the Job Object to terminate the process.
@@ -116,7 +116,7 @@ fn spawn(bin: &Path, pid: u32) -> std::io::Result<Child> {
         cmd.creation_flags(CREATE_NO_WINDOW);
     }
     let mut child = cmd.spawn()?;
-    // Kill-on-close job: if Meteor dies for any reason (crash, force-quit,
+    // Kill-on-close job: if Astrail dies for any reason (crash, force-quit,
     // `panic = "abort"`), the kernel terminates this elevated child and its ETW
     // session instead of leaving it orphaned.
     #[cfg(windows)]
@@ -365,7 +365,7 @@ pub fn start(app: AppHandle) {
         // PresentMon's ETW realtime session requires admin. Elevation can't change at
         // runtime, so check once: when not elevated we never even attempt to spawn it
         // (no access-denied spam, no overhead). FPS on NVIDIA therefore only appears
-        // when Meteor is already running as admin; AMD gets fullscreen FPS from the
+        // when Astrail is already running as admin; AMD gets fullscreen FPS from the
         // cputemp sidecar regardless.
         let elevated = {
             #[cfg(windows)]
@@ -392,7 +392,7 @@ pub fn start(app: AppHandle) {
 
         loop {
             // Park while there is nothing to target; poll only while a session is
-            // live, so an idle Meteor does not wake this thread at all.
+            // live, so an idle Astrail does not wake this thread at all.
             let idle = !crate::metrics::want_fps() || crate::metrics::current_pid() == 0;
             let running = child_lock().is_some();
             crate::metrics::wait_sidecar(

@@ -13,7 +13,7 @@
 use serde::Serialize;
 
 /// The license itself, the section 7 terms it points to, and the notices for
-/// the code Meteor ships from other people.
+/// the code Astrail ships from other people.
 const LICENSE: &str = include_str!("../../LICENSE");
 const ADDITIONAL_TERMS: &str = include_str!("../../ADDITIONAL-TERMS.md");
 const THIRD_PARTY_NOTICES: &str = include_str!("../../THIRD-PARTY-NOTICES.txt");
@@ -32,7 +32,7 @@ pub struct AboutInfo {
     pub license: &'static str,
     /// Whether this build came out of the project's own release workflow.
     ///
-    /// The release workflow sets `METEOR_OFFICIAL_BUILD` only when it runs in
+    /// The release workflow sets `ASTRAIL_OFFICIAL_BUILD` only when it runs in
     /// the upstream repository, so a fork that builds the same tag gets `false`
     /// without having to remember to change anything — which is what term 2
     /// (GPL section 7c, mark modified versions) asks for.
@@ -45,7 +45,7 @@ pub fn info() -> AboutInfo {
         author: AUTHOR,
         repository: REPOSITORY,
         license: "GPL-3.0-only",
-        official: option_env!("METEOR_OFFICIAL_BUILD").is_some_and(|v| !v.is_empty()),
+        official: option_env!("ASTRAIL_OFFICIAL_BUILD").is_some_and(|v| !v.is_empty()),
     }
 }
 

@@ -70,7 +70,7 @@ struct AppxGame {
 const APPX_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Absolute path to the system PowerShell. Resolved from `%SystemRoot%` instead
-/// of `PATH`: Meteor may run elevated, and a `powershell.exe` planted earlier in
+/// of `PATH`: Astrail may run elevated, and a `powershell.exe` planted earlier in
 /// a writable `PATH` entry would then execute with the elevated token.
 fn powershell_path() -> PathBuf {
     #[cfg(windows)]

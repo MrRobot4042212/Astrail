@@ -110,7 +110,7 @@ jobs:
           $cargo    = (Select-String -Path src-tauri/Cargo.toml -Pattern '^version\s*=\s*"([^"]+)"' |
                        Select-Object -First 1).Matches[0].Groups[1].Value
           $lockRs   = (Get-Content src-tauri/Cargo.lock -Raw |
-                       Select-String -Pattern 'name = "meteor"\r?\nversion = "([^"]+)"').Matches[0].Groups[1].Value
+                       Select-String -Pattern 'name = "astrail"\r?\nversion = "([^"]+)"').Matches[0].Groups[1].Value
 
           Write-Host "tauri.conf.json=$conf package.json=$pkg package-lock(top)=$lockTop package-lock(self)=$lockSelf Cargo.toml=$cargo Cargo.lock=$lockRs"
           $all = @($pkg, $lockTop, $lockSelf, $cargo, $lockRs)
@@ -163,12 +163,12 @@ jobs:
           # only happens here, in the upstream repository. A fork that runs the
           # same workflow gets the warning without having to remember anything —
           # term 2 of ADDITIONAL-TERMS.md (GPL section 7c).
-          METEOR_OFFICIAL_BUILD: ${{ github.repository == 'MrRobot4042212/Meteor' && '1' || '' }}
+          ASTRAIL_OFFICIAL_BUILD: ${{ github.repository == 'MrRobot4042212/Meteor' && '1' || '' }}
         with:
           # tauri-action substitutes __VERSION__ with the app version and creates
           # the tag itself, so the tag can never disagree with what was built.
           tagName: v__VERSION__
-          releaseName: 'Meteor v__VERSION__'
+          releaseName: 'Astrail v__VERSION__'
           releaseBody: 'See CHANGELOG.md for what changed in this version.'
           releaseDraft: false
           prerelease: false

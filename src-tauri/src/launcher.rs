@@ -19,7 +19,7 @@
 //! cache or the manual store (`lib.rs::launch_game` takes an **id**), so the
 //! webview cannot fabricate a target.
 //!
-//! **Elevation.** When Meteor itself runs as administrator (the admin-only
+//! **Elevation.** When Astrail itself runs as administrator (the admin-only
 //! metrics), anything it starts with `CreateProcess` or `ShellExecuteW` inherits
 //! that admin token: the game, and a store client that was not already running.
 //! In that state every launch is handed to the desktop Explorer instead
@@ -31,7 +31,7 @@ use crate::models::{Game, GameSource};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-/// Protocol schemes Meteor is allowed to open. One entry per store scanner that
+/// Protocol schemes Astrail is allowed to open. One entry per store scanner that
 /// emits a `launch_uri` (`launcher.rs` for Steam, `epic.rs`, `ubisoft.rs`,
 /// `battlenet.rs`); `shell:` (Xbox AUMIDs) is handled separately below because
 /// it is opened through Explorer rather than a protocol handler.
@@ -258,11 +258,11 @@ fn spawn_exe(game: &Game, exe: &str) -> Result<(), String> {
 #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
 #[derive(Debug, PartialEq, Eq)]
 enum ExeRoute {
-    /// `Command::spawn` (CreateProcess): inherits Meteor's token.
+    /// `Command::spawn` (CreateProcess): inherits Astrail's token.
     CreateProcess,
     /// `ShellExecuteW`: `.lnk` shortcuts, which CreateProcess cannot start.
     ShellExecute,
-    /// The desktop Explorer: the only route while Meteor is elevated.
+    /// The desktop Explorer: the only route while Astrail is elevated.
     DesktopShell,
 }
 
@@ -346,7 +346,7 @@ pub(crate) mod desktop_shell {
         let _com = ComScope::enter();
         let shell = dispatch().map_err(|e| {
             format!(
-                "Meteor is running as administrator and could not hand the launch to the \
+                "Astrail is running as administrator and could not hand the launch to the \
                  desktop shell, so it was not started with admin rights ({e})"
             )
         })?;
@@ -366,8 +366,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn an_elevated_meteor_never_starts_an_executable_itself() {
-        // Regression (W1): games inherited the admin token of an elevated Meteor.
+    fn an_elevated_astrail_never_starts_an_executable_itself() {
+        // Regression (W1): games inherited the admin token of an elevated Astrail.
         for exe in ["C:\\Games\\x\\game.exe", "C:\\Games\\x\\start.bat", "C:\\x\\Game.LNK"] {
             assert_eq!(exe_route(Path::new(exe), true), ExeRoute::DesktopShell, "{exe}");
         }

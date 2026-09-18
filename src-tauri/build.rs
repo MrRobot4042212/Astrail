@@ -28,7 +28,7 @@ fn load_dotenv() {
     // Only declared when the file exists: cargo treats a missing
     // `rerun-if-changed` path as "always dirty" on some versions, which would
     // recompile the crate on every build for everyone without a `.env`.
-    // Consequence: creating `.env` later needs a `cargo clean -p meteor` (or
+    // Consequence: creating `.env` later needs a `cargo clean -p astrail` (or
     // any other change to this script's inputs) to be picked up.
     let Ok(contents) = std::fs::read_to_string(&path) else {
         return;
@@ -62,8 +62,8 @@ fn embed_sidecar_hashes() {
     use sha2::{Digest, Sha256};
 
     for (file, key) in [
-        ("PresentMon.exe", "METEOR_PRESENTMON_SHA256"),
-        ("cputemp.exe", "METEOR_CPUTEMP_SHA256"),
+        ("PresentMon.exe", "ASTRAIL_PRESENTMON_SHA256"),
+        ("cputemp.exe", "ASTRAIL_CPUTEMP_SHA256"),
     ] {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("binaries")
@@ -84,7 +84,7 @@ fn main() {
     // `src/about.rs` reads this with `option_env!` to decide whether the About
     // screen says "unofficial build"; only the release workflow of the upstream
     // repository sets it. Declared here so flipping it rebuilds the crate.
-    println!("cargo:rerun-if-env-changed=METEOR_OFFICIAL_BUILD");
+    println!("cargo:rerun-if-env-changed=ASTRAIL_OFFICIAL_BUILD");
     #[cfg(windows)]
     embed_sidecar_hashes();
 

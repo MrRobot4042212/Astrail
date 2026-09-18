@@ -175,7 +175,7 @@ unsafe fn init() -> Result<Dcomp> {
     }
 
     let hinst = step!("GetModuleHandleW", GetModuleHandleW(None));
-    let class = w!("MeteorOverlayDComp");
+    let class = w!("AstrailOverlayDComp");
     let wc = WNDCLASSEXW {
         cbSize: std::mem::size_of::<WNDCLASSEXW>() as u32,
         lpfnWndProc: Some(wndproc),
@@ -736,7 +736,7 @@ pub fn composition_mode() -> Option<i32> {
 /// Query and log the swapchain's actual composition mode — the definitive runtime
 /// MPO check. `OVERLAY` = the HUD is on a hardware overlay plane (the game keeps
 /// independent-flip → no added latency); `COMPOSED` = DWM is compositing it (the
-/// input-lag case). Diagnostics-gated, so this only runs with METEOR_OVERLAY_DEBUG.
+/// input-lag case). Diagnostics-gated, so this only runs with ASTRAIL_OVERLAY_DEBUG.
 pub fn log_composition_mode() {
     STATE.with(|s| {
         let guard = s.borrow();

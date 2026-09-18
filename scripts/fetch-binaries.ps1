@@ -4,7 +4,7 @@
 
 <#
 .SYNOPSIS
-  Produce the two metrics binaries Meteor bundles as resources.
+  Produce the two metrics binaries Astrail bundles as resources.
 
 .DESCRIPTION
   `src-tauri/tauri.conf.json` declares `binaries/PresentMon.exe` and

@@ -7,7 +7,7 @@
 //!
 //! - **CPU temperature** (`--cpu`): LHM reads Ryzen Tctl / Intel core temps through
 //!   a kernel driver, so this needs **admin** and an HVCI-compatible driver. It is
-//!   only requested when Meteor is elevated.
+//!   only requested when Astrail is elevated.
 //! - **AMD GPU telemetry and FPS** (`--gpu <selector>`): read through ADL, which
 //!   ships with AMD's graphics driver. No admin and no kernel driver. The sampler
 //!   decides when the sidecar is the GPU source (`metrics::sidecar_gpu`).
@@ -210,7 +210,7 @@ fn spawn(bin: &PathBuf, mode: &Mode) -> std::io::Result<Child> {
     let mut child = cmd.spawn()?;
     let generation = next_generation();
     // Kill-on-close job: last-resort backstop so an orphaned elevated sidecar cannot
-    // outlive Meteor after a crash. Note it terminates rather than stops the child,
+    // outlive Astrail after a crash. Note it terminates rather than stops the child,
     // which does NOT unload the driver — that is what `stop` is for.
     #[cfg(windows)]
     crate::jobobj::assign(&child);

@@ -4,7 +4,7 @@
 
 <#
 .SYNOPSIS
-  Capture Meteor's resource baseline into docs/perf/<label>.json.
+  Capture Astrail's resource baseline into docs/perf/<label>.json.
 
 .DESCRIPTION
   Every optimization phase in the roadmap has a numeric exit criterion, and this
@@ -13,17 +13,17 @@
 
   Uses only what ships with Windows: performance counters, CIM and file mtimes.
 
-  What it measures, with Meteor RUNNING and hidden to the tray, no game open:
-    * CPU%       — \Process(meteor)\% Processor Time, averaged over the window
-    * Wakeups    — thread context switches/sec across meteor's threads
-    * Memory     — Private Bytes of meteor.exe and of the WebView2 process tree
+  What it measures, with Astrail RUNNING and hidden to the tray, no game open:
+    * CPU%       — \Process(astrail)\% Processor Time, averaged over the window
+    * Wakeups    — thread context switches/sec across astrail's threads
+    * Memory     — Private Bytes of astrail.exe and of the WebView2 process tree
     * Disk       — files under %APPDATA%\com.alfonso.meteor whose mtime moved,
                    which is the honest measure of "writes while doing nothing"
     * Backends   — whether nvml.dll is loaded and the cputemp sidecar is running
                    (neither should be until a game runs, from phase 3 on)
 
 .EXAMPLE
-  # 1. Start Meteor, close the window so it sits in the tray, then:
+  # 1. Start Astrail, close the window so it sits in the tray, then:
   powershell -File docs\perf\capture.ps1 -Label baseline -Minutes 10
 
 .EXAMPLE
@@ -47,9 +47,9 @@ if (-not $OutDir) {
     $OutDir = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
 }
 
-function Get-MeteorProcess {
-    $p = Get-Process -Name meteor -ErrorAction SilentlyContinue
-    if (-not $p) { throw 'meteor.exe is not running. Start Meteor and close its window to the tray first.' }
+function Get-AstrailProcess {
+    $p = Get-Process -Name astrail -ErrorAction SilentlyContinue
+    if (-not $p) { throw 'astrail.exe is not running. Start Astrail and close its window to the tray first.' }
     if ($p -is [array]) { $p = $p[0] }
     return $p
 }
@@ -67,7 +67,7 @@ function Get-WebViewTree($parentId) {
 
 # Performance-counter paths are LOCALIZED: on a Spanish Windows the object is
 # "Proceso" and the counter "% de tiempo de procesador", so the English literal
-# `\Process(meteor)\% Processor Time` returns nothing (and under StrictMode the
+# `\Process(astrail)\% Processor Time` returns nothing (and under StrictMode the
 # `.CounterSamples` access throws). Perflib assigns every object/counter a
 # language-neutral index; resolve the names through the current-language table.
 $script:PerfNames = $null
@@ -87,8 +87,8 @@ $objThread   = Resolve-CounterName 232   # Thread
 $ctrCtx      = Resolve-CounterName 146   # Context Switches/sec
 
 $dataDir = Join-Path $env:APPDATA 'com.alfonso.meteor'
-$proc = Get-MeteorProcess
-Write-Host "Sampling meteor.exe (pid $($proc.Id)) for $Minutes min. Leave it idle in the tray."
+$proc = Get-AstrailProcess
+Write-Host "Sampling astrail.exe (pid $($proc.Id)) for $Minutes min. Leave it idle in the tray."
 
 $before = @{}
 if (Test-Path $dataDir) {
@@ -96,15 +96,15 @@ if (Test-Path $dataDir) {
 }
 
 $samples = [int][math]::Max(2, ($Minutes * 60) / 5)
-$cpu = (Get-Counter "\$objProcess(meteor)\$ctrCpu" -SampleInterval 5 -MaxSamples $samples).CounterSamples
+$cpu = (Get-Counter "\$objProcess(astrail)\$ctrCpu" -SampleInterval 5 -MaxSamples $samples).CounterSamples
 $cpuValues = @($cpu | ForEach-Object { $_.CookedValue })
 $cores = (Get-CimInstance Win32_ComputerSystem).NumberOfLogicalProcessors
 
-# Context switches per second across meteor's threads = how often it wakes up.
-# The `meteor/*` instance set changes between samples (short-lived tokio
+# Context switches per second across astrail's threads = how often it wakes up.
+# The `astrail/*` instance set changes between samples (short-lived tokio
 # workers), and Get-Counter throws on any invalid sample unless told not to;
 # keep only samples with Status 0 and average over the samples we did get.
-$ctxRaw = Get-Counter "\$objThread(meteor/*)\$ctrCtx" -SampleInterval 5 -MaxSamples 3 -ErrorAction SilentlyContinue
+$ctxRaw = Get-Counter "\$objThread(astrail/*)\$ctrCtx" -SampleInterval 5 -MaxSamples 3 -ErrorAction SilentlyContinue
 $ctxTotal = 0
 if ($ctxRaw) {
     $ctx = @($ctxRaw | ForEach-Object { $_.CounterSamples } | Where-Object { $_.Status -eq 0 })
@@ -147,8 +147,8 @@ $result = [ordered]@{
         cpu_percent_max     = if ($cpuValues.Count) { [math]::Round((($cpuValues | Measure-Object -Maximum).Maximum) / $cores, 3) } else { $null }
         context_switches_s  = $ctxTotal
         threads             = $proc.Threads.Count
-        meteor_private_mb   = [math]::Round($proc.PrivateMemorySize64 / 1MB, 1)
-        meteor_workingset_mb = [math]::Round($proc.WorkingSet64 / 1MB, 1)
+        astrail_private_mb   = [math]::Round($proc.PrivateMemorySize64 / 1MB, 1)
+        astrail_workingset_mb = [math]::Round($proc.WorkingSet64 / 1MB, 1)
         webview_processes   = $webview.Count
         webview_workingset_mb = $webviewMb
         files_written       = @($touched | Sort-Object -Unique)
@@ -161,7 +161,7 @@ $result = [ordered]@{
         app_icons_mb = if (Test-Path "$dataDir\app_icons") { [math]::Round((Get-ChildItem "$dataDir\app_icons" -File | Measure-Object Length -Sum).Sum / 1MB, 1) } else { 0 }
     }
     artifacts        = [ordered]@{
-        meteor_exe_mb  = if (Test-Path 'src-tauri/target/release/meteor.exe') { [math]::Round((Get-Item 'src-tauri/target/release/meteor.exe').Length / 1MB, 1) } else { $null }
+        astrail_exe_mb  = if (Test-Path 'src-tauri/target/release/astrail.exe') { [math]::Round((Get-Item 'src-tauri/target/release/astrail.exe').Length / 1MB, 1) } else { $null }
         cputemp_exe_mb = if (Test-Path 'src-tauri/binaries/cputemp.exe') { [math]::Round((Get-Item 'src-tauri/binaries/cputemp.exe').Length / 1MB, 1) } else { $null }
         installer_mb   = if (Test-Path 'src-tauri/target/release/bundle/nsis') { [math]::Round(((Get-ChildItem 'src-tauri/target/release/bundle/nsis' -Filter *.exe | Measure-Object Length -Sum).Sum) / 1MB, 1) } else { $null }
     }
@@ -176,8 +176,11 @@ $result.idle | Format-List
 if ($Compare) {
     $base = Get-Content $Compare -Raw | ConvertFrom-Json
     Write-Host "`n=== vs $Compare ==="
-    foreach ($k in 'cpu_percent_mean', 'context_switches_s', 'meteor_private_mb', 'webview_workingset_mb', 'files_written_count') {
-        $old = $base.idle.$k
+    foreach ($k in 'cpu_percent_mean', 'context_switches_s', 'astrail_private_mb', 'webview_workingset_mb', 'files_written_count') {
+        # Captures from before the rename name the process fields `meteor_*`.
+        $prop = $base.idle.PSObject.Properties[$k]
+        if (-not $prop) { $prop = $base.idle.PSObject.Properties[($k -replace '^astrail_', 'meteor_')] }
+        $old = if ($prop) { $prop.Value } else { $null }
         $new = $result.idle.$k
         $delta = if ($old -and $old -ne 0) { "{0:P0}" -f (($new - $old) / $old) } else { 'n/a' }
         Write-Host ("{0,-24} {1,10} -> {2,10}  ({3})" -f $k, $old, $new, $delta)

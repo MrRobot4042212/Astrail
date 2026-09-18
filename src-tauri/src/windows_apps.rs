@@ -151,7 +151,7 @@ fn is_junk(name: &str, publisher: &str) -> bool {
         "steam", "steam client", "epic games launcher", "gog galaxy", "ea app",
         "ea desktop", "origin", "ubisoft connect", "uplay", "battle.net",
         "riot client", "rockstar games launcher", "amazon games", "discord",
-        "overwolf", "playnite", "geforce now", "meteor", "blender", "7-zip",
+        "overwolf", "playnite", "geforce now", "astrail", "blender", "7-zip",
         "wallpaper engine", "youtube",
     ];
     if EXACT_BLOCK.contains(&n.as_str()) {

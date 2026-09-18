@@ -9,19 +9,19 @@ use std::sync::{Condvar, Mutex, PoisonError};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter};
 
-static LAUNCHED_FROM_METEOR: Mutex<Vec<(String, u64)>> = Mutex::new(Vec::new());
+static LAUNCHED_FROM_ASTRAIL: Mutex<Vec<(String, u64)>> = Mutex::new(Vec::new());
 
 /// Wake signal for the watcher thread: a generation counter plus a condvar.
 ///
 /// The watcher used to `sleep(5s)` forever and enumerate **every process on the
 /// system** on each tick, even with nothing to track — and then discard all of
 /// it, because matching is opt-in per launch (ADR-5). Now it blocks here with no
-/// timeout while idle and is woken by `notify_launched`, so an idle Meteor does
+/// timeout while idle and is woken by `notify_launched`, so an idle Astrail does
 /// no process work at all.
 static WAKE: (Mutex<u64>, Condvar) = (Mutex::new(0), Condvar::new());
 
 const STORE_FILE: &str = "playtime.json";
-/// In-flight sessions, persisted so a Meteor crash/close doesn't lose time.
+/// In-flight sessions, persisted so an Astrail crash/close doesn't lose time.
 const ACTIVE_FILE: &str = "active_sessions.json";
 /// Snapshot of the library the watcher matches processes against.
 const LIBRARY_CACHE: &str = "library_cache.json";
@@ -150,7 +150,7 @@ fn active_load(app: &AppHandle) -> Vec<ActiveSession> {
 
 /// Flush in-flight sessions, but only when they actually changed.
 ///
-/// This ran unconditionally on every 5 s poll, so an idle Meteor wrote `[]` to
+/// This ran unconditionally on every 5 s poll, so an idle Astrail wrote `[]` to
 /// disk ~17 000 times a day — the only continuous disk activity at rest.
 fn active_save(app: &AppHandle, sessions: &[ActiveSession]) {
     if let Err(e) = jsonstore::save_if_changed(app, ACTIVE_FILE, &sessions) {
@@ -175,12 +175,12 @@ pub fn reconcile(app: &AppHandle) {
     let _ = app.emit("playtime-updated", "");
 }
 
-/// Registra que un juego fue lanzado a través de Meteor, para que sus métricas
+/// Registra que un juego fue lanzado a través de Astrail, para que sus métricas
 /// sean mostradas en el overlay.
 pub fn notify_launched(id: &str) {
     // Never skip the registration on a poisoned mutex: dropping it here would mean
     // the game the user just launched is silently not tracked at all.
-    let mut list = LAUNCHED_FROM_METEOR
+    let mut list = LAUNCHED_FROM_ASTRAIL
         .lock()
         .unwrap_or_else(PoisonError::into_inner);
     list.retain(|(i, _)| i != id);
@@ -450,7 +450,7 @@ fn proc_alive(pid: u32) -> bool {
 
 /// Start the global playtime watcher: a background thread that polls every
 /// running process and matches them against the **whole library**, so a game is
-/// timed no matter how it was launched (Meteor, Steam, a desktop shortcut…).
+/// timed no matter how it was launched (Astrail, Steam, a desktop shortcut…).
 /// Sessions are accumulated per game id and the frontend is notified on end.
 pub fn start(app: AppHandle) {
     std::thread::spawn(move || {
@@ -476,7 +476,7 @@ pub fn start(app: AppHandle) {
             // Nothing tracked and nothing launched → block until something
             // happens. This is the whole idle-cost story: no timer, no wakeups.
             let idle = active.is_empty()
-                && LAUNCHED_FROM_METEOR
+                && LAUNCHED_FROM_ASTRAIL
                     .lock()
                     .map(|l| l.is_empty())
                     .unwrap_or(true);
@@ -501,7 +501,7 @@ pub fn start(app: AppHandle) {
             // read-modify-write of playtime.json with its fsync, and a Discord IPC
             // call — freezing IPC, the tray and the global shortcuts with it.
             let launched: Vec<(String, u64)> = {
-                let mut launched_list = LAUNCHED_FROM_METEOR
+                let mut launched_list = LAUNCHED_FROM_ASTRAIL
                     .lock()
                     .unwrap_or_else(PoisonError::into_inner);
                 launched_list.retain(|(id, launch_ts)| {
@@ -510,7 +510,7 @@ pub fn start(app: AppHandle) {
                 launched_list.clone()
             };
 
-            // A Meteor-launched game we haven't matched to a process yet → keep scanning
+            // An Astrail-launched game we haven't matched to a process yet → keep scanning
             // promptly until it shows up (don't wait for the slow full-scan cadence).
             let pending_launch = launched.iter().any(|(id, _)| !active.contains_key(id));
 
@@ -579,7 +579,7 @@ pub fn start(app: AppHandle) {
                 let procs = running_processes();
 
                 for e in &index {
-                    // OPT-IN: only games that are active or were launched via Meteor.
+                    // OPT-IN: only games that are active or were launched via Astrail.
                     let is_active = active.contains_key(&e.id);
                     let was_launched = launched.iter().any(|(l_id, _)| l_id == &e.id);
                     if !is_active && !was_launched {
@@ -633,7 +633,7 @@ pub fn start(app: AppHandle) {
                 .map(|(id, _)| id);
 
             // Publish the foreground game (name + pid) to the metrics overlay
-            // ONLY if it was launched from Meteor.
+            // ONLY if it was launched from Astrail.
             let show_metrics_for = primary
                 .as_ref()
                 .filter(|id| launched.iter().any(|(l_id, _)| l_id == *id));
@@ -645,7 +645,7 @@ pub fn start(app: AppHandle) {
             // Debug: surface why the overlay is/ isn't fed a game (transition-only).
             if game_name != dbg_overlay_game {
                 eprintln!(
-                    "[overlay] watcher: running_primary={:?} launched_from_meteor={} -> publish={:?} pid={:?}",
+                    "[overlay] watcher: running_primary={:?} launched_from_astrail={} -> publish={:?} pid={:?}",
                     primary,
                     show_metrics_for.is_some(),
                     game_name,

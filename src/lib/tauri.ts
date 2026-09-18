@@ -122,10 +122,10 @@ export const getDiscordClientId = () => invoke<string>('get_discord_client_id');
 export const setDiscordClientId = (id: string) =>
   invoke<void>('set_discord_client_id', { id });
 
-/** Whether Meteor launches on Windows login. */
+/** Whether Astrail launches on Windows login. */
 export const getAutostart = () => invoke<boolean>('get_autostart');
 
-/** Enable/disable launching Meteor on Windows login. */
+/** Enable/disable launching Astrail on Windows login. */
 export const setAutostart = (enabled: boolean) =>
   invoke<void>('set_autostart', { enabled });
 
@@ -166,10 +166,10 @@ export const overlayMpoDiagnostics = () =>
 /** The OS user's display/full name (or login name) for the Home greeting. */
 export const username = () => invoke<string>('username');
 
-/** Whether Meteor runs elevated (admin) — needed for CPU temp / NVIDIA FPS. */
+/** Whether Astrail runs elevated (admin) — needed for CPU temp / NVIDIA FPS. */
 export const isElevated = () => invoke<boolean>('is_elevated');
 
-/** Relaunch Meteor as administrator (UAC), then the current instance exits. */
+/** Relaunch Astrail as administrator (UAC), then the current instance exits. */
 export const restartAsAdmin = () => invoke<void>('restart_as_admin');
 
 /** Stop the metrics sidecars before the updater installs (its install exits the

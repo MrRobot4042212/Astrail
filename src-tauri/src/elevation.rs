@@ -97,7 +97,7 @@ pub fn await_previous_instance() {
     }
 }
 
-/// Name of the Task Scheduler entry older builds created to autostart Meteor
+/// Name of the Task Scheduler entry older builds created to autostart the app
 /// elevated. It is no longer created: autostart is the ordinary `Run` key only,
 /// because a `/RL HIGHEST` logon task restarts an elevated launcher at every
 /// logon without UAC, and every game spawned from it inherits the admin token.
@@ -121,7 +121,7 @@ fn schtasks(args: &[&str]) -> std::io::Result<bool> {
 /// Remove the elevated logon task left by an older build. Returns `true` when a
 /// task existed and is now gone, so the caller can move autostart to the `Run`
 /// key. Only an elevated process can delete a `/RL HIGHEST` task, and such a task
-/// only ever launches Meteor elevated, so callers skip this when not elevated:
+/// only ever launches the app elevated, so callers skip this when not elevated:
 /// the next logon launch performs it, and normal launches spawn nothing.
 pub fn remove_legacy_logon_task() -> bool {
     if !schtasks(&["/Query", "/TN", LEGACY_AUTOSTART_TASK]).unwrap_or(false) {
@@ -152,10 +152,10 @@ mod tests {
     fn an_elevated_relaunch_waits_for_the_instance_that_started_it() {
         // Regression (W2): with the single-instance guard, the elevated copy found
         // the old instance still alive, handed off to it and exited, and the old one
-        // then quit as planned, leaving no Meteor running.
-        assert_eq!(await_exit_pid(args(&["meteor.exe", "--await-exit=4242"])), Some(4242));
-        assert_eq!(await_exit_pid(args(&["meteor.exe"])), None);
-        assert_eq!(await_exit_pid(args(&["meteor.exe", "--await-exit=0"])), None);
-        assert_eq!(await_exit_pid(args(&["meteor.exe", "--await-exit=abc"])), None);
+        // then quit as planned, leaving no Astrail running.
+        assert_eq!(await_exit_pid(args(&["astrail.exe", "--await-exit=4242"])), Some(4242));
+        assert_eq!(await_exit_pid(args(&["astrail.exe"])), None);
+        assert_eq!(await_exit_pid(args(&["astrail.exe", "--await-exit=0"])), None);
+        assert_eq!(await_exit_pid(args(&["astrail.exe", "--await-exit=abc"])), None);
     }
 }
