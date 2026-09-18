@@ -21,7 +21,7 @@ const THIRD_PARTY_NOTICES: &str = include_str!("../../THIRD-PARTY-NOTICES.txt");
 /// The author, as the additional terms spell it. Every build must keep this.
 pub const AUTHOR: &str = "Diego Alfonso Chicoma Ibañez (Dalfon.dev)";
 /// The project the attribution has to link to.
-pub const REPOSITORY: &str = "https://github.com/MrRobot4042212/Meteor";
+pub const REPOSITORY: &str = "https://github.com/MrRobot4042212/Astrail";
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]

@@ -254,7 +254,7 @@ mod tests {
     fn external_urls_are_host_allowlisted() {
         assert!(is_allowed_external("https://www.pcgamingwiki.com/w/index.php?search=Halo"));
         assert!(is_allowed_external("https://duckduckgo.com/?q=x"));
-        assert!(is_allowed_external("https://github.com/MrRobot4042212/Meteor"));
+        assert!(is_allowed_external("https://github.com/MrRobot4042212/Astrail"));
         // Not on the list, wrong scheme, credential trick, or a lookalike host.
         assert!(!is_allowed_external("https://evil.example/"));
         assert!(!is_allowed_external("http://www.reddit.com/"));

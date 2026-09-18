@@ -43,7 +43,7 @@ telemetría.
 ## Publicaciones
 
 Solo el mantenedor publica. Una versión oficial es la que sale del workflow
-`release.yml` de este repositorio (`MrRobot4042212/Meteor`) al fusionar en
+`release.yml` de este repositorio (`MrRobot4042212/Astrail`) al fusionar en
 `deploy`: construye el instalador, lo firma y publica la release de GitHub que lee
 el actualizador integrado.
 
@@ -54,7 +54,7 @@ Acerca de* lo dice, como pide el término 2 de
 ## Seguridad
 
 Los fallos de seguridad se comunican en privado al mantenedor a través de
-[GitHub Security Advisories](https://github.com/MrRobot4042212/Meteor/security/advisories/new),
+[GitHub Security Advisories](https://github.com/MrRobot4042212/Astrail/security/advisories/new),
 no en un issue público.
 
 ## Licencia

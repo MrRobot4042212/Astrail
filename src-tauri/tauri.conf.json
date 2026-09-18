@@ -44,7 +44,7 @@
     "createUpdaterArtifacts": true,
     "publisher": "Dalfon.dev",
     "copyright": "Copyright (C) 2026 Diego Alfonso Chicoma Ibañez (Dalfon.dev). GPL-3.0-only with additional terms.",
-    "homepage": "https://github.com/MrRobot4042212/Meteor",
+    "homepage": "https://github.com/MrRobot4042212/Astrail",
     "shortDescription": "Unified game and app library for Windows",
     "longDescription": "Astrail gathers the games you own on Steam, Epic, GOG, EA, Ubisoft, Xbox/Game Pass and Battle.net, plus your Windows apps, into one library — with cover art, playtime tracking and an in-game metrics overlay.",
     "resources": [
@@ -71,7 +71,7 @@
   "plugins": {
     "updater": {
       "endpoints": [
-        "https://github.com/MrRobot4042212/Meteor/releases/latest/download/latest.json"
+        "https://github.com/MrRobot4042212/Astrail/releases/latest/download/latest.json"
       ],
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDc2Q0MxMDBGOTkzRTE1MzIKUldReUZUNlpEeERNZHJIdm9MamtzV0VLcnJjSERYVG1rRWlZOWNLNnREZGt4QVhxL3UvSjhWUGIK"
     }

@@ -34,7 +34,7 @@ and the equivalent screen of any work you build from this one, must keep this
 attribution:
 
 > Meteor was created by Diego Alfonso Chicoma Ibañez (Dalfon.dev)
-> — https://github.com/MrRobot4042212/Meteor
+> — https://github.com/MrRobot4042212/Astrail
 
 You may translate it, as long as the name and the link stay intact. You may add your
 own authorship next to it; you may not replace it. If you distribute the work with a
@@ -93,7 +93,7 @@ Términos adicionales, al amparo de la sección 7 de la GPL v3:
 
 1. **Conservar la atribución de autoría (7b).** La pantalla *Ajustes → Acerca de*, y
    su equivalente en cualquier obra derivada, debe seguir mostrando «Meteor fue creado
-   por Diego Alfonso Chicoma Ibañez (Dalfon.dev) — https://github.com/MrRobot4042212/Meteor».
+   por Diego Alfonso Chicoma Ibañez (Dalfon.dev) — https://github.com/MrRobot4042212/Astrail».
    Puedes traducirla, pero no sustituir el nombre ni el enlace, y puedes añadir tu
    propia autoría junto a ella.
 2. **Marcar las versiones modificadas (7c).** Si distribuyes una versión modificada,

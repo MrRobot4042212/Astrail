@@ -6,7 +6,7 @@
   "author": "Diego Alfonso Chicoma Ibañez (Dalfon.dev)",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/MrRobot4042212/Meteor.git"
+    "url": "git+https://github.com/MrRobot4042212/Astrail.git"
   },
   "scripts": {
     "dev": "next dev",
