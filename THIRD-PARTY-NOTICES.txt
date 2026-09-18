@@ -13,7 +13,7 @@ scripts/third-party-notices.mjs` instead.
 
 Contents:
   Rust crates .......................... 313
-  npm packages ......................... 30
+  npm packages ......................... 31
   .NET packages in the cputemp sidecar . 11
   Bundled binaries and assets
   License texts
@@ -360,7 +360,7 @@ part of what Astrail ships.
   zmij 1.0.21 — MIT — text 1
 
 
-npm packages (30)
+npm packages (31)
 -----------------
 
 The production dependency tree of the frontend, as installed on Windows.
@@ -402,12 +402,13 @@ expression is reproduced above.
   react-dom 19.2.7 — MIT — text 164
   react-i18next 17.0.8 — MIT — text 165
   scheduler 0.27.0 — MIT — text 164
+  semver 7.8.5 — ISC — text 166
   sharp 0.35.4 — Apache-2.0 — text 152
-  source-map-js 1.2.1 — BSD-3-Clause — text 166
-  styled-jsx 5.1.6 — MIT — text 167
-  tslib 2.8.1 — 0BSD — text 168
+  source-map-js 1.2.1 — BSD-3-Clause — text 167
+  styled-jsx 5.1.6 — MIT — text 168
+  tslib 2.8.1 — 0BSD — text 169
   use-sync-external-store 1.6.0 — MIT — text 164
-  void-elements 3.1.0 — MIT — text 169
+  void-elements 3.1.0 — MIT — text 170
 
 
 .NET packages in the cputemp sidecar (11)
@@ -420,17 +421,17 @@ so these packages and the .NET runtime itself are inside cputemp.exe.
       source: https://github.com/Blacktempel/BlackSharp/tree/35f908a3d5cefaf8d4557709273d25e166593109
   DiskInfoToolkit 2.1.1 — MPL-2.0 — text 22
       source: https://github.com/Blacktempel/DiskInfoToolkit/tree/3c7f43001e66f478e20587f5d8e7edd8ec7e2806
-  HidSharp 2.6.4 — Apache-2.0 — text 170
+  HidSharp 2.6.4 — Apache-2.0 — text 171
   LibreHardwareMonitorLib 0.9.7-pre704 — MPL-2.0 — text 22
       source: https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/tree/0c05d35b8fb013256efa11ada3266fae843aef81
-  Mono.Posix.NETStandard 1.0.0 — MIT — text 171
+  Mono.Posix.NETStandard 1.0.0 — MIT — text 172
   RAMSPDToolkit-NDD 1.5.0 — MPL-2.0 — text 22
       source: https://github.com/Blacktempel/RAMSPDToolkit/tree/713038f919d85397214e17644d78534dc15a2fd2
-  runtime.native.System.IO.Ports 10.0.9 — MIT — text 172
-  System.CodeDom 10.0.9 — MIT — text 172
-  System.IO.Ports 10.0.9 — MIT — text 172
-  System.Management 10.0.9 — MIT — text 172
-  System.Threading.AccessControl 10.0.9 — MIT — text 172
+  runtime.native.System.IO.Ports 10.0.9 — MIT — text 173
+  System.CodeDom 10.0.9 — MIT — text 173
+  System.IO.Ports 10.0.9 — MIT — text 173
+  System.Management 10.0.9 — MIT — text 173
+  System.Threading.AccessControl 10.0.9 — MIT — text 173
 
 
 Bundled binaries and assets
@@ -442,32 +443,32 @@ These are shipped as they are, next to the Astrail executable or inside it.
       Bundled as PresentMon.exe. Astrail runs it to sample frame times; it is
       downloaded and hash-pinned by scripts/fetch-binaries.ps1. Source:
       https://github.com/GameTechDev/PresentMon
-      license: text 173
+      license: text 174
 
   .NET 8 runtime (.NET Foundation and Contributors) — MIT
       Embedded in cputemp.exe by `dotnet publish --self-contained`. The second
       text is the runtime's own third-party notices, passed on unchanged.
       Source: https://github.com/dotnet/runtime
-      license: text 172, third-party notices: text 174
+      license: text 173, third-party notices: text 175
 
   PawnIO modules (namazso and contributors) — LGPL-2.1
       LibreHardwareMonitorLib embeds the compiled PawnIo.*.bin modules it
       loads into the PawnIO driver to read hardware sensors, so they travel
       inside cputemp.exe. Source: https://github.com/namazso/PawnIO.Modules
-      license: text 175
+      license: text 176
 
   Oxanium (The Oxanium Project Authors) — OFL-1.1
       Astrail's display typeface, self-hosted as a webfont by next/font.
       Copyright 2019 The Oxanium Project Authors
       (https://github.com/sevmeyer/oxanium).
-      license: text 176
+      license: text 177
 
   Source Code Pro (Adobe Systems Incorporated) — OFL-1.1
       Astrail's monospace typeface, self-hosted as a webfont by next/font.
       Copyright 2010, 2012 Adobe Systems Incorporated (http://www.adobe.com/),
       with Reserved Font Name 'Source'. Source is a trademark of Adobe Systems
       Incorporated in the United States and/or other countries.
-      license: text 176
+      license: text 177
 
 
 License texts
@@ -7760,6 +7761,26 @@ SOFTWARE.
 
 Text 166
 ~~~~~~~~
+Applies to: semver 7.8.5
+
+The ISC License
+
+Copyright (c) Isaac Z. Schlueter and Contributors
+
+Permission to use, copy, modify, and/or distribute this software for any
+purpose with or without fee is hereby granted, provided that the above
+copyright notice and this permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR
+IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+Text 167
+~~~~~~~~
 Applies to: source-map-js 1.2.1
 
 Copyright (c) 2009-2011, Mozilla Foundation and contributors
@@ -7790,7 +7811,7 @@ CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-Text 167
+Text 168
 ~~~~~~~~
 Applies to: styled-jsx 5.1.6
 
@@ -7816,7 +7837,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-Text 168
+Text 169
 ~~~~~~~~
 Applies to: tslib 2.8.1
 
@@ -7833,7 +7854,7 @@ LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
 OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 PERFORMANCE OF THIS SOFTWARE.
 
-Text 169
+Text 170
 ~~~~~~~~
 Applies to: void-elements 3.1.0
 
@@ -7860,7 +7881,7 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-Text 170
+Text 171
 ~~~~~~~~
 Applies to: HidSharp 2.6.4
 
@@ -8057,7 +8078,7 @@ limitations under the License.
 
    END OF TERMS AND CONDITIONS
 
-Text 171
+Text 172
 ~~~~~~~~
 Applies to: Mono.Posix.NETStandard 1.0.0
 
@@ -8083,7 +8104,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-Text 172
+Text 173
 ~~~~~~~~
 Applies to: runtime.native.System.IO.Ports 10.0.9, System.CodeDom 10.0.9,
     System.IO.Ports 10.0.9, System.Management 10.0.9,
@@ -8114,7 +8135,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-Text 173
+Text 174
 ~~~~~~~~
 Applies to: PresentMon 2.4.1 (Intel Corporation) — MIT
 
@@ -8138,7 +8159,7 @@ OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE
 OR OTHER DEALINGS IN THE SOFTWARE.
 
-Text 174
+Text 175
 ~~~~~~~~
 Applies to: .NET 8 runtime (.NET Foundation and Contributors) — MIT
 
@@ -9415,7 +9436,7 @@ Licensed under the Apache License, Version 2.0.
 Available at
 https://github.com/SixLabors/ImageSharp/blob/f4f689ce67ecbcc35cebddba5aacb603e6d1068a/LICENSE
 
-Text 175
+Text 176
 ~~~~~~~~
 Applies to: PawnIO modules (namazso and contributors) — LGPL-2.1
 
@@ -9922,7 +9943,7 @@ necessary.  Here is a sample; alter the names:
 
 That's all there is to it!
 
-Text 176
+Text 177
 ~~~~~~~~
 Applies to: Oxanium (The Oxanium Project Authors) — OFL-1.1, Source Code Pro
     (Adobe Systems Incorporated) — OFL-1.1

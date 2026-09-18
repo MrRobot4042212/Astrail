@@ -331,13 +331,51 @@ function rustPackages() {
 
 function npmPackages() {
   const lock = JSON.parse(fs.readFileSync(path.join(REPO, 'package-lock.json'), 'utf8'))
+  const packages = lock.packages
+
+  // Node's lookup: the nearest node_modules/<name> from `from` upwards.
+  const resolve = (from, name) => {
+    for (let base = from; ; base = base.slice(0, Math.max(0, base.lastIndexOf('/node_modules/')))) {
+      const key = `${base ? `${base}/` : ''}node_modules/${name}`
+      if (packages[key]) return key
+      if (!base) return null
+    }
+  }
+  const allows = (list, value) => !list
+    || (!list.includes(`!${value}`) && (list.includes(value) || list.every((v) => v.startsWith('!'))))
+
+  // Walk the production tree for win32-x64 in the lock file rather than trusting
+  // what is on disk: npm 10 also installs the dependencies of optional packages
+  // it skipped for another platform (sharp's wasm32 build and @emnapi/runtime),
+  // npm 11 does not, and the notices must not depend on which one ran. The dev
+  // flags in the lock file are no shortcut either: semver is `devOptional`
+  // because the dev tools use it too, yet sharp installs it on Windows.
+  const reached = new Set()
+  const stack = ['']
+  while (stack.length) {
+    const key = stack.pop()
+    if (reached.has(key)) continue
+    reached.add(key)
+    const entry = packages[key]
+    const optional = new Set(Object.keys(entry.optionalDependencies ?? {}))
+    const peers = Object.keys(entry.peerDependencies ?? {})
+      .filter((name) => !entry.peerDependenciesMeta?.[name]?.optional)
+    for (const name of [...Object.keys(entry.dependencies ?? {}), ...optional, ...peers]) {
+      const dep = resolve(key, name)
+      if (!dep) {
+        if (optional.has(name)) continue
+        die(`npm package ${key || 'the root'} needs ${name}, which package-lock.json does not have`)
+      }
+      if (allows(packages[dep].os, 'win32') && allows(packages[dep].cpu, 'x64')) stack.push(dep)
+    }
+  }
+
   const out = []
-  for (const [key, entry] of Object.entries(lock.packages)) {
-    if (!key.startsWith('node_modules/') || entry.dev || entry.devOptional) continue
+  for (const key of reached) {
+    if (!key) continue
+    const entry = packages[key]
     const dir = path.join(REPO, key)
-    // Optional packages for other platforms are in the lock file but never
-    // installed here, and their code cannot end up in a Windows build.
-    if (!fs.existsSync(dir)) continue
+    if (!fs.existsSync(dir)) die(`npm package ${key} is in the production tree but not installed; run \`npm ci\``)
     out.push({
       name: key.slice(key.lastIndexOf('node_modules/') + 'node_modules/'.length),
       version: entry.version,

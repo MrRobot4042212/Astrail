@@ -21,7 +21,7 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
   adicionales y de los avisos de terceros, que van embebidos en el ejecutable. Si
   la compilación no sale del workflow de publicación del proyecto, lo advierte.
 - **`THIRD-PARTY-NOTICES.txt`**: los avisos de todo el código de terceros que
-  Astrail incluye (313 crates de Rust, 30 paquetes npm, 11 de NuGet, además de
+  Astrail incluye (313 crates de Rust, 31 paquetes npm, 11 de NuGet, además de
   PresentMon, el runtime de .NET, los módulos de PawnIO y las tipografías). Lo
   genera `scripts/third-party-notices.mjs` a partir de los ficheros de bloqueo, y
   la CI falla si se queda desactualizado.
