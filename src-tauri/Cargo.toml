@@ -20,7 +20,7 @@ crate-type = ["rlib"]
 tauri-build = { version = "2", features = [] }
 [target.'cfg(windows)'.build-dependencies]
 # Embeds the SHA-256 of the bundled sidecars (see build.rs, sidecar_integrity.rs).
-sha2 = "0.10"
+sha2 = "0.11"
 
 [dependencies]
 # No `image-png`/`image-ico`: tauri-codegen decodes `icons/icon.ico` to raw RGBA
@@ -30,7 +30,7 @@ sha2 = "0.10"
 tauri = { version = "2", features = ["protocol-asset", "tray-icon"] }
 # Verifies the elevated sidecars before they are started (sidecar_integrity.rs).
 # Already in the dependency graph through tauri.
-sha2 = "0.10"
+sha2 = "0.11"
 tauri-plugin-dialog = "2"
 tauri-plugin-global-shortcut = "2"
 # In-app auto-update: check GitHub Releases for a newer signed build, download
@@ -43,29 +43,29 @@ serde_json = "1"
 steamlocate = "2.1"
 ureq = { version = "2", features = ["json", "tls"] }
 # Discord Rich Presence over the local IPC pipe (pure Rust, no Discord SDK).
-discord-rich-presence = "0.2"
+discord-rich-presence = "1.1"
 # NVIDIA GPU telemetry for the in-game metrics overlay (usage, temp, VRAM,
 # clocks, power). Loads nvml.dll at runtime; on non-NVIDIA systems init fails
 # gracefully and the overlay just omits GPU metrics. CPU/RAM come from Win32.
-nvml-wrapper = "0.10"
+nvml-wrapper = "0.13"
 
 # Registry-backed scanners (GOG, EA, Ubisoft) are Windows-only.
 [target.'cfg(windows)'.dependencies]
 # Same version Tauri's runtime already links, so no duplicate crate. Used to tell
 # WebView2 to release memory while Astrail sits in the tray (see lib.rs).
-webview2-com = "0.38"
+webview2-com = "0.39"
 # Deliberately NOT bumped to 0.56 (which Tauri itself pulls, so `cargo tree -d`
 # reports duplicates): 0.56 changes `HKEY` from `isize` to `*mut c_void`, which
 # would churn every registry scanner for a build-graph cleanup with no runtime
 # effect. Revisit when a scanner needs touching anyway.
-winreg = "0.52"
+winreg = "0.56"
 # Pure-Rust PE reader to extract the icon embedded in an app's .exe, so any
 # installed app gets its correct icon without a curated list or native libs.
 pelite = "0.10"
 # Raw Win32 to force the metrics overlay back to the top of the topmost z-order
 # band each tick (Tauri's set_always_on_top is a no-op once already topmost).
 # Same version Tauri itself uses, so no extra build cost.
-windows = { version = "0.61", features = [
+windows = { version = "0.62", features = [
     "Win32_Foundation",
     "Win32_UI_WindowsAndMessaging",
     "Win32_Graphics_Gdi",
