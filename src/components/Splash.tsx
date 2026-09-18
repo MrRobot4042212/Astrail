@@ -51,15 +51,19 @@ export function Splash({
         exiting ? 'opacity-0' : 'opacity-100'
       }`}
     >
-      {/* Animated mark: a shower of falling meteorites */}
+      {/* Animated mark: a shower of falling meteorites. The mark flies up-right, so
+          it is turned a quarter clockwise to fall; the wrapper owns the animation
+          because both use `transform`. */}
       <div className="relative h-28 w-56 overflow-hidden">
         {METEORS.map((m, i) => (
-          <MeteorIcon
+          <span
             key={i}
             aria-hidden
-            className={`animate-meteor-fall absolute top-0 text-accent ${m.size}`}
+            className={`animate-meteor-fall absolute top-0 ${m.size}`}
             style={{ left: m.left, animationDelay: m.delay, animationDuration: m.dur }}
-          />
+          >
+            <MeteorIcon className="h-full w-full rotate-90 text-accent" />
+          </span>
         ))}
       </div>
 

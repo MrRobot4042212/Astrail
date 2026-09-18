@@ -32,6 +32,11 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
   publica y dónde se reportan los fallos de seguridad.
 
 ### Cambiado
+- **Logo nuevo.** Un meteoro dibujado para Meteor (cabeza cuadrada con las
+  esquinas de Oxanium y una estela que la rodea) sustituye al anterior. El icono
+  de la aplicación pasa a ser el símbolo rojo sobre una baldosa oscura, con un
+  corte simplificado para 16, 24 y 32 px (barra de tareas, bandeja y Explorador).
+  La pantalla de carga usa el símbolo nuevo.
 - **Las métricas de GPU AMD ya no usan el SDK de ADLX.** El sidecar `cputemp`
   (LibreHardwareMonitor) lee uso, temperatura, potencia, reloj, VRAM y FPS de la
   GPU AMD por ADL, la librería que instala el propio driver, sin permisos de
