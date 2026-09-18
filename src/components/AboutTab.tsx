@@ -14,7 +14,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { aboutInfo, legalDocument, openExternal } from '@/lib/tauri';
 import type { AboutInfo, LegalDocument } from '@/lib/types';
-import { ArrowLeftIcon, BookIcon, MeteorIcon } from './icons';
+import { ArrowLeftIcon, BookIcon, AstrailIcon } from './icons';
 
 const DOCUMENTS: { id: LegalDocument; tKey: string }[] = [
   { id: 'license', tKey: 'about.docLicense' },
@@ -88,9 +88,9 @@ export function AboutTab() {
 
       <div className="border border-line bg-elevated/30 p-5">
         <div className="flex items-center gap-3">
-          <MeteorIcon className="h-9 w-9 text-accent" />
+          <AstrailIcon className="h-9 w-9 text-accent" />
           <div>
-            <p className="font-display text-lg font-semibold text-ink">Meteor</p>
+            <p className="font-display text-lg font-semibold text-ink">Astrail</p>
             <p className="text-sm text-muted">
               {info ? t('about.version', { version: info.version }) : '—'}
             </p>

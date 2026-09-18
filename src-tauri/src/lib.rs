@@ -913,7 +913,7 @@ fn ensure_overlay_window(app: &AppHandle) -> Option<tauri::WebviewWindow> {
     // loads only the overlay tree. No `.html`: the dev server only knows the route
     // `/overlay`, and the bundled app resolves `overlay` to `overlay.html` itself.
     WebviewWindowBuilder::new(app, "overlay", WebviewUrl::App("overlay".into()))
-        .title("Meteor Overlay")
+        .title("Astrail Overlay")
         .decorations(false)
         .transparent(true)
         .always_on_top(true)
@@ -1198,13 +1198,13 @@ pub fn run() {
             register_shortcuts(&handle, &settings.shortcuts);
 
             // System tray: Meteor lives in the tray so the watchers keep running
-            // after the window is closed. Left-click or "Mostrar Meteor" reopens
+            // after the window is closed. Left-click or "Mostrar Astrail" reopens
             // the window; "Salir" really quits.
             {
                 use tauri::menu::{Menu, MenuItem};
                 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 
-                let show = MenuItem::with_id(app, "show", "Mostrar Meteor", true, None::<&str>)?;
+                let show = MenuItem::with_id(app, "show", "Mostrar Astrail", true, None::<&str>)?;
                 let quit = MenuItem::with_id(app, "quit", "Salir", true, None::<&str>)?;
                 let menu = Menu::with_items(app, &[&show, &quit])?;
                 // No `unwrap()`: a missing icon must not take the whole app down
@@ -1214,7 +1214,7 @@ pub fn run() {
                     tray = tray.icon(icon.clone());
                 }
                 let _tray = tray
-                    .tooltip("Meteor")
+                    .tooltip("Astrail")
                     .menu(&menu)
                     .show_menu_on_left_click(false)
                     .on_menu_event(|app, event| match event.id.as_ref() {

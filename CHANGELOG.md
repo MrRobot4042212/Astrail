@@ -1,6 +1,6 @@
 # Changelog
 
-Todas las novedades destacables de **Meteor** (launcher de escritorio que unifica
+Todas las novedades destacables de **Astrail** (launcher de escritorio que unifica
 juegos y apps de varias tiendas en una sola biblioteca).
 
 El formato sigue, a grandes rasgos, [Keep a Changelog](https://keepachangelog.com/es-ES/)
@@ -11,7 +11,7 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
 ## [No publicado] — Trabajo en curso
 
 ### Añadido
-- **Meteor es software libre: GPL-3.0-only.** Se publica el texto de la licencia
+- **Astrail es software libre: GPL-3.0-only.** Se publica el texto de la licencia
   ([LICENSE](LICENSE)) y los términos adicionales de la sección 7
   ([ADDITIONAL-TERMS.md](ADDITIONAL-TERMS.md)): conservar la atribución de autoría
   en «Acerca de», marcar las versiones modificadas como no oficiales, y sin
@@ -21,7 +21,7 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
   adicionales y de los avisos de terceros, que van embebidos en el ejecutable. Si
   la compilación no sale del workflow de publicación del proyecto, lo advierte.
 - **`THIRD-PARTY-NOTICES.txt`**: los avisos de todo el código de terceros que
-  Meteor incluye (313 crates de Rust, 30 paquetes npm, 11 de NuGet, además de
+  Astrail incluye (313 crates de Rust, 30 paquetes npm, 11 de NuGet, además de
   PresentMon, el runtime de .NET, los módulos de PawnIO y las tipografías). Lo
   genera `scripts/third-party-notices.mjs` a partir de los ficheros de bloqueo, y
   la CI falla si se queda desactualizado.
@@ -32,16 +32,20 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
   publica y dónde se reportan los fallos de seguridad.
 
 ### Cambiado
-- **Logo nuevo.** Un meteoro dibujado para Meteor (cabeza cuadrada con las
-  esquinas de Oxanium y una estela que la rodea) sustituye al anterior. El icono
-  de la aplicación pasa a ser el símbolo rojo sobre una baldosa oscura, con un
-  corte simplificado para 16, 24 y 32 px (barra de tareas, bandeja y Explorador).
-  La pantalla de carga usa el símbolo nuevo.
+- **Meteor pasa a llamarse Astrail.** Cambia el nombre del programa, de su
+  ejecutable, de la carpeta de instalación y de los accesos directos, y la firma
+  del instalador pasa a ser Dalfon.dev. La biblioteca, los ajustes y el tiempo de
+  juego no cambian.
+- **Logo nuevo.** Un símbolo propio, un astro con su estela (cabeza cuadrada con
+  las esquinas de Oxanium y una estela que la rodea), sustituye al anterior. El
+  icono de la aplicación pasa a ser el símbolo rojo sobre una baldosa oscura, con
+  un corte simplificado para 16, 24 y 32 px (barra de tareas, bandeja y
+  Explorador). La pantalla de carga usa el símbolo nuevo.
 - **Las métricas de GPU AMD ya no usan el SDK de ADLX.** El sidecar `cputemp`
   (LibreHardwareMonitor) lee uso, temperatura, potencia, reloj, VRAM y FPS de la
   GPU AMD por ADL, la librería que instala el propio driver, sin permisos de
   administrador. Se retiran el SDK de ADLX, su shim en C++ y la dependencia
-  `cc`, cuya licencia no permitía publicar Meteor como software libre.
+  `cc`, cuya licencia no permitía publicar Astrail como software libre.
   - **Los FPS en AMD pasan a necesitar administrador** (PresentMon), igual que
     en NVIDIA. ADL solo da FPS de juegos en pantalla completa exclusiva y no los
     da en juegos actuales en ventana sin bordes; cuando los da, se usan.
@@ -51,7 +55,7 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
   - El sidecar se arranca solo con un juego abierto y el overlay pidiendo GPU o
     FPS, y actualiza una vez por segundo.
 - **Las carátulas pegadas como URL se descargan a disco.** Al poner una URL como
-  carátula (en el diálogo de carátula o al añadir una app manual) Meteor la
+  carátula (en el diálogo de carátula o al añadir una app manual) Astrail la
   descarga a `user_covers/` y guarda la ruta local; las URLs guardadas por
   versiones anteriores se migran al arrancar. Así la ventana solo carga imágenes
   del CDN de IGDB y de su propio disco, nunca de un servidor arbitrario.
@@ -59,7 +63,7 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
   eventos, abrir el diálogo de archivo, comprobar/descargar/instalar
   actualizaciones y relanzarse; la ventana de ajustes in-game solo escuchar
   eventos. Se retiran los permisos de bandeja y menús que ningún código usaba.
-- **Iniciar con Windows sin el plugin de autoarranque.** Meteor escribe él mismo
+- **Iniciar con Windows sin el plugin de autoarranque.** Astrail escribe él mismo
   la clave `Run` del usuario, con la ruta entre comillas, y respeta la casilla
   de "Aplicaciones de inicio" del Administrador de tareas. El desinstalador
   borra ambas entradas.
@@ -76,7 +80,7 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
   desaparecen**, y los favoritos, categorías, carátulas y tipo asignados a una
   copia duplicada (por ejemplo la del registro) se conservan cuando la copia de
   la tienda pasa a ser la mostrada.
-- **Con Meteor abierto como administrador, "Abrir carpeta" y los enlaces externos
+- **Con Astrail abierto como administrador, "Abrir carpeta" y los enlaces externos
   ya no heredan los privilegios**: se abren a través del Explorador del
   escritorio, igual que los juegos.
 

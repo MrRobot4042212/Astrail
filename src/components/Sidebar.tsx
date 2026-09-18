@@ -12,7 +12,7 @@ import { CATEGORY_ICONS } from '@/lib/categoryIcons';
 import {
   GearIcon,
   EyeOffIcon,
-  GridIcon, StarIcon, TagIcon, PlusIcon, AppIcon, HomeIcon, MeteorIcon
+  GridIcon, StarIcon, TagIcon, PlusIcon, AppIcon, HomeIcon, AstrailIcon
 } from './icons';
 
 export type Filter = 'home' | 'all' | 'favorites' | GameSource | `cat:${string}`;
@@ -149,9 +149,9 @@ export function Sidebar({
   return (
     <aside data-tour="sidebar" className="flex w-[208px] shrink-0 flex-col overflow-y-auto border-r border-line bg-sidebar px-3 py-5">
       <div className="mb-3 flex items-center gap-2.5 px-2">
-        <MeteorIcon className="h-6 w-6 text-accent" />
+        <AstrailIcon className="h-6 w-6 text-accent" />
         <span className="font-display text-lg font-semibold tracking-tight text-ink">
-          Meteor
+          Astrail
         </span>
       </div>
 
@@ -205,13 +205,13 @@ export function Sidebar({
                 draggable
                 onDragStart={(e) => {
                   setDragCat(name);
-                  e.dataTransfer.setData('application/x-meteor-cat', name);
+                  e.dataTransfer.setData('application/x-astrail-cat', name);
                   e.dataTransfer.effectAllowed = 'move';
                 }}
                 onDragEnd={() => setDragCat(null)}
                 onDragOver={(e) => {
                   e.preventDefault();
-                  const reordering = e.dataTransfer.types.includes('application/x-meteor-cat');
+                  const reordering = e.dataTransfer.types.includes('application/x-astrail-cat');
                   e.dataTransfer.dropEffect = reordering ? 'move' : 'copy';
                   if (dragOver !== id) setDragOver(id);
                 }}
@@ -219,7 +219,7 @@ export function Sidebar({
                 onDrop={(e) => {
                   e.preventDefault();
                   setDragOver(null);
-                  if (e.dataTransfer.types.includes('application/x-meteor-cat')) {
+                  if (e.dataTransfer.types.includes('application/x-astrail-cat')) {
                     reorderTo(name);
                   } else {
                     const gameId = e.dataTransfer.getData('text/plain');

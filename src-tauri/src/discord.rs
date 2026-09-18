@@ -11,7 +11,7 @@
 //!
 //! Requires a **Discord application client id** (created at
 //! <https://discord.com/developers/applications>) — set it in Ajustes. Discord
-//! shows "Playing <your app's name>" so naming that app "Meteor" reads best.
+//! shows "Playing <your app's name>" so naming that app "Astrail" reads best.
 //! Everything is best-effort: if Discord isn't running or no id is set, it no-ops.
 
 use discord_rich_presence::{activity, DiscordIpc, DiscordIpcClient};
@@ -48,7 +48,7 @@ const LARGE_IMAGE: &str = "";
 /// setup. The Application ID is **not a secret** (only the client *secret* is, and
 /// RPC doesn't use it), so it's safe to embed — same approach as the IGDB creds.
 /// Create one app at <https://discord.com/developers/applications> (name it
-/// "Meteor"), then either paste its numeric id below or build with
+/// "Astrail"), then either paste its numeric id below or build with
 /// `DISCORD_CLIENT_ID=...`. Empty = no built-in default (per-user id only).
 const DEFAULT_CLIENT_ID: &str = match option_env!("DISCORD_CLIENT_ID") {
     Some(v) => v,
@@ -179,7 +179,7 @@ pub fn set_playing(name: &str, started_at: u64) -> bool {
         act.assets(
             activity::Assets::new()
                 .large_image(LARGE_IMAGE)
-                .large_text("Meteor"),
+                .large_text("Astrail"),
         )
     };
     // `ensure` returning true means the client is connected, but this runs on the

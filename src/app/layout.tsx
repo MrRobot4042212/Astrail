@@ -25,7 +25,7 @@ const mono = Source_Code_Pro({
 });
 
 export const metadata: Metadata = {
-  title: 'Meteor',
+  title: 'Astrail',
   description: 'Tu biblioteca unificada de juegos y apps',
 };
 

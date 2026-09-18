@@ -7,7 +7,7 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getAutostart, setAutostart, getAppSettings, patchAppSettings } from '@/lib/tauri';
-import { MeteorIcon } from './icons';
+import { AstrailIcon } from './icons';
 
 export function Onboarding({
   onComplete,
@@ -73,7 +73,7 @@ export function Onboarding({
       <div className="relative w-full max-w-lg">
         {/* Header Icon */}
         <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-accent to-accent-soft shadow-[0_0_40px_rgba(223,79,79,0.3)] transition-all duration-500">
-          <MeteorIcon className="h-10 w-10 text-white" />
+          <AstrailIcon className="h-10 w-10 text-white" />
         </div>
 
         {/* Carousel Content */}

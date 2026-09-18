@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Meteor",
+  "productName": "Astrail",
   "version": "0.1.3",
   "identifier": "com.alfonso.meteor",
   "build": {
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Meteor",
+        "title": "Astrail",
         "width": 1280,
         "height": 820,
         "minWidth": 940,
@@ -42,11 +42,11 @@
       "nsis"
     ],
     "createUpdaterArtifacts": true,
-    "publisher": "Meteor",
+    "publisher": "Dalfon.dev",
     "copyright": "Copyright (C) 2026 Diego Alfonso Chicoma Ibañez (Dalfon.dev). GPL-3.0-only with additional terms.",
     "homepage": "https://github.com/MrRobot4042212/Meteor",
     "shortDescription": "Unified game and app library for Windows",
-    "longDescription": "Meteor gathers the games you own on Steam, Epic, GOG, EA, Ubisoft, Xbox/Game Pass and Battle.net, plus your Windows apps, into one library — with cover art, playtime tracking and an in-game metrics overlay.",
+    "longDescription": "Astrail gathers the games you own on Steam, Epic, GOG, EA, Ubisoft, Xbox/Game Pass and Battle.net, plus your Windows apps, into one library — with cover art, playtime tracking and an in-game metrics overlay.",
     "resources": [
       "binaries/PresentMon.exe",
       "binaries/cputemp.exe"

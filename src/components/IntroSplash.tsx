@@ -6,7 +6,7 @@
 
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { MeteorIcon } from './icons';
+import { AstrailIcon } from './icons';
 
 /** A brief intro splash that plays every time the app starts. */
 export function IntroSplash({ onFinish }: { onFinish: () => void }) {
@@ -32,9 +32,9 @@ export function IntroSplash({ onFinish }: { onFinish: () => void }) {
       }`}
     >
       <div className="flex flex-col items-center animate-fade-in">
-        <MeteorIcon className="h-20 w-20 text-accent mb-6 animate-pulse drop-shadow-[0_0_15px_rgba(var(--ring),0.6)]" />
+        <AstrailIcon className="h-20 w-20 text-accent mb-6 animate-pulse drop-shadow-[0_0_15px_rgba(var(--ring),0.6)]" />
         <h1 className="font-display text-5xl md:text-7xl font-bold tracking-[0.3em] text-ink drop-shadow-[0_0_20px_rgba(var(--ring),0.4)]">
-          METEOR
+          ASTRAIL
         </h1>
         <p className="mt-4 font-display text-xs uppercase tracking-[0.4em] text-muted">
           {t('app.tagline')}

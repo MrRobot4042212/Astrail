@@ -315,7 +315,7 @@ export const ImageIcon = (p: P) => (
 	</svg>
 );
 
-export const MeteorIcon = (p: P) => (
+export const AstrailIcon = (p: P) => (
 	<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" {...p}>
 		<path d="M140 53.87Q140 28 165.87 28H202.13Q228 28 228 53.87V90.13Q228 116 202.13 116H165.87Q140 116 140 90.13Z" />
 		<path d="M24 232C84.68 150.75 83.78 121.95 132.69 31.9Q128 40.54 128 53.87V90.13Q128 128 165.87 128H202.13Q215.46 128 224.1 123.31C134.05 172.22 105.25 171.32 24 232Z" />

@@ -6,7 +6,7 @@
 
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { MeteorIcon } from './icons';
+import { AstrailIcon } from './icons';
 
 /** A few meteorites with varied lane, size, delay and speed for a shower effect. */
 const METEORS = [
@@ -62,14 +62,14 @@ export function Splash({
             className={`animate-meteor-fall absolute top-0 ${m.size}`}
             style={{ left: m.left, animationDelay: m.delay, animationDuration: m.dur }}
           >
-            <MeteorIcon className="h-full w-full rotate-90 text-accent" />
+            <AstrailIcon className="h-full w-full rotate-90 text-accent" />
           </span>
         ))}
       </div>
 
       <div className="text-center">
         <h1 className="font-display text-3xl font-bold tracking-[0.2em] text-ink">
-          METEOR
+          ASTRAIL
         </h1>
         <p className="mt-1 font-display text-xs uppercase tracking-[0.3em] text-muted">
           {t('app.tagline')}
