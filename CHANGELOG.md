@@ -10,6 +10,8 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
 
 ## [No publicado] — Trabajo en curso
 
+## [0.3.0] — 2026-09-18
+
 ### Añadido
 - **Astrail es software libre: GPL-3.0-only.** Se publica el texto de la licencia
   ([LICENSE](LICENSE)) y los términos adicionales de la sección 7

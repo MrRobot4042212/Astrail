@@ -1,6 +1,6 @@
 [package]
 name = "astrail"
-version = "0.1.3"
+version = "0.3.0"
 description = "Astrail - biblioteca unificada de juegos y apps"
 authors = ["Diego Alfonso Chicoma Ibañez (Dalfon.dev)"]
 edition = "2021"

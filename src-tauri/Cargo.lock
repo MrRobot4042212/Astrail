@@ -58,7 +58,7 @@ dependencies = [
 
 [[package]]
 name = "astrail"
-version = "0.1.3"
+version = "0.3.0"
 dependencies = [
  "discord-rich-presence",
  "nvml-wrapper",
