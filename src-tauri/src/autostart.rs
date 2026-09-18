@@ -8,12 +8,15 @@
 //! executable path **unquoted** (a path with spaces is split by the shell at the
 //! first one), left the `StartupApproved\Run` entry that Task Manager writes
 //! behind on disable, and dragged a second `winreg` version into the graph.
-//! Meteor never starts itself elevated at logon (see
+//! Astrail never starts itself elevated at logon (see
 //! `elevation::remove_legacy_logon_task`), so a plain user key is the whole
 //! feature.
 
 /// Value name under both keys — what Task Manager's "Startup apps" shows.
-pub const VALUE_NAME: &str = "Meteor";
+pub const VALUE_NAME: &str = "Astrail";
+/// The value name used while the app was called Meteor (up to 0.1.3).
+#[cfg(windows)]
+const LEGACY_VALUE_NAME: &str = "Meteor";
 
 #[cfg(windows)]
 const RUN_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
@@ -35,9 +38,26 @@ pub(crate) fn approved_enabled(blob: &[u8]) -> bool {
     blob.first().is_none_or(|b| b % 2 == 0)
 }
 
+/// The executable a Run command line starts: the quoted path, or for an
+/// unquoted value everything up to and including `.exe`. `None` when empty.
+pub(crate) fn run_target(value: &str) -> Option<std::path::PathBuf> {
+    let value = value.trim();
+    let path = match value.strip_prefix('"') {
+        Some(rest) => rest.split('"').next().unwrap_or_default(),
+        None => match value.to_ascii_lowercase().find(".exe") {
+            Some(i) => &value[..i + ".exe".len()],
+            None => value,
+        },
+    };
+    (!path.is_empty()).then(|| std::path::PathBuf::from(path))
+}
+
 #[cfg(windows)]
 mod imp {
-    use super::{approved_enabled, run_value, APPROVED_KEY, RUN_KEY, VALUE_NAME};
+    use super::{
+        approved_enabled, run_target, run_value, APPROVED_KEY, LEGACY_VALUE_NAME, RUN_KEY,
+        VALUE_NAME,
+    };
     use std::io;
     use winreg::enums::{HKEY_CURRENT_USER, KEY_READ};
     use winreg::{RegKey, RegValue};
@@ -105,10 +125,42 @@ mod imp {
         Ok(())
     }
 
-    /// Startup self-heal: if autostart is on but the stored command line is not
-    /// the quoted path of this executable (an unquoted value from the old
-    /// plugin, or a moved install), rewrite it. One key read when it matches.
+    /// Move a "Meteor" entry left by an install from before the rename to
+    /// "Astrail", keeping Task Manager's enable/disable choice. The installer
+    /// removes the old program but keeps this value, so it only moves once the
+    /// executable it names is gone: an old install that is still there keeps
+    /// its own entry.
+    fn migrate_legacy() -> io::Result<()> {
+        let Ok(run) = open(RUN_KEY, false) else { return Ok(()) };
+        let Ok(legacy) = run.get_value::<String, _>(LEGACY_VALUE_NAME) else {
+            return Ok(());
+        };
+        if run_target(&legacy).is_some_and(|exe| exe.exists()) {
+            return Ok(());
+        }
+        let run = open(RUN_KEY, true)?;
+        let approved = open(APPROVED_KEY, true).ok();
+        if run.get_value::<String, _>(VALUE_NAME).is_err() {
+            run.set_value(VALUE_NAME, &expected()?)?;
+            if let Some(approved) = &approved {
+                if let Ok(state) = approved.get_raw_value(LEGACY_VALUE_NAME) {
+                    approved.set_raw_value(VALUE_NAME, &state)?;
+                }
+            }
+        }
+        ignore_missing(run.delete_value(LEGACY_VALUE_NAME))?;
+        if let Some(approved) = &approved {
+            ignore_missing(approved.delete_value(LEGACY_VALUE_NAME))?;
+        }
+        Ok(())
+    }
+
+    /// Startup self-heal: carry over the entry from before the rename, then, if
+    /// autostart is on but the stored command line is not the quoted path of
+    /// this executable (an unquoted value from the old plugin, or a moved
+    /// install), rewrite it. One key read when it matches.
     pub fn repair() -> io::Result<()> {
+        migrate_legacy()?;
         let Ok(run) = open(RUN_KEY, false) else { return Ok(()) };
         let Ok(current) = run.get_value::<String, _>(VALUE_NAME) else {
             return Ok(());
@@ -157,9 +209,26 @@ mod tests {
         // machine's key held `C:\Users\me\AppData\Local\Meteor\meteor.exe ` with
         // a trailing space — a path with a space in it would be cut there.
         assert_eq!(
-            run_value(Path::new(r"C:\Users\Jane Doe\AppData\Local\Meteor\meteor.exe")),
-            r#""C:\Users\Jane Doe\AppData\Local\Meteor\meteor.exe""#
+            run_value(Path::new(r"C:\Users\Jane Doe\AppData\Local\Astrail\Astrail.exe")),
+            r#""C:\Users\Jane Doe\AppData\Local\Astrail\Astrail.exe""#
         );
+    }
+
+    #[test]
+    fn the_run_target_is_the_executable() {
+        let exe = Path::new(r"C:\Users\Jane Doe\AppData\Local\Meteor\Meteor.exe");
+        assert_eq!(run_target(&run_value(exe)).as_deref(), Some(exe));
+        // Unquoted, with the trailing space the old plugin left.
+        assert_eq!(
+            run_target(r"C:\Users\me\AppData\Local\Meteor\meteor.exe ").as_deref(),
+            Some(Path::new(r"C:\Users\me\AppData\Local\Meteor\meteor.exe"))
+        );
+        assert_eq!(
+            run_target(r"C:\Apps\Meteor.EXE --minimized").as_deref(),
+            Some(Path::new(r"C:\Apps\Meteor.EXE"))
+        );
+        assert_eq!(run_target("  "), None);
+        assert_eq!(run_target(r#""""#), None);
     }
 
     #[test]

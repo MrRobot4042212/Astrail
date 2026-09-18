@@ -1165,8 +1165,9 @@ pub fn run() {
             // from the old unstable hash to FNV-1a, then keep `covers/` and
             // `app_icons/` under their size caps (they had none before, so they
             // grew forever); pull remote user covers onto disk so the CSP can
-            // stop allowing images from any host; and rewrite an unquoted
-            // autostart command line left by the old plugin.
+            // stop allowing images from any host; and move the autostart entry
+            // from before the rename to Astrail's name, rewriting an unquoted
+            // command line left by the old plugin.
             {
                 let maintenance = handle.clone();
                 std::thread::spawn(move || {
