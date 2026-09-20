@@ -129,6 +129,24 @@ export interface AppSettings {
    * broadcasts what you are playing to your whole friends list.
    */
   discord_enabled: boolean;
+  /** Releases the updater offers. `beta` is opt-in. */
+  update_channel: UpdateChannel;
+}
+
+export type UpdateChannel = 'stable' | 'beta';
+
+/**
+ * What `check_update` returns: the updater plugin's own metadata (its `Update`
+ * class is built from it) plus the channel the offer came from.
+ */
+export interface UpdateOffer {
+  rid: number;
+  currentVersion: string;
+  version: string;
+  date?: string;
+  body?: string;
+  rawJson: Record<string, unknown>;
+  channel: UpdateChannel;
 }
 
 /** A GPU as reported by `system_info`. `key` is set only for metric-capable GPUs. */

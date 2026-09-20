@@ -3,7 +3,7 @@
 // Additional terms under GPL-3.0 section 7 apply: see ADDITIONAL-TERMS.md
 
 import { invoke } from '@tauri-apps/api/core';
-import type { Game, Category, PlayStat, AppSettings, AppSettingsPatch, SystemInfo, MpoDiagnostics, AboutInfo, LegalDocument } from './types';
+import type { Game, Category, PlayStat, AppSettings, AppSettingsPatch, SystemInfo, MpoDiagnostics, AboutInfo, LegalDocument, UpdateOffer } from './types';
 
 /** Unified library across every source (Steam, Epic, GOG, EA, Ubisoft, Xbox, manual). */
 export const getLibrary = () => invoke<Game[]>('get_library');
@@ -178,6 +178,10 @@ export const prepareForUpdate = () => invoke<void>('prepare_for_update');
 
 /** Resume the sidecars after a failed install. */
 export const abortUpdate = () => invoke<void>('abort_update');
+
+/** Ask the endpoints of the configured update channel (chosen in Rust, never by
+ *  the webview). Resolves to `null` when there is nothing newer. */
+export const checkUpdate = () => invoke<UpdateOffer | null>('check_update');
 
 /** Write the log, crash reports and a system summary into one local text file and
  *  open its folder. Resolves to the file path. Nothing is uploaded. */

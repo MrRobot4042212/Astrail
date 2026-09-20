@@ -173,6 +173,7 @@ export const en = {
     downloading: 'Downloading… {{pct}}%',
     restarting: 'Restarting…',
     errorBody: 'The update could not be completed. Try again later.',
+    betaTag: 'Beta channel',
   },
   notifications: {
     title: 'Information and Guides',
@@ -333,6 +334,11 @@ export const en = {
     sStorage: 'Storage',
     sDisk: 'Disk',
     // Application preferences
+    aBeta: 'Beta versions',
+    aBetaBody:
+      'Get each version a day or two before everyone else. It is exactly the same build that later moves to the stable channel if nobody finds a serious bug.',
+    aBetaOn:
+      'You can go back to the stable channel at any time. Astrail never installs an older version: if you already have a beta, it stays until stable catches up.',
     aDiagnostics: 'Diagnostics',
     aDiagnosticsBody: 'Collects the Astrail log, the crash reports and a summary of your system into a single text file. It is saved on your PC and sent nowhere: you decide whether to attach it to a report.',
     aDiagnosticsExport: 'Export diagnostics',

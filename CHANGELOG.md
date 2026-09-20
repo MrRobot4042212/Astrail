@@ -25,9 +25,20 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
   dibujarse, Astrail muestra el error con las opciones de reintentar, recargar o
   exportar el diagnóstico, y el resto de la ventana sigue funcionando. Los errores
   de la interfaz quedan también en el registro.
+- **Canal beta opcional (Ajustes → Avanzado).** Cada versión se publica primero
+  en el canal beta y pasa al estable uno o dos días después, sin recompilar: es
+  exactamente el mismo instalador. Quien no lo active no nota ningún cambio. Una
+  instalación en beta consulta también el canal estable y se queda con la versión
+  más nueva, así que nunca se queda atrás. El aviso de actualización indica
+  cuándo la versión ofrecida viene del canal beta.
 - La variable de entorno `ASTRAIL_LOG=debug` (o `trace`) sube el nivel de detalle.
 
 ### Cambiado
+- Las actualizaciones se comprueban al arrancar **y cada 6 horas**. Antes solo al
+  arrancar: un Astrail que vive en la bandeja durante días no se enteraba de una
+  versión nueva hasta reiniciarlo.
+- La comprobación de actualizaciones la hace el núcleo en Rust, que es quien
+  elige el canal; la ventana ya no tiene permiso para lanzarla por su cuenta.
 - Un escaneo de tienda que falla ya no es silencioso: el motivo queda en el
   registro (la biblioteca sigue mostrando el resto de tiendas, como antes).
 

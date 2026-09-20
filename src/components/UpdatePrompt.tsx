@@ -4,40 +4,73 @@
 
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { check, type Update } from '@tauri-apps/plugin-updater';
+import { listen } from '@tauri-apps/api/event';
+import { Update } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
-import { abortUpdate, prepareForUpdate } from '@/lib/tauri';
+import { abortUpdate, checkUpdate, prepareForUpdate } from '@/lib/tauri';
+import type { UpdateChannel } from '@/lib/types';
 import { RefreshIcon, CloseIcon } from './icons';
 
 type Phase = 'idle' | 'available' | 'downloading' | 'ready' | 'error';
 
-/** Checks GitHub Releases for a newer signed build on startup and offers a
- *  one-click update (download → install → relaunch). Silent if up to date,
- *  offline, or running in dev (the check just fails and is ignored). */
+/** A launcher that lives in the tray can stay up for days: checking only at startup
+ *  left it on an old version until the next reboot. */
+const RECHECK_MS = 6 * 60 * 60 * 1000;
+
+/** Checks for a newer signed build on startup, every few hours and when the update
+ *  channel changes, and offers a one-click update (download → install → relaunch).
+ *  The check runs in Rust, which picks the endpoints of the configured channel.
+ *  Silent if up to date, offline, or running in dev (the check just fails and is
+ *  ignored). */
 export function UpdatePrompt() {
   const { t } = useTranslation();
   const [update, setUpdate] = useState<Update | null>(null);
   const [phase, setPhase] = useState<Phase>('idle');
   const [pct, setPct] = useState(0);
   const [dismissed, setDismissed] = useState(false);
+  const [channel, setChannel] = useState<UpdateChannel>('stable');
+  // Read by the re-check, which outlives the render it was created in.
+  const phaseRef = useRef<Phase>('idle');
+  const offeredRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    phaseRef.current = phase;
+  }, [phase]);
 
   useEffect(() => {
     let cancelled = false;
-    (async () => {
+    const run = async () => {
+      // Never swap out an update that is being downloaded or installed.
+      if (phaseRef.current === 'downloading' || phaseRef.current === 'ready') return;
       try {
-        const u = await check();
-        if (!cancelled && u?.available) {
-          setUpdate(u);
+        const offer = await checkUpdate();
+        if (cancelled) return;
+        if (offer) {
+          // A version the user already dismissed stays dismissed.
+          if (offeredRef.current !== offer.version) setDismissed(false);
+          offeredRef.current = offer.version;
+          setUpdate(new Update(offer));
+          setChannel(offer.channel);
           setPhase('available');
+        } else if (phaseRef.current === 'available') {
+          // Left the beta channel: that offer no longer applies.
+          offeredRef.current = null;
+          setUpdate(null);
+          setPhase('idle');
         }
       } catch {
         // No release yet, offline, or dev build: nothing to offer.
       }
-    })();
+    };
+    run();
+    const timer = window.setInterval(run, RECHECK_MS);
+    const unlisten = listen('update-channel-changed', run);
     return () => {
       cancelled = true;
+      window.clearInterval(timer);
+      unlisten.then((f) => f());
     };
   }, []);
 
@@ -97,6 +130,9 @@ export function UpdatePrompt() {
 
       {phase === 'available' && (
         <>
+          {channel === 'beta' && (
+            <p className="mb-2 text-xs font-medium text-accent">{t('update.betaTag')}</p>
+          )}
           <p className="mb-3 text-xs leading-relaxed text-muted">
             {t('update.body')}
           </p>

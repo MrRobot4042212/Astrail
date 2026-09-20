@@ -45,6 +45,7 @@ mod storage;
 mod sysstat;
 mod system;
 mod ubisoft;
+mod updates;
 mod windows_apps;
 mod xbox;
 
@@ -866,6 +867,11 @@ fn settings_changed(app: &AppHandle, previous: &AppSettings, next: &AppSettings)
         apply_overlay_settings(app, next);
     }
     discord::set_enabled(next.discord_enabled);
+    if previous.update_channel != next.update_channel {
+        log::info!("update channel: {:?} -> {:?}", previous.update_channel, next.update_channel);
+        // The update prompt checks again right away instead of at the next start.
+        let _ = app.emit("update-channel-changed", ());
+    }
     if !same(&previous.shortcuts, &next.shortcuts) {
         // A window-manager operation: keep it on the main thread.
         let handle = app.clone();
@@ -1390,7 +1396,8 @@ pub fn run() {
             set_overlay_interactive,
             show_main_window,
             export_diagnostics,
-            report_frontend_error
+            report_frontend_error,
+            updates::check_update
         ])
         .build(context)
         .expect("error al iniciar la aplicación Tauri")
@@ -1435,6 +1442,18 @@ mod tests {
         assert!(apply_settings_patch(&current, serde_json::json!({ "overlay": { "show_fsp": true } })).is_err());
         assert!(apply_settings_patch(&current, serde_json::json!({ "minimize_to_tray": "yes" })).is_err());
         assert!(apply_settings_patch(&current, serde_json::json!(true)).is_err());
+    }
+
+    #[test]
+    fn the_update_channel_is_stable_unless_a_valid_patch_says_beta() {
+        // Settings written before the channel existed must read as stable: beta is
+        // opt-in, and an unknown channel name must not be stored.
+        let current = settings();
+        assert_eq!(current.update_channel, models::UpdateChannel::Stable);
+        let beta = apply_settings_patch(&current, serde_json::json!({ "update_channel": "beta" })).unwrap();
+        assert_eq!(beta.update_channel, models::UpdateChannel::Beta);
+        assert!(apply_settings_patch(&current, serde_json::json!({ "update_channel": "nightly" })).is_err());
+        assert!(apply_settings_patch(&current, serde_json::json!({ "update_channel": "Beta" })).is_err());
     }
 
     #[test]

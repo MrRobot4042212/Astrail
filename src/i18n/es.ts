@@ -172,6 +172,7 @@ export const es = {
     downloading: 'Descargando… {{pct}}%',
     restarting: 'Reiniciando…',
     errorBody: 'No se pudo completar la actualización. Inténtalo más tarde.',
+    betaTag: 'Canal beta',
   },
   notifications: {
     title: 'Información y Guías',
@@ -332,6 +333,11 @@ export const es = {
     sStorage: 'Almacenamiento',
     sDisk: 'Disco',
     // Preferencias de aplicación
+    aBeta: 'Versiones beta',
+    aBetaBody:
+      'Recibe cada versión uno o dos días antes que el resto. Es exactamente la misma compilación que después pasa al canal estable si nadie encuentra un fallo grave.',
+    aBetaOn:
+      'Puedes volver al canal estable cuando quieras. Astrail nunca instala una versión anterior: si ya tienes una beta, se queda hasta que la estable la alcance.',
     aDiagnostics: 'Diagnóstico',
     aDiagnosticsBody: 'Reúne el registro de Astrail, los informes de fallo y un resumen de tu equipo en un único archivo de texto. Se guarda en tu PC y no se envía a ningún sitio: tú decides si lo adjuntas a un reporte.',
     aDiagnosticsExport: 'Exportar diagnóstico',

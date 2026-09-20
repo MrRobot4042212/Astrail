@@ -105,6 +105,19 @@ pub struct AppSettings {
     /// settings file without the field also reads as off.
     #[serde(default)]
     pub discord_enabled: bool,
+    /// Which releases the updater offers. `beta` is opt-in: those builds reach the
+    /// stable channel a day or two later, unchanged, if nothing breaks.
+    #[serde(default)]
+    pub update_channel: UpdateChannel,
+}
+
+/// Release channel followed by the updater (see `updates.rs`).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum UpdateChannel {
+    #[default]
+    Stable,
+    Beta,
 }
 
 fn default_language() -> String {

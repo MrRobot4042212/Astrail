@@ -218,6 +218,7 @@ pub fn load_settings(app: &AppHandle) -> AppSettings {
             shortcuts: Default::default(),
             language: "system".to_string(),
             discord_enabled: false,
+            update_channel: Default::default(),
         },
     }
 }
