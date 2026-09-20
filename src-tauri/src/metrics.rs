@@ -143,12 +143,22 @@ pub struct MetricsSample {
     // PresentMon (per-process, measured) or the sidecar (fullscreen app, FPS only).
     pub fps: Option<f32>,
     pub frametime_ms: Option<f32>,
+    // PresentMon only: per-frame data is the one thing that can back these.
+    pub fps_low_1: Option<f32>,
+    pub fps_low_01: Option<f32>,
+    pub frametime_graph: Option<crate::presentmon::FrameGraph>,
 }
 
 /// Apply overlay settings live (called on startup, on settings change, on hotkey).
 pub fn configure(overlay: &crate::models::OverlaySettings) {
     OVERLAY_ENABLED.store(overlay.enabled, Ordering::Relaxed);
-    FPS_WANTED.store(overlay.show_fps || overlay.show_frametime, Ordering::Relaxed);
+    FPS_WANTED.store(
+        overlay.show_fps
+            || overlay.show_frametime
+            || overlay.show_lows
+            || overlay.show_frametime_graph,
+        Ordering::Relaxed,
+    );
     GPU_WANTED.store(
         overlay.show_gpu || overlay.show_gpu_temp || overlay.show_vram,
         Ordering::Relaxed,
@@ -558,10 +568,15 @@ pub fn monitor_geometry(hwnd: isize) -> MonitorGeometry {
 /// `1000 / fps` is not a frametime measurement: at 143 fps it cannot tell 6.9 ms from
 /// 7.0 ms and it hides every stutter inside the second. Showing it as `Frame x.x ms`
 /// next to PresentMon-grade values presented a derived number as a measured one, so
-/// the frametime row is left empty on this path.
+/// the frametime row is left empty on this path. The lows and the graph need every
+/// frame, which this source never sees, so they go with it: PresentMon numbers from
+/// a targeted pid must not sit next to the FPS of "whatever is fullscreen".
 fn apply_sidecar_fps(sample: &mut MetricsSample, fps: f32) {
     sample.fps = Some(fps);
     sample.frametime_ms = None;
+    sample.fps_low_1 = None;
+    sample.fps_low_01 = None;
+    sample.frametime_graph = None;
 }
 
 /// Start the sampler thread. Spawned once from `setup`.
@@ -795,6 +810,9 @@ pub fn start(app: AppHandle) {
                 cpu_temp_c: None,
                 fps: None,
                 frametime_ms: None,
+                fps_low_1: None,
+                fps_low_01: None,
+                frametime_graph: None,
             };
             // The LibreHardwareMonitor sidecar's latest reading. CPU temperature is
             // None unless it runs with admin + a loadable driver.
@@ -804,9 +822,15 @@ pub fn start(app: AppHandle) {
             // FPS / frametime from the PresentMon controller (None unless it's
             // running with admin + the bundled binary). The sidecar path below may
             // override this with AMD's native FPS.
-            let (fps, frametime) = crate::presentmon::current();
-            sample.fps = fps;
-            sample.frametime_ms = frametime;
+            let frames = crate::presentmon::current();
+            sample.fps = frames.fps;
+            sample.frametime_ms = frames.frametime_ms;
+            sample.fps_low_1 = frames.low_1;
+            sample.fps_low_01 = frames.low_01;
+            // The graph is the one reading that takes a lock: only when it is drawn.
+            if cfg.as_ref().is_some_and(|c| c.show_frametime_graph) {
+                sample.frametime_graph = crate::presentmon::graph();
+            }
 
             // Which GPU to read (see `gpu_route`). `sel` is refreshed at the top of
             // the loop only when the config generation moved.
@@ -1066,6 +1090,9 @@ mod tests {
             cpu_temp_c: None,
             fps: None,
             frametime_ms: None,
+            fps_low_1: None,
+            fps_low_01: None,
+            frametime_graph: None,
         }
     }
 
@@ -1075,9 +1102,15 @@ mod tests {
         // and it also overwrote a stale PresentMon frametime from another source.
         let mut s = empty_sample();
         s.frametime_ms = Some(4.2);
+        s.fps_low_1 = Some(97.0);
+        s.fps_low_01 = Some(61.0);
+        s.frametime_graph = Some(crate::presentmon::FrameGraph::from_points(&[6.9, 7.1]));
         apply_sidecar_fps(&mut s, 143.0);
         assert_eq!(s.fps, Some(143.0));
         assert_eq!(s.frametime_ms, None);
+        // Per-frame statistics of another source do not survive next to it either.
+        assert_eq!((s.fps_low_1, s.fps_low_01), (None, None));
+        assert!(s.frametime_graph.is_none());
     }
 
     #[test]

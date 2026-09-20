@@ -214,6 +214,14 @@ pub struct OverlaySettings {
     pub show_fps: bool,
     #[serde(default = "yes")]
     pub show_frametime: bool,
+    /// 1 % / 0.1 % low FPS. PresentMon only; the rows appear once there are enough
+    /// frames to back them.
+    #[serde(default = "yes")]
+    pub show_lows: bool,
+    /// Frametime graph under the rows. Off by default: it takes room, and it makes
+    /// the HUD redraw on every tick instead of only when a number changes.
+    #[serde(default)]
+    pub show_frametime_graph: bool,
     #[serde(default = "yes")]
     pub show_gpu: bool,
     #[serde(default = "yes")]
@@ -262,6 +270,8 @@ impl Default for OverlaySettings {
             interval_ms: default_overlay_interval(),
             show_fps: true,
             show_frametime: true,
+            show_lows: true,
+            show_frametime_graph: false,
             show_gpu: true,
             show_gpu_temp: true,
             show_cpu_temp: false,

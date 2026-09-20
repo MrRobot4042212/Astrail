@@ -43,6 +43,22 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
   Windows solo cuenta por su cuenta después de haberlo abierto una vez desde
   Astrail (o de marcarlo como juego); si no, cualquier herramienta desconocida
   abriría una sesión.
+- **Mínimos 1 % y 0.1 % en el HUD (activados por defecto).** Dos filas nuevas bajo
+  los FPS: los FPS que corresponden al percentil 99 y 99.9 del tiempo de frame de
+  los últimos 30 segundos, es decir, lo rápido que va el juego en sus peores
+  momentos. Es la definición por percentil; las herramientas que muestran la
+  media del 1 % peor dan una cifra algo más baja para la misma partida. Cada fila aparece
+  solo cuando hay frames suficientes para respaldarla (100 y 1000): por debajo de
+  unos 33 FPS el 0.1 % no llega a mostrarse, porque 30 segundos no dan 1000
+  frames. Una pausa de más de un segundo (pantalla de carga, Alt+Tab) no cuenta
+  como frame lento. Requiere PresentMon, igual que el frametime: con el contador
+  de FPS de AMD no se muestran, porque ese contador no da tiempos por frame.
+- **Gráfica de frametime en el HUD (opcional, desactivada por defecto).** Unos 12
+  segundos de historial bajo las filas: cada barra es el peor frame de 200 ms de
+  juego. La escala es relativa a la mediana de la propia gráfica (la mediana queda
+  a media altura y el doble llena la barra), así que muestra la forma, no valores
+  absolutos; los tirones de más de 1.5 veces la mediana se pintan en el color de
+  acento. La vista previa de Ajustes dibuja la misma regla.
 
 ### Cambiado
 - El tiempo de juego ya no depende de haber lanzado el juego desde Astrail (ver

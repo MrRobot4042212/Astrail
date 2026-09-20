@@ -78,6 +78,15 @@ pub(crate) fn build_rows(cfg: &OverlaySettings, m: &MetricsSample) -> (Option<St
             rows.push(HudRow { label: "FPS", value: format!("{:.0}", f), rgb: accent });
         }
     }
+    if cfg.show_lows {
+        // Each appears on its own once the history can back it (100 / 1000 frames).
+        if let Some(f) = m.fps_low_1 {
+            rows.push(HudRow { label: "1% low", value: format!("{:.0}", f), rgb: value });
+        }
+        if let Some(f) = m.fps_low_01 {
+            rows.push(HudRow { label: "0.1% low", value: format!("{:.0}", f), rgb: value });
+        }
+    }
     if cfg.show_frametime {
         if let Some(ft) = m.frametime_ms {
             rows.push(HudRow { label: "Frame", value: format!("{:.1} ms", ft), rgb: value });
@@ -119,6 +128,50 @@ pub(crate) fn build_rows(cfg: &OverlaySettings, m: &MetricsSample) -> (Option<St
     let title = m.game.as_deref().map(|g| g.to_uppercase());
     (title, rows)
 }
+
+/// The frametime graph to draw, if it is switched on and there is one.
+pub(crate) fn graph_points<'a>(cfg: &OverlaySettings, m: &'a MetricsSample) -> Option<&'a [f32]> {
+    if !cfg.show_frametime_graph {
+        return None;
+    }
+    m.frametime_graph.as_ref().map(|g| g.points()).filter(|p| p.len() >= 2)
+}
+
+/// One bar of the frametime graph.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct GraphBar {
+    /// Height as a fraction of the graph, in `(0, 1]`.
+    pub height: f32,
+    /// Clearly slower than the rest of the graph: drawn in the accent color.
+    pub spike: bool,
+}
+
+/// What the graph is scaled against: the median of its points. The graph has no axis
+/// (the numbers are in the rows above it), so its job is to show *shape*: the median
+/// sits at half height, and it does not move when a single hitch comes in, which an
+/// average would.
+pub(crate) fn graph_baseline_ms(points: &[f32]) -> f32 {
+    let mut sorted = [0.0f32; crate::presentmon::GRAPH_POINTS];
+    let n = points.len().min(sorted.len());
+    if n == 0 {
+        return 0.0;
+    }
+    sorted[..n].copy_from_slice(&points[..n]);
+    *sorted[..n].select_nth_unstable_by(n / 2, f32::total_cmp).1
+}
+
+/// A frametime against the baseline: full height is twice the baseline (anything
+/// slower is clipped there), and 1.5× the baseline is a spike.
+pub(crate) fn graph_bar(frametime_ms: f32, baseline_ms: f32) -> GraphBar {
+    if baseline_ms <= 0.0 || !frametime_ms.is_finite() {
+        return GraphBar { height: GRAPH_MIN_BAR, spike: false };
+    }
+    let ratio = frametime_ms / baseline_ms;
+    GraphBar { height: (ratio / 2.0).clamp(GRAPH_MIN_BAR, 1.0), spike: ratio > 1.5 }
+}
+
+/// A bar never disappears: a very fast slice still leaves a mark.
+const GRAPH_MIN_BAR: f32 = 0.06;
 
 /// Top-left corner of a `w`×`h` HUD placed in `position` on `mon`, in virtual-desktop
 /// coordinates.
@@ -277,7 +330,60 @@ mod tests {
             cpu_temp_c: None,
             fps: None,
             frametime_ms: None,
+            fps_low_1: None,
+            fps_low_01: None,
+            frametime_graph: None,
         }
+    }
+
+    #[test]
+    fn low_rows_follow_the_data_and_the_switch() {
+        let cfg = OverlaySettings::default();
+        let labels = |cfg: &OverlaySettings, m: &MetricsSample| {
+            build_rows(cfg, m).1.iter().map(|r| r.label).collect::<Vec<_>>()
+        };
+        let mut m = sample(None);
+        m.fps = Some(143.6);
+        assert_eq!(labels(&cfg, &m), ["FPS", "RAM"], "no lows without enough frames");
+        m.fps_low_1 = Some(97.4);
+        assert_eq!(labels(&cfg, &m), ["FPS", "1% low", "RAM"]);
+        m.fps_low_01 = Some(61.5);
+        let (_, rows) = build_rows(&cfg, &m);
+        assert_eq!(rows[1].value, "97");
+        assert_eq!(rows[2].label, "0.1% low");
+        assert_eq!(rows[2].value, "62");
+        let off = OverlaySettings { show_lows: false, ..OverlaySettings::default() };
+        assert_eq!(labels(&off, &m), ["FPS", "RAM"]);
+    }
+
+    #[test]
+    fn the_graph_is_drawn_only_when_asked_for_and_available() {
+        use crate::presentmon::FrameGraph;
+        let on = OverlaySettings { show_frametime_graph: true, ..OverlaySettings::default() };
+        let mut m = sample(None);
+        assert_eq!(graph_points(&on, &m), None);
+        m.frametime_graph = Some(FrameGraph::from_points(&[7.0]));
+        assert_eq!(graph_points(&on, &m), None, "one point is not a graph");
+        m.frametime_graph = Some(FrameGraph::from_points(&[7.0, 8.0]));
+        assert_eq!(graph_points(&on, &m), Some(&[7.0, 8.0][..]));
+        assert_eq!(graph_points(&OverlaySettings::default(), &m), None, "off by default");
+    }
+
+    #[test]
+    fn graph_bars_scale_against_the_median() {
+        // One hitch does not move the baseline, so the steady bars stay put.
+        let mut points = vec![7.0f32; 59];
+        points.push(40.0);
+        let base = graph_baseline_ms(&points);
+        assert_eq!(base, 7.0);
+        assert_eq!(graph_bar(7.0, base), GraphBar { height: 0.5, spike: false });
+        assert!(!graph_bar(10.0, base).spike, "1.4x the baseline is not a spike");
+        assert_eq!(graph_bar(40.0, base), GraphBar { height: 1.0, spike: true });
+        assert!(graph_bar(0.1, base).height > 0.0);
+        // Nothing to scale against, or garbage: a minimal bar, never a NaN rect.
+        assert_eq!(graph_baseline_ms(&[]), 0.0);
+        assert!(graph_bar(7.0, 0.0).height > 0.0);
+        assert!(graph_bar(f32::NAN, 7.0).height.is_finite());
     }
 
     #[test]

@@ -189,7 +189,9 @@ export const es = {
   },
   metrics: {
     fps: 'FPS',
+    lows: 'Mínimos 1 % / 0.1 %',
     frametime: 'Frametime',
+    frametimeGraph: 'Gráfica de frametime',
     gpuUsage: 'Uso GPU',
     gpuTemp: 'Temp. GPU',
     vram: 'VRAM',

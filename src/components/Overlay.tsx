@@ -7,6 +7,7 @@
 import { useEffect } from 'react';
 import { setOverlayInteractive } from '@/lib/tauri';
 import type { MetricsSample, OverlaySettings } from '@/lib/types';
+import { graphBar, graphBaseline } from '@/lib/overlayMetrics';
 import { OverlaySettingsScreen } from './OverlaySettingsScreen';
 
 /** Corner placement → fixed-position classes. */
@@ -85,6 +86,12 @@ export function OverlayPanel({
   if (cfg.show_fps && sample.fps != null) {
     rows.push({ label: 'FPS', value: sample.fps.toFixed(0), color: accentColor });
   }
+  if (cfg.show_lows && sample.fps_low_1 != null) {
+    rows.push({ label: '1% low', value: sample.fps_low_1.toFixed(0), color: valueColor });
+  }
+  if (cfg.show_lows && sample.fps_low_01 != null) {
+    rows.push({ label: '0.1% low', value: sample.fps_low_01.toFixed(0), color: valueColor });
+  }
   if (cfg.show_frametime && sample.frametime_ms != null) {
     rows.push({ label: 'Frame', value: `${sample.frametime_ms.toFixed(1)} ms`, color: valueColor });
   }
@@ -108,6 +115,12 @@ export function OverlayPanel({
   }
 
   if (rows.length === 0) return null;
+
+  const graph =
+    cfg.show_frametime_graph && sample.frametime_graph && sample.frametime_graph.length >= 2
+      ? sample.frametime_graph
+      : null;
+  const baseline = graph ? graphBaseline(graph) : 0;
 
   return (
     <div
@@ -135,6 +148,25 @@ export function OverlayPanel({
           />
         ))}
       </div>
+      {graph && (
+        // Same rule as the native HUD: median at half height, newest slice on the right.
+        <div className="relative mt-2 flex h-7 items-end justify-end" aria-hidden="true">
+          <div className="absolute inset-x-0 top-1/2 h-px bg-white/10" />
+          {graph.map((ft, i) => {
+            const bar = graphBar(ft, baseline);
+            return (
+              <div
+                key={i}
+                className="relative w-0.5 flex-none"
+                style={{
+                  height: `${bar.height * 100}%`,
+                  background: bar.spike ? accentColor : labelColor,
+                }}
+              />
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

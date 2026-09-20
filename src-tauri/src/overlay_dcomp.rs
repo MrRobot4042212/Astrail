@@ -531,6 +531,7 @@ unsafe fn render_inner(
 
     let accent = crate::overlay::parse_rgb(&cfg.accent_color);
     let label_rgb = crate::overlay::parse_rgb(&cfg.label_color);
+    let graph = crate::overlay::graph_points(cfg, m);
 
     // Present-on-change: skip the whole frame if nothing visible changed.
     let sig = {
@@ -541,6 +542,12 @@ unsafe fn render_inner(
             r.value.hash(&mut h);
             r.rgb.hash(&mut h);
         }
+        // The graph gains a slice every 200 ms of game time, so with it on the HUD
+        // redraws about as often as the FPS value already makes it.
+        for p in graph.unwrap_or_default() {
+            p.to_bits().hash(&mut h);
+        }
+        graph.is_some().hash(&mut h);
         cfg.position.hash(&mut h);
         cfg.font_size.hash(&mut h);
         cfg.bg_opacity.hash(&mut h);
@@ -611,7 +618,11 @@ unsafe fn render_inner(
         0.0
     };
     let rows_h = value_h * rows.len() as f32 + row_gap * (rows.len() as f32 - 1.0).max(0.0);
-    let h = (pad_y * 2.0 + title_block + rows_h).ceil() as i32;
+    // A fixed-height block: the HUD height only changes when the graph comes or goes,
+    // never with its contents, so `ResizeBuffers` stays tied to configuration.
+    let graph_h = (28.0 * s).round();
+    let graph_block = if graph.is_some() { div_gap * 2.0 + graph_h } else { 0.0 };
+    let h = (pad_y * 2.0 + title_block + rows_h + graph_block).ceil() as i32;
 
     // Position the window in the chosen corner.
     let margin = (12.0 * s).round() as i32;
@@ -624,7 +635,9 @@ unsafe fn render_inner(
     d.resize(w, h)?;
 
     // Build the draw list.
-    let mut items: Vec<DrawItem> = Vec::new();
+    let mut items: Vec<DrawItem> = Vec::with_capacity(
+        rows.len() * 2 + 2 + graph.map_or(0, |g| g.len() + 1),
+    );
     let mut y = pad_y;
     if let Some(t) = &title_wide {
         items.push(DrawItem::Text {
@@ -656,6 +669,43 @@ unsafe fn render_inner(
             col: color(r.rgb, 1.0),
         });
         y += value_h + row_gap;
+    }
+    if let Some(points) = graph {
+        // Newest slice on the right; whole-pixel bars so nothing is anti-aliased
+        // into a blur at 2 px wide.
+        let top = y - row_gap + div_gap * 2.0;
+        let bottom = top + graph_h;
+        let right = w as f32 - pad_x;
+        let slot = ((right - pad_x) / crate::presentmon::GRAPH_POINTS as f32).floor().max(1.0);
+        let bar_w = if slot >= 3.0 { slot - 1.0 } else { slot };
+        let baseline = crate::overlay::graph_baseline_ms(points);
+        // Where a frame at the baseline reaches: bars above this line are slow ones.
+        items.push(DrawItem::Rect {
+            rect: D2D_RECT_F {
+                left: pad_x,
+                top: top + (graph_h / 2.0).floor(),
+                right,
+                bottom: top + (graph_h / 2.0).floor() + 1.0,
+            },
+            col: color((0x2a, 0x2a, 0x2a), 1.0),
+        });
+        for (i, ft) in points.iter().rev().enumerate() {
+            let bar = crate::overlay::graph_bar(*ft, baseline);
+            let bar_right = right - slot * i as f32;
+            let left = bar_right - bar_w;
+            if left < pad_x {
+                break;
+            }
+            items.push(DrawItem::Rect {
+                rect: D2D_RECT_F {
+                    left,
+                    top: bottom - (graph_h * bar.height).round().max(1.0),
+                    right: bar_right,
+                    bottom,
+                },
+                col: color(if bar.spike { accent } else { label_rgb }, 1.0),
+            });
+        }
     }
 
     let bg = color((0, 0, 0), (cfg.bg_opacity.min(100) as f32) / 100.0);

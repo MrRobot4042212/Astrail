@@ -7,11 +7,17 @@
 //! targeting the running game's PID, streams its CSV from stdout, and keeps a
 //! ~1s rolling window of frame times to derive FPS and average frametime.
 //!
+//! The same stream feeds the 1 % / 0.1 % lows and the frametime graph. Both are
+//! built on the reader thread from a fixed-size history of the reported swapchain
+//! (no allocation once the parser exists) and handed to the sampler through
+//! atomics and one small mutex; the sampler never sees the frame stream itself.
+//!
 //! Requirements (both needed for FPS to appear; everything degrades silently to
 //! `None` otherwise, so the rest of the overlay always works):
 //!   1. The `PresentMon.exe` binary present (see `binaries/README.md`).
 //!   2. Astrail running **elevated** — ETW realtime sessions require admin.
 
+use serde::{Serialize, Serializer};
 use std::collections::VecDeque;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
@@ -24,8 +30,14 @@ use tauri::{AppHandle, Manager};
 /// Latest FPS / frametime as hundredths (0 = no data), so they fit in atomics.
 static FPS_X100: AtomicU32 = AtomicU32::new(0);
 static FRAMETIME_X100: AtomicU32 = AtomicU32::new(0);
+/// 1 % / 0.1 % low FPS as hundredths (0 = not enough frames yet).
+static LOW_1_X100: AtomicU32 = AtomicU32::new(0);
+static LOW_01_X100: AtomicU32 = AtomicU32::new(0);
 /// `metrics::clock_ms()` of the last published frame (0 = never).
 static LAST_UPDATE_MS: AtomicU64 = AtomicU64::new(0);
+/// Latest frametime graph. Written by the reader thread once per finished slice,
+/// copied out by the sampler once per tick.
+static GRAPH: Mutex<FrameGraph> = Mutex::new(FrameGraph::EMPTY);
 
 /// Our own ETW session name. PresentMon defaults to a fixed well-known name, which
 /// is why `--stop_existing_session` used to be needed — and why it could tear down
@@ -45,26 +57,60 @@ fn child_lock() -> MutexGuard<'static, Option<Child>> {
     CHILD.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
-/// Current FPS and average frametime (ms), if PresentMon produced them recently.
+/// What PresentMon measured for the running game. Every field is `None` until there
+/// is enough fresh data to back it: nothing here is ever derived or guessed.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct FrameStats {
+    pub fps: Option<f32>,
+    pub frametime_ms: Option<f32>,
+    /// See [`percentile_lows`] for the exact definition.
+    pub low_1: Option<f32>,
+    pub low_01: Option<f32>,
+}
+
+fn is_live() -> bool {
+    let stamp = LAST_UPDATE_MS.load(Ordering::Relaxed);
+    crate::metrics::is_fresh(stamp, crate::metrics::clock_ms(), crate::metrics::fps_max_age_ms())
+}
+
+/// Current frame statistics, if PresentMon produced them recently.
 ///
 /// The reader only writes when a frame arrives, so a game that stops presenting
 /// (loading screen, hang, minimized) must expire here instead of freezing its last
 /// FPS on the HUD.
-pub fn current() -> (Option<f32>, Option<f32>) {
-    let stamp = LAST_UPDATE_MS.load(Ordering::Relaxed);
-    if !crate::metrics::is_fresh(stamp, crate::metrics::clock_ms(), crate::metrics::fps_max_age_ms()) {
-        return (None, None);
+pub fn current() -> FrameStats {
+    if !is_live() {
+        return FrameStats::default();
     }
-    let f = FPS_X100.load(Ordering::Relaxed);
-    let ft = FRAMETIME_X100.load(Ordering::Relaxed);
-    let opt = |v: u32| if v == 0 { None } else { Some(v as f32 / 100.0) };
-    (opt(f), opt(ft))
+    let opt = |v: &AtomicU32| match v.load(Ordering::Relaxed) {
+        0 => None,
+        v => Some(v as f32 / 100.0),
+    };
+    FrameStats {
+        fps: opt(&FPS_X100),
+        frametime_ms: opt(&FRAMETIME_X100),
+        low_1: opt(&LOW_1_X100),
+        low_01: opt(&LOW_01_X100),
+    }
+}
+
+/// The frametime graph, under the same freshness rule as [`current`]. `None` until
+/// there are two finished slices to draw.
+pub fn graph() -> Option<FrameGraph> {
+    if !is_live() {
+        return None;
+    }
+    let graph = *GRAPH.lock().unwrap_or_else(PoisonError::into_inner);
+    (graph.len >= 2).then_some(graph)
 }
 
 fn reset() {
     FPS_X100.store(0, Ordering::Relaxed);
     FRAMETIME_X100.store(0, Ordering::Relaxed);
+    LOW_1_X100.store(0, Ordering::Relaxed);
+    LOW_01_X100.store(0, Ordering::Relaxed);
     LAST_UPDATE_MS.store(0, Ordering::Relaxed);
+    *GRAPH.lock().unwrap_or_else(PoisonError::into_inner) = FrameGraph::EMPTY;
 }
 
 /// Locate the PresentMon binary: bundled resource, next to our exe, or the dev
@@ -135,6 +181,173 @@ const CHAIN_TTL_MS: u64 = 1000;
 /// grow the table without limit.
 const MAX_CHAINS: usize = 8;
 
+/// Frames the lows are computed over, at most. Allocated once per parser and never
+/// grown: above ~270 fps the history covers less than `HISTORY_WINDOW_MS`.
+const HISTORY_CAP: usize = 8192;
+/// The lows describe the last 30 s of play, not the whole session: a HUD number has
+/// to follow what the game is doing now.
+const HISTORY_WINDOW_MS: f64 = 30_000.0;
+/// A frame longer than this is the game not presenting (loading screen, alt-tab,
+/// pause), not a slow frame. Same threshold as `CHAIN_TTL_MS`. It still counts for
+/// the FPS window, but it stays out of the lows and the graph, where a single one
+/// would otherwise own the 0.1 % low for the next 30 s.
+const GAP_MS: f32 = 1000.0;
+/// Fewer frames than this and a percentile is one or two frames wide: not shown.
+const MIN_FRAMES_LOW_1: usize = 100;
+const MIN_FRAMES_LOW_01: usize = 1000;
+/// How often the reader thread recomputes the lows.
+const LOWS_EVERY_MS: u64 = 500;
+/// Points in the frametime graph.
+pub const GRAPH_POINTS: usize = 60;
+/// Game time one graph point covers; 60 of them are the last 12 s.
+const GRAPH_SLICE_MS: f32 = 200.0;
+
+/// The frametime graph: the worst frametime (ms) of each finished
+/// `GRAPH_SLICE_MS` slice of game time, oldest first.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct FrameGraph {
+    points: [f32; GRAPH_POINTS],
+    len: usize,
+}
+
+impl FrameGraph {
+    pub const EMPTY: Self = Self { points: [0.0; GRAPH_POINTS], len: 0 };
+
+    /// Finished slices, oldest first.
+    pub fn points(&self) -> &[f32] {
+        &self.points[..self.len]
+    }
+
+    fn push(&mut self, worst_ms: f32) {
+        if self.len == GRAPH_POINTS {
+            self.points.copy_within(1.., 0);
+            self.len -= 1;
+        }
+        self.points[self.len] = worst_ms;
+        self.len += 1;
+    }
+
+    #[cfg(test)]
+    pub(crate) fn from_points(points: &[f32]) -> Self {
+        let mut graph = Self::EMPTY;
+        for p in points {
+            graph.push(*p);
+        }
+        graph
+    }
+}
+
+// serde implements `Serialize` for arrays only up to 32 elements, and the unused
+// tail is not data anyway.
+impl Serialize for FrameGraph {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_seq(self.points())
+    }
+}
+
+/// 1 % and 0.1 % low FPS of a set of frametimes (ms), as percentiles: the 1 % low is
+/// the FPS of the frametime that 99 % of the frames beat — the *fastest* of the worst
+/// 1 % — and the 0.1 % low is the same at 99.9 %. This is the percentile reading
+/// (CapFrameX "P1" / "P0.1"), not the average of the worst 1 %, which is lower and
+/// swings with a single outlier. Reorders `frametimes`.
+fn percentile_lows(frametimes: &mut [f32]) -> (Option<f32>, Option<f32>) {
+    let n = frametimes.len();
+    if n < MIN_FRAMES_LOW_1 {
+        return (None, None);
+    }
+    let fps = |ft: f32| (ft > 0.0).then(|| 1000.0 / ft);
+    let worst_1 = n / 100;
+    let (_, p99, slower) = frametimes.select_nth_unstable_by(n - worst_1, f32::total_cmp);
+    let low_1 = fps(*p99);
+    if n < MIN_FRAMES_LOW_01 {
+        return (low_1, None);
+    }
+    // `slower` is the `worst_1 - 1` frames above the 99th percentile; the 99.9th
+    // sits `n / 1000` from its end.
+    let low_01 = slower
+        .len()
+        .checked_sub(n / 1000)
+        .filter(|i| *i < slower.len())
+        .and_then(|i| fps(*slower.select_nth_unstable_by(i, f32::total_cmp).1));
+    (low_1, low_01)
+}
+
+/// Frametimes of the reported swapchain: the source of the lows and the graph.
+struct History {
+    frames: VecDeque<f32>,
+    total_ms: f64,
+    graph: FrameGraph,
+    /// Bumped whenever `graph` changes, so the reader only publishes then.
+    graph_version: u32,
+    /// Game time accumulated in the slice being filled, and its worst frame so far.
+    slice_ms: f32,
+    slice_worst: f32,
+    /// Set by `clear`, so lows of a swapchain that is gone are withdrawn at once.
+    cleared: bool,
+}
+
+impl History {
+    fn new() -> Self {
+        Self {
+            frames: VecDeque::with_capacity(HISTORY_CAP),
+            total_ms: 0.0,
+            graph: FrameGraph::EMPTY,
+            graph_version: 0,
+            slice_ms: 0.0,
+            slice_worst: 0.0,
+            cleared: false,
+        }
+    }
+
+    fn clear(&mut self) {
+        self.frames.clear();
+        self.total_ms = 0.0;
+        self.graph = FrameGraph::EMPTY;
+        self.graph_version = self.graph_version.wrapping_add(1);
+        self.slice_ms = 0.0;
+        self.slice_worst = 0.0;
+        self.cleared = true;
+    }
+
+    fn push(&mut self, ft: f32) {
+        if ft > GAP_MS {
+            return;
+        }
+        // Never grows: the oldest frame leaves before the new one enters.
+        if self.frames.len() == HISTORY_CAP {
+            if let Some(old) = self.frames.pop_front() {
+                self.total_ms -= f64::from(old);
+            }
+        }
+        self.frames.push_back(ft);
+        self.total_ms += f64::from(ft);
+        while self.total_ms > HISTORY_WINDOW_MS && self.frames.len() > 1 {
+            if let Some(old) = self.frames.pop_front() {
+                self.total_ms -= f64::from(old);
+            }
+        }
+
+        // The graph runs on game time (the sum of frametimes), not on the time a row
+        // was read: stdout arrives in bursts, the frametimes do not.
+        self.slice_ms += ft;
+        if self.slice_ms < GRAPH_SLICE_MS {
+            self.slice_worst = self.slice_worst.max(ft);
+            return;
+        }
+        // This frame ends in a later slice. The slice it started in shows the frames
+        // that ended inside it; slices nothing ended in were spent waiting for this
+        // frame, so they show it.
+        let finished = (self.slice_ms / GRAPH_SLICE_MS) as usize;
+        self.graph.push(if self.slice_worst > 0.0 { self.slice_worst } else { ft });
+        for _ in 1..finished.min(GRAPH_POINTS) {
+            self.graph.push(ft);
+        }
+        self.slice_ms = (self.slice_ms - finished as f32 * GRAPH_SLICE_MS).max(0.0);
+        self.slice_worst = ft;
+        self.graph_version = self.graph_version.wrapping_add(1);
+    }
+}
+
 /// Rolling ~1 s window of one swapchain's frame times.
 struct Chain {
     id: u64,
@@ -151,19 +364,77 @@ struct Chain {
 /// folding every row into one window mixed a 144 fps game with a 30 fps UI into a
 /// single inflated number. The reported value is the busiest live swapchain, which
 /// is the one rendering the game.
+///
+/// The lows and the graph need one continuous series, so the reported swapchain is
+/// sticky: it stays the owner of `history` until another one is clearly busier (see
+/// `reported`). Two swapchains presenting at the same rate would otherwise trade
+/// places on every frame and restart the history each time.
 pub(crate) struct FrameParser {
     ft_col: Option<usize>,
     sc_col: Option<usize>,
     chains: Vec<Chain>,
+    /// Swapchain whose frames `history` holds.
+    owner: Option<u64>,
+    history: History,
+    /// Reused copy of the history for the percentile selection, which reorders it.
+    scratch: Vec<f32>,
 }
 
 impl FrameParser {
     pub(crate) fn new() -> Self {
-        Self { ft_col: None, sc_col: None, chains: Vec::new() }
+        Self {
+            ft_col: None,
+            sc_col: None,
+            chains: Vec::new(),
+            owner: None,
+            history: History::new(),
+            scratch: Vec::with_capacity(HISTORY_CAP),
+        }
+    }
+
+    /// Index of the swapchain to report: the owner of the history while it is live
+    /// and within 10 % of the busiest one, otherwise the busiest (most presents in
+    /// its last second, ties to the most recent), which then becomes the owner of a
+    /// fresh history.
+    fn reported(&mut self) -> Option<usize> {
+        let busiest = (0..self.chains.len())
+            .max_by_key(|&i| (self.chains[i].frames.len(), self.chains[i].last_ms))?;
+        let owner = self.owner.and_then(|id| self.chains.iter().position(|c| c.id == id));
+        if let Some(o) = owner {
+            if self.chains[o].frames.len() * 10 >= self.chains[busiest].frames.len() * 9 {
+                return Some(o);
+            }
+        }
+        self.owner = Some(self.chains[busiest].id);
+        self.history.clear();
+        Some(busiest)
+    }
+
+    /// 1 % / 0.1 % low FPS over the history, each `None` until it has enough frames.
+    pub(crate) fn lows(&mut self) -> (Option<f32>, Option<f32>) {
+        let (a, b) = self.history.frames.as_slices();
+        self.scratch.clear();
+        self.scratch.extend_from_slice(a);
+        self.scratch.extend_from_slice(b);
+        percentile_lows(&mut self.scratch)
+    }
+
+    pub(crate) fn graph(&self) -> FrameGraph {
+        self.history.graph
+    }
+
+    pub(crate) fn graph_version(&self) -> u32 {
+        self.history.graph_version
+    }
+
+    /// True once after the history restarted: published lows belong to a swapchain
+    /// that is no longer the reported one.
+    pub(crate) fn take_cleared(&mut self) -> bool {
+        std::mem::take(&mut self.history.cleared)
     }
 
     /// Feed one CSV line read at `now_ms`. Returns `(fps, avg_frametime_ms)` of the
-    /// busiest live swapchain after a valid data row, `None` otherwise.
+    /// reported swapchain after a valid data row, `None` otherwise.
     pub(crate) fn feed(&mut self, line: &str, now_ms: u64) -> Option<(f32, f32)> {
         // Header: locate the frametime column (the name varies across versions:
         // "msBetweenPresents" / "MsBetweenPresents") and the swapchain column. Parsed
@@ -217,8 +488,11 @@ impl FrameParser {
             }
         }
 
-        // Busiest = most presents in its last second; ties go to the most recent.
-        let best = self.chains.iter().max_by_key(|c| (c.frames.len(), c.last_ms))?;
+        let reported = self.reported()?;
+        if reported == pos {
+            self.history.push(ft);
+        }
+        let best = &self.chains[reported];
         let avg_ft = best.sum / best.frames.len() as f32;
         (avg_ft > 0.0).then(|| (1000.0 / avg_ft, avg_ft))
     }
@@ -242,6 +516,8 @@ fn parse_stdout(out: impl std::io::Read) {
     // exists for that was 200-800 heap allocations per second, sustained for the
     // whole play session — the most frequent allocation site in the app.
     let mut line = String::new();
+    let mut lows_at: u64 = 0;
+    let mut graph_version = parser.graph_version();
     loop {
         line.clear();
         match reader.read_line(&mut line) {
@@ -255,6 +531,22 @@ fn parse_stdout(out: impl std::io::Read) {
             FRAMETIME_X100.store((avg_ft * 100.0) as u32, Ordering::Relaxed);
             FPS_X100.store((fps * 100.0) as u32, Ordering::Relaxed);
             LAST_UPDATE_MS.store(now, Ordering::Relaxed);
+
+            // The lows move slowly and cost a copy of the history: twice a second,
+            // plus right away when the history restarted under them.
+            let lows_due = parser.take_cleared() || now.saturating_sub(lows_at) >= LOWS_EVERY_MS;
+            if lows_due {
+                lows_at = now;
+                let (low_1, low_01) = parser.lows();
+                let x100 = |v: Option<f32>| v.map_or(0, |v| (v * 100.0) as u32);
+                LOW_1_X100.store(x100(low_1), Ordering::Relaxed);
+                LOW_01_X100.store(x100(low_01), Ordering::Relaxed);
+            }
+            // One lock per finished slice (5 per second), not one per frame.
+            if parser.graph_version() != graph_version {
+                graph_version = parser.graph_version();
+                *GRAPH.lock().unwrap_or_else(PoisonError::into_inner) = parser.graph();
+            }
         }
     }
     // Stream ended (game closed / PresentMon stopped): clear stale numbers.
@@ -570,6 +862,170 @@ mod tests {
         assert!(p.chains.len() <= MAX_CHAINS);
     }
 
+    /// A parser past its header, fed `frames` from one swapchain on a clock that
+    /// advances with the frametimes.
+    fn fed(frames: impl IntoIterator<Item = f32>) -> FrameParser {
+        let mut p = FrameParser::new();
+        p.feed(HEADER, 1);
+        let mut t = 1.0f64;
+        for ft in frames {
+            t += f64::from(ft);
+            p.feed(&row("0x1", ft), t as u64);
+        }
+        p
+    }
+
+    fn close(a: Option<f32>, b: f32) -> bool {
+        a.is_some_and(|a| (a - b).abs() < 0.05)
+    }
+
+    const FT_60: f32 = 1000.0 / 60.0;
+
+    #[test]
+    fn lows_are_the_99th_and_999th_frametime_percentiles() {
+        // 990 frames at 60 fps, nine at 40 ms, one at 100 ms: 99 % of the frames beat
+        // 40 ms (25 fps) and 99.9 % beat 100 ms (10 fps).
+        let mut frames = vec![FT_60; 990];
+        frames.extend([40.0; 9]);
+        frames.push(100.0);
+        // Order must not matter.
+        frames.swap(0, 999);
+        frames.swap(500, 995);
+        let (low_1, low_01) = fed(frames).lows();
+        assert!(close(low_1, 25.0), "1% low {low_1:?}");
+        assert!(close(low_01, 10.0), "0.1% low {low_01:?}");
+    }
+
+    #[test]
+    fn a_steady_game_has_lows_equal_to_its_fps() {
+        let (low_1, low_01) = fed(vec![FT_60; 1200]).lows();
+        assert!(close(low_1, 60.0) && close(low_01, 60.0), "{low_1:?} {low_01:?}");
+    }
+
+    #[test]
+    fn lows_stay_empty_until_there_are_enough_frames() {
+        assert_eq!(fed(vec![FT_60; MIN_FRAMES_LOW_1 - 1]).lows(), (None, None));
+        let (low_1, low_01) = fed(vec![FT_60; MIN_FRAMES_LOW_01 - 1]).lows();
+        assert!(close(low_1, 60.0));
+        assert_eq!(low_01, None);
+        assert_eq!(percentile_lows(&mut []), (None, None));
+    }
+
+    #[test]
+    fn the_history_is_bounded_and_never_reallocates() {
+        // 1000 fps: the 30 s window would be 30 000 frames, the cap is what binds.
+        let mut p = fed(vec![1.0; 20_000]);
+        assert_eq!(p.history.frames.len(), HISTORY_CAP);
+        assert_eq!(p.history.frames.capacity(), FrameParser::new().history.frames.capacity());
+        p.lows();
+        assert_eq!(p.scratch.capacity(), FrameParser::new().scratch.capacity());
+
+        // 20 fps: the window binds, and old frames leave the lows with it.
+        let mut frames = vec![400.0; 5];
+        frames.extend(vec![50.0; 1200]);
+        let mut p = fed(frames);
+        assert!(p.history.total_ms <= HISTORY_WINDOW_MS);
+        assert_eq!(p.history.frames.len(), 600);
+        assert!(close(p.lows().0, 20.0));
+    }
+
+    #[test]
+    fn a_loading_gap_is_not_a_slow_frame() {
+        let mut frames = vec![FT_60; 1100];
+        frames.insert(600, 4000.0);
+        let mut p = fed(frames);
+        let (low_1, low_01) = p.lows();
+        assert!(close(low_1, 60.0) && close(low_01, 60.0), "{low_1:?} {low_01:?}");
+        assert!(p.graph().points().iter().all(|ft| (*ft - FT_60).abs() < 0.01));
+    }
+
+    #[test]
+    fn swapchains_at_the_same_rate_do_not_restart_the_history() {
+        let mut p = FrameParser::new();
+        p.feed(HEADER, 1);
+        for i in 0..600u64 {
+            let t = 1 + i * 16;
+            p.feed(&row("0xA", FT_60), t);
+            p.feed(&row("0xB", FT_60), t);
+        }
+        assert_eq!(p.owner, Some(0xA));
+        assert_eq!(p.history.frames.len(), 600);
+    }
+
+    #[test]
+    fn a_new_busiest_swapchain_starts_a_fresh_history() {
+        // A 30 fps menu swapchain, then the 144 fps game one takes over.
+        let mut p = fed(vec![1000.0 / 30.0; 300]);
+        assert!(p.take_cleared(), "the first owner starts from an empty history");
+        assert!(p.lows().0.is_some());
+        let version = p.graph_version();
+        let mut t = 10_001.0f64;
+        for _ in 0..90 {
+            t += 1000.0 / 144.0;
+            p.feed(&row("0x2", 1000.0 / 144.0), t as u64);
+        }
+        assert_eq!(p.owner, Some(0x2));
+        assert!(p.take_cleared());
+        assert_ne!(p.graph_version(), version);
+        assert_eq!(p.lows(), (None, None), "menu frames must not count as game frames");
+        assert!(p.history.frames.iter().all(|ft| *ft < 10.0));
+    }
+
+    #[test]
+    fn the_graph_keeps_the_worst_frame_of_each_slice() {
+        // 11 frames at 60 fps = 183 ms, then a 30 ms frame that crosses into the next
+        // slice, where it ended: slice 1 is clean, slice 2 shows the spike.
+        let mut frames = vec![FT_60; 11];
+        frames.push(30.0);
+        frames.extend(vec![FT_60; 24]);
+        let p = fed(frames);
+        let points = p.graph().points().to_vec();
+        assert_eq!(points.len(), 3, "{points:?}");
+        assert!((points[0] - FT_60).abs() < 0.01, "{points:?}");
+        assert!((points[1] - 30.0).abs() < 0.01, "{points:?}");
+        assert!((points[2] - FT_60).abs() < 0.01, "{points:?}");
+    }
+
+    #[test]
+    fn a_long_frame_fills_the_slices_it_spans() {
+        // 50 ms of normal frames, then a 500 ms hitch (50..550 ms): nothing ended in
+        // 200..400, so that slice is the hitch; it ended in 400..600.
+        let mut frames = vec![FT_60; 3];
+        frames.push(500.0);
+        frames.extend(vec![FT_60; 5]);
+        let p = fed(frames);
+        let points = p.graph().points().to_vec();
+        assert_eq!(points.len(), 3, "{points:?}");
+        assert!((points[0] - FT_60).abs() < 0.01, "{points:?}");
+        assert_eq!(&points[1..], &[500.0, 500.0]);
+    }
+
+    #[test]
+    fn the_graph_holds_the_last_sixty_slices() {
+        // 100 slices of exactly 200 ms at 100 fps; the last ten carry a 25 ms frame.
+        let mut frames = Vec::new();
+        for slice in 0..100 {
+            if slice < 90 {
+                frames.extend([10.0; 20]);
+            } else {
+                frames.extend([10.0; 8]);
+                frames.push(25.0);
+                frames.extend([10.0; 9]);
+                frames.push(5.0);
+            }
+        }
+        let graph = fed(frames).graph();
+        assert_eq!(graph.points().len(), GRAPH_POINTS);
+        assert_eq!(graph.points().iter().filter(|ft| **ft == 25.0).count(), 10);
+        assert_eq!(graph.points()[GRAPH_POINTS - 1], 25.0);
+        assert_eq!(graph.points()[0], 10.0);
+    }
+
+    #[test]
+    fn a_graph_serializes_as_its_points() {
+        let json = serde_json::to_string(&FrameGraph::from_points(&[16.5, 33.0])).expect("json");
+        assert_eq!(json, "[16.5,33.0]");
+    }
     #[test]
     fn swapchain_addresses_parse_with_or_without_prefix() {
         assert_eq!(parse_address(" 0x0000020F3A1B2C40 "), 0x0000_020F_3A1B_2C40);

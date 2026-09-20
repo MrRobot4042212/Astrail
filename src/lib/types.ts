@@ -65,6 +65,10 @@ export interface OverlaySettings {
   interval_ms: number;
   show_fps: boolean;
   show_frametime: boolean;
+  /** 1 % and 0.1 % low FPS rows. PresentMon only; each appears once it has enough frames. */
+  show_lows: boolean;
+  /** Frametime graph under the rows. PresentMon only; off by default. */
+  show_frametime_graph: boolean;
   show_gpu: boolean;
   show_gpu_temp: boolean;
   show_vram: boolean;
@@ -226,5 +230,10 @@ export interface MetricsSample {
   fps?: number | null;
   /** PresentMon only; the sidecar reports an integer FPS, so no frametime is derived from it. */
   frametime_ms?: number | null;
+  /** FPS of the 99th / 99.9th percentile frametime over the last 30 s. PresentMon only. */
+  fps_low_1?: number | null;
+  fps_low_01?: number | null;
+  /** Worst frametime (ms) of each 200 ms slice, oldest first, at most 60. PresentMon only. */
+  frametime_graph?: number[] | null;
 }
 
