@@ -16,8 +16,15 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
   con mando, y el aviso daba a entender un soporte que no existe.
 
 ### Corregido
+- Las acciones sobre varias entradas a la vez (favoritos, categorías, ocultar)
+  anunciaban que todo había ido bien aunque alguna escritura fallara. Ahora, si
+  algo no se guarda, la biblioteca se recarga con el estado real y un aviso dice
+  cuántos cambios no se pudieron guardar.
+- Añadir categorías a una selección reescribía también las entradas que ya las
+  tenían todas.
 - Los interruptores de Ajustes no tenían nombre accesible: un lector de pantalla
   solo anunciaba «interruptor». Ahora llevan el título de su tarjeta.
+- Los avisos breves (toasts) no se anunciaban a los lectores de pantalla.
 - El aviso de «guardado» de Discord podía actualizar una ventana de Ajustes ya
   cerrada.
 - Pegar como carátula una ruta o un texto con caracteres no ASCII en los primeros

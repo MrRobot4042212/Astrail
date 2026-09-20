@@ -141,6 +141,8 @@ export const en = {
     hiddenCount_one: '{{count}} hidden',
     hiddenCount_other: '{{count}} hidden',
     categoriesAddedTo: 'Categories added to {{count}}',
+    bulkSaveFailed_one: '{{count}} change could not be saved',
+    bulkSaveFailed_other: '{{count}} changes could not be saved',
     toApp: '{{name}} → Application',
     toGame: '{{name}} → Game',
     toFavorites: '{{name}} → Favorites',

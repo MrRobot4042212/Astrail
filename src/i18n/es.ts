@@ -140,6 +140,8 @@ export const es = {
     hiddenCount_one: '{{count}} oculto',
     hiddenCount_other: '{{count}} ocultos',
     categoriesAddedTo: 'Categorías añadidas a {{count}}',
+    bulkSaveFailed_one: '{{count}} cambio no se pudo guardar',
+    bulkSaveFailed_other: '{{count}} cambios no se pudieron guardar',
     toApp: '{{name}} → Aplicación',
     toGame: '{{name}} → Juego',
     toFavorites: '{{name}} → Favoritos',
