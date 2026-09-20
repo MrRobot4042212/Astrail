@@ -29,8 +29,8 @@ fn credentials() -> Option<(&'static str, &'static str)> {
         }
         _ => {
             MISSING_LOGGED.get_or_init(|| {
-                eprintln!(
-                    "[igdb] no IGDB credentials in this build (IGDB_CLIENT_ID / IGDB_CLIENT_SECRET); cover lookups are disabled"
+                log::warn!(
+                    "no IGDB credentials in this build (IGDB_CLIENT_ID / IGDB_CLIENT_SECRET); cover lookups are disabled"
                 );
             });
             None
@@ -123,7 +123,7 @@ fn token() -> Option<String> {
         *TOKEN_RETRY_AFTER
             .lock()
             .unwrap_or_else(PoisonError::into_inner) = Some(Instant::now() + TOKEN_RETRY_BACKOFF);
-        eprintln!("[igdb] token request failed; pausing cover lookups for {TOKEN_RETRY_BACKOFF:?}");
+        log::warn!("token request failed; pausing cover lookups for {TOKEN_RETRY_BACKOFF:?}");
         return None;
     };
 

@@ -271,7 +271,7 @@ fn stop(mut child: Child) {
             Err(_) => break,
         }
         if Instant::now() >= deadline {
-            eprintln!("cputemp did not stop within {GRACEFUL_STOP:?}; terminating (its driver may stay loaded)");
+            log::warn!("cputemp did not stop within {GRACEFUL_STOP:?}; terminating (its driver may stay loaded)");
             break;
         }
         std::thread::sleep(Duration::from_millis(25));
@@ -343,17 +343,18 @@ pub fn start(app: AppHandle) {
                 match find_binary(&app) {
                     Some(bin) => match spawn(&bin, &want) {
                         Ok(c) => {
+                            log::info!("cputemp started (pid {}, {want:?})", c.id());
                             *child_lock() = Some(c);
                             running = Some(want);
                         }
                         Err(e) => {
-                            eprintln!("cputemp no pudo iniciarse: {e}");
+                            log::warn!("cputemp could not be started: {e}");
                             last_unexpected_exit = Some(Instant::now());
                         }
                     },
                     None => {
                         if !bin_missing_logged {
-                            eprintln!("cputemp.exe not found: CPU temperature and AMD GPU metrics disabled");
+                            log::warn!("cputemp.exe not found: CPU temperature and AMD GPU metrics disabled");
                             bin_missing_logged = true;
                         }
                     }
@@ -366,7 +367,15 @@ pub fn start(app: AppHandle) {
                 let mut child = child_lock();
                 let exited = match child.as_mut() {
                     None => Some(false),
-                    Some(c) => matches!(c.try_wait(), Ok(Some(_))).then_some(true),
+                    Some(c) => match c.try_wait() {
+                        Ok(Some(status)) => {
+                            log::warn!(
+                                "cputemp exited on its own ({status}); next attempt in {RESPAWN_BACKOFF:?}"
+                            );
+                            Some(true)
+                        }
+                        _ => None,
+                    },
                 };
                 if let Some(unexpected) = exited {
                     *child = None;

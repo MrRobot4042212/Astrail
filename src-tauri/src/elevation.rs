@@ -130,11 +130,11 @@ pub fn remove_legacy_logon_task() -> bool {
     match schtasks(&["/Delete", "/TN", LEGACY_AUTOSTART_TASK, "/F"]) {
         Ok(true) => true,
         Ok(false) => {
-            eprintln!("[elevation] schtasks could not delete the legacy {LEGACY_AUTOSTART_TASK} task");
+            log::warn!("schtasks could not delete the legacy {LEGACY_AUTOSTART_TASK} task");
             false
         }
         Err(e) => {
-            eprintln!("[elevation] schtasks failed to start: {e}");
+            log::warn!("schtasks failed to start: {e}");
             false
         }
     }

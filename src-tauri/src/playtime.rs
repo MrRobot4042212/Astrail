@@ -154,7 +154,7 @@ fn active_load(app: &AppHandle) -> Vec<ActiveSession> {
 /// disk ~17 000 times a day — the only continuous disk activity at rest.
 fn active_save(app: &AppHandle, sessions: &[ActiveSession]) {
     if let Err(e) = jsonstore::save_if_changed(app, ACTIVE_FILE, &sessions) {
-        eprintln!("[playtime] could not save {ACTIVE_FILE}: {e}");
+        log::warn!("could not save {ACTIVE_FILE}: {e}");
     }
 }
 
@@ -592,6 +592,9 @@ pub fn start(app: AppHandle) {
                         foreground,
                     ) {
                         running.insert(e.id.clone());
+                        if !active.contains_key(&e.id) {
+                            log::info!("session started: {} (pid {pid})", e.id);
+                        }
                         active
                             .entry(e.id.clone())
                             .and_modify(|v| {
@@ -611,9 +614,14 @@ pub fn start(app: AppHandle) {
                 .collect();
             for id in ended {
                 if let Some((start, last, _pid)) = active.remove(&id) {
-                    if last.saturating_sub(start) >= MIN_SESSION_SECS {
-                        let _ = record_session(&app, &id, start, last);
+                    let secs = last.saturating_sub(start);
+                    if secs >= MIN_SESSION_SECS {
+                        if let Err(e) = record_session(&app, &id, start, last) {
+                            log::error!("could not record the session of {id}: {e}");
+                        }
                         let _ = app.emit("playtime-updated", &id);
+                    } else {
+                        log::info!("session ended: {id} ({secs} s, under {MIN_SESSION_SECS} s: not recorded)");
                     }
                 }
             }
@@ -644,8 +652,8 @@ pub fn start(app: AppHandle) {
             let game_pid = show_metrics_for.and_then(|id| active.get(id).map(|(_, _, pid)| *pid));
             // Debug: surface why the overlay is/ isn't fed a game (transition-only).
             if game_name != dbg_overlay_game {
-                eprintln!(
-                    "[overlay] watcher: running_primary={:?} launched_from_astrail={} -> publish={:?} pid={:?}",
+                log::info!(
+                    "watcher: running_primary={:?} registered={} -> hud_target={:?} pid={:?}",
                     primary,
                     show_metrics_for.is_some(),
                     game_name,

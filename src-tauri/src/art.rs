@@ -397,7 +397,7 @@ pub fn migrate_remote_user_covers(app: &AppHandle) {
             Ok(path) => {
                 let _ = crate::storage::set_cover_override(app, id, Some(&path));
             }
-            Err(e) => eprintln!("[art] could not migrate the cover of {id}: {e}"),
+            Err(e) => log::warn!("could not migrate the cover of {id}: {e}"),
         }
     }
 
@@ -412,7 +412,7 @@ pub fn migrate_remote_user_covers(app: &AppHandle) {
                 game.cover_url = Some(path);
                 changed = true;
             }
-            Err(e) => eprintln!("[art] could not migrate the cover of {}: {e}", game.id),
+            Err(e) => log::warn!("could not migrate the cover of {}: {e}", game.id),
         }
     }
     if changed {
@@ -496,7 +496,7 @@ fn save_cache(app: &AppHandle, force: bool) {
         entries: entries.clone(),
     };
     if let Err(e) = jsonstore::save(app, CACHE_FILE, &file) {
-        eprintln!("[art] could not save {CACHE_FILE}: {e}");
+        log::warn!("could not save {CACHE_FILE}: {e}");
     }
 }
 
@@ -537,8 +537,8 @@ pub fn prune_covers(app: &AppHandle) {
     let Ok(dir) = covers_dir(app) else { return };
     let freed = prune_lru(&dir, COVERS_MAX_BYTES);
     if freed > 0 {
-        eprintln!(
-            "[art] pruned {} MB of cached covers (cap {} MB)",
+        log::info!(
+            "pruned {} MB of cached covers (cap {} MB)",
             freed / (1024 * 1024),
             COVERS_MAX_BYTES / (1024 * 1024)
         );

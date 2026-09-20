@@ -235,7 +235,7 @@ mod dxgi {
         let factory = match unsafe { CreateDXGIFactory1::<IDXGIFactory1>() } {
             Ok(factory) => factory,
             Err(e) => {
-                eprintln!("[system] DXGI unavailable, no GPU listed and no AMD metrics: {e}");
+                log::warn!("DXGI unavailable, no GPU listed and no AMD metrics: {e}");
                 return Vec::new();
             }
         };
@@ -250,7 +250,7 @@ mod dxgi {
             let desc = match unsafe { adapter.GetDesc1() } {
                 Ok(desc) => desc,
                 Err(e) => {
-                    eprintln!("[system] skipping GPU adapter {index}: {e}");
+                    log::warn!("skipping GPU adapter {index}: {e}");
                     continue;
                 }
             };
@@ -305,7 +305,7 @@ mod dxgi {
                 None,
                 None,
             ) {
-                eprintln!("[system] no D3D11 device on {}, GPU type unknown: {e}", adapter.name);
+                log::warn!("no D3D11 device on {}, GPU type unknown: {e}", adapter.name);
                 return None;
             }
         }

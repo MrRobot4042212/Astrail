@@ -122,8 +122,8 @@ pub fn maintain(app: &AppHandle) {
     }
     let freed = crate::art::prune_lru(&dir, ICONS_MAX_BYTES);
     if freed > 0 {
-        eprintln!(
-            "[appicons] pruned {} MB of cached icons (cap {} MB)",
+        log::info!(
+            "pruned {} MB of cached icons (cap {} MB)",
             freed / (1024 * 1024),
             ICONS_MAX_BYTES / (1024 * 1024)
         );

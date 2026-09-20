@@ -179,6 +179,14 @@ export const prepareForUpdate = () => invoke<void>('prepare_for_update');
 /** Resume the sidecars after a failed install. */
 export const abortUpdate = () => invoke<void>('abort_update');
 
+/** Write the log, crash reports and a system summary into one local text file and
+ *  open its folder. Resolves to the file path. Nothing is uploaded. */
+export const exportDiagnostics = () => invoke<string>('export_diagnostics');
+
+/** Append a webview error to the app log. Rust sanitizes and rate-limits it. */
+export const reportFrontendError = (message: string) =>
+  invoke<void>('report_frontend_error', { message });
+
 /** Open/close the in-game overlay settings screen (shows/hides the WebView2 window
  *  and pauses the native HUD while open). */
 export const setOverlayInteractive = (interactive: boolean) =>

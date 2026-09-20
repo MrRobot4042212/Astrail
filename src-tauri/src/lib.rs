@@ -4,6 +4,7 @@
 
 mod about;
 mod appicons;
+mod applog;
 mod apps_db;
 mod art;
 mod autostart;
@@ -88,8 +89,19 @@ async fn get_library(app: AppHandle) -> Result<Vec<Game>, String> {
     blocking(move || get_library_inner(app)).await
 }
 
+/// A store that fails degrades to an empty list (scanners are best-effort), but
+/// the reason is kept: "Steam is not installed" and "the library folders could not
+/// be read" look the same from the grid.
+fn scanned(store: &str, result: Result<Vec<Game>, String>) -> Vec<Game> {
+    result.unwrap_or_else(|e| {
+        log::info!("{store} scan returned nothing: {e}");
+        Vec::new()
+    })
+}
+
 fn get_library_inner(app: AppHandle) -> Result<Vec<Game>, String> {
     let _span = perf::Span::new("get_library");
+    let started = std::time::Instant::now();
     // Computed *before* the scanners run, and stored afterwards. Taking it after
     // meant a game whose install finished mid-scan was absent from the results but
     // already reflected in the fingerprint, so `library_changed` answered "no" and
@@ -102,17 +114,17 @@ fn get_library_inner(app: AppHandle) -> Result<Vec<Game>, String> {
     // because they need the AppHandle and are typically very few.
     let [steam, epic, gog, xbox, ea, ubisoft, bnet, win] =
         std::thread::scope(|s| {
-            let t_steam   = s.spawn(|| steam::scan().unwrap_or_default());
-            let t_epic    = s.spawn(|| epic::scan().unwrap_or_default());
-            let t_gog     = s.spawn(|| gog::scan().unwrap_or_default());
-            let t_xbox    = s.spawn(|| xbox::scan(fingerprint).unwrap_or_default());
-            let t_ea      = s.spawn(|| ea::scan().unwrap_or_default());
-            let t_ubisoft = s.spawn(|| ubisoft::scan().unwrap_or_default());
+            let t_steam   = s.spawn(|| scanned("steam", steam::scan()));
+            let t_epic    = s.spawn(|| scanned("epic", epic::scan()));
+            let t_gog     = s.spawn(|| scanned("gog", gog::scan()));
+            let t_xbox    = s.spawn(|| scanned("xbox", xbox::scan(fingerprint)));
+            let t_ea      = s.spawn(|| scanned("ea", ea::scan()));
+            let t_ubisoft = s.spawn(|| scanned("ubisoft", ubisoft::scan()));
             // Battle.net before windows_apps so its richer per-flavor WoW entries
             // win the dedup over the single generic registry entry.
-            let t_bnet    = s.spawn(|| battlenet::scan().unwrap_or_default());
+            let t_bnet    = s.spawn(|| scanned("battlenet", battlenet::scan()));
             // Generic registry scan last so the dedup keeps the richer native entry.
-            let t_win     = s.spawn(|| windows_apps::scan().unwrap_or_default());
+            let t_win     = s.spawn(|| scanned("windows_apps", windows_apps::scan()));
             [
                 t_steam.join().unwrap_or_default(),
                 t_epic.join().unwrap_or_default(),
@@ -124,6 +136,19 @@ fn get_library_inner(app: AppHandle) -> Result<Vec<Game>, String> {
                 t_win.join().unwrap_or_default(),
             ]
         });
+
+    log::info!(
+        "library scan: steam={} epic={} gog={} xbox={} ea={} ubisoft={} battlenet={} windows_apps={} in {:?}",
+        steam.len(),
+        epic.len(),
+        gog.len(),
+        xbox.len(),
+        ea.len(),
+        ubisoft.len(),
+        bnet.len(),
+        win.len(),
+        started.elapsed()
+    );
 
     let mut games: Vec<Game> = Vec::new();
     games.extend(steam);
@@ -189,6 +214,7 @@ fn get_library_inner(app: AppHandle) -> Result<Vec<Game>, String> {
     // The watcher re-reads the index when this file changes; nudge it so a game
     // launched right after a scan is picked up immediately.
     playtime::wake();
+    log::info!("library ready: {} entries in {:?}", games.len(), started.elapsed());
     Ok(games)
 }
 
@@ -201,7 +227,7 @@ const FINGERPRINT_FILE: &str = "library_fingerprint.json";
 
 fn write_library_cache(app: &AppHandle, games: &[Game]) {
     if let Err(e) = jsonstore::save(app, LIBRARY_CACHE_FILE, &games) {
-        eprintln!("[library] could not write {LIBRARY_CACHE_FILE}: {e}");
+        log::warn!("could not write {LIBRARY_CACHE_FILE}: {e}");
     }
 }
 
@@ -629,6 +655,67 @@ fn overlay_mpo_diagnostics() -> system::MpoDiagnostics {
     system::mpo_diagnostics()
 }
 
+/// Write one text file with everything needed to look into a bug report (build,
+/// hardware, overlay/MPO state, settings, crash reports, the end of the log) and
+/// show it in the file manager. Nothing leaves the machine: the user reads it and
+/// decides whether to attach it. Returns the path.
+#[tauri::command]
+async fn export_diagnostics(app: AppHandle) -> Result<String, String> {
+    blocking(move || {
+        let settings = app
+            .try_state::<std::sync::Mutex<AppSettings>>()
+            .map(|s| s.lock().unwrap_or_else(std::sync::PoisonError::into_inner).clone())
+            .unwrap_or_else(|| storage::load_settings(&app));
+        let header = diagnostics_header(&settings);
+        let path = applog::write_diagnostics(&header)?;
+        log::info!("diagnostics exported to {}", path.display());
+        if let Some(dir) = path.parent() {
+            files::open_folder(dir)?;
+        }
+        Ok(path.to_string_lossy().into_owned())
+    })
+    .await
+}
+
+fn diagnostics_header(settings: &AppSettings) -> String {
+    fn json<T: serde::Serialize>(value: &T) -> String {
+        serde_json::to_string_pretty(value).unwrap_or_else(|e| format!("<not serializable: {e}>"))
+    }
+    format!(
+        "Astrail {} diagnostics\ntime: {}\nelevated: {}\n\n===== system =====\n{}\n\n===== overlay / MPO =====\n{}\n\n===== settings =====\n{}\n",
+        env!("CARGO_PKG_VERSION"),
+        applog::timestamp(
+            SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis()
+        ),
+        is_elevated(),
+        json(&system::collect()),
+        json(&system::mpo_diagnostics()),
+        json(settings),
+    )
+}
+
+/// A render error or an unhandled rejection caught in the webview. The webview is
+/// not trusted: the text is flattened to one bounded line, and a burst is dropped
+/// after the first few so a render loop cannot fill the log.
+// Async: a log line is a file write.
+#[tauri::command(async)]
+fn report_frontend_error(window: tauri::Window, message: String) {
+    use std::sync::atomic::{AtomicU32, Ordering};
+    const MAX_PER_RUN: u32 = 50;
+    static SEEN: AtomicU32 = AtomicU32::new(0);
+    let seen = SEEN.fetch_add(1, Ordering::Relaxed);
+    if seen < MAX_PER_RUN {
+        log::error!(
+            target: "astrail::webview",
+            "[{}] {}",
+            window.label(),
+            applog::sanitize_frontend_message(&message)
+        );
+    } else if seen == MAX_PER_RUN {
+        log::error!(target: "astrail::webview", "further webview errors are not logged in this run");
+    }
+}
+
 /// The current OS user's name, for greetings. Prefers the Windows display/full
 /// name (e.g. "Diego Chicoma"); falls back to the login name (USERNAME). Empty
 /// string if nothing is available.
@@ -684,6 +771,7 @@ fn shutdown_for_exit(app: &AppHandle) {
 /// the process exits.
 #[tauri::command]
 async fn prepare_for_update(app: AppHandle) -> Result<(), String> {
+    log::info!("update downloaded: stopping the sidecars before the installer runs");
     crate::metrics::set_sidecars_suspended(true);
     blocking(move || {
         shutdown_for_exit(&app);
@@ -695,6 +783,7 @@ async fn prepare_for_update(app: AppHandle) -> Result<(), String> {
 /// The install did not happen after `prepare_for_update`: let the sidecars run again.
 #[tauri::command]
 fn abort_update() {
+    log::warn!("update install did not happen: sidecars allowed again");
     crate::metrics::set_sidecars_suspended(false);
 }
 
@@ -843,14 +932,14 @@ fn register_shortcuts(app: &AppHandle, shortcuts: &crate::models::ShortcutsSetti
             continue;
         }
         let Some(parsed) = parse_shortcut(combo) else {
-            eprintln!(
-                "[shortcuts] {what}: '{combo}' is not a valid combination or lacks a Ctrl/Alt/Win modifier; not registered"
+            log::warn!(
+                "{what}: '{combo}' is not a valid combination or lacks a Ctrl/Alt/Win modifier; not registered"
             );
             continue;
         };
         if let Err(e) = app.global_shortcut().register(parsed) {
-            eprintln!(
-                "[shortcuts] {what}: could not register '{combo}' (another application may own it): {e}"
+            log::warn!(
+                "{what}: could not register '{combo}' (another application may own it): {e}"
             );
         }
     }
@@ -1042,6 +1131,19 @@ async fn launch_game(app: AppHandle, id: String) -> Result<(), String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Before anything else: a release build has no stderr, so without this a
+    // failure in the hand-off below or in `build()` leaves nothing behind.
+    let context = tauri::generate_context!();
+    if let Some(dir) = applog::default_dir(&context.config().identifier) {
+        applog::init(dir);
+    }
+    log::info!(
+        "Astrail {} starting (elevated: {}, pid {})",
+        env!("CARGO_PKG_VERSION"),
+        is_elevated(),
+        std::process::id()
+    );
+
     #[cfg(windows)]
     elevation::await_previous_instance();
 
@@ -1155,7 +1257,7 @@ pub fn run() {
                         && !autostart::is_enabled().unwrap_or(false)
                     {
                         if let Err(e) = autostart::enable() {
-                            eprintln!("[autostart] could not move autostart to the Run key: {e}");
+                            log::warn!("could not move autostart to the Run key: {e}");
                         }
                     }
                 });
@@ -1176,7 +1278,7 @@ pub fn run() {
                     crate::appicons::maintain(&maintenance);
                     crate::art::migrate_remote_user_covers(&maintenance);
                     if let Err(e) = autostart::repair() {
-                        eprintln!("[autostart] could not repair the Run value: {e}");
+                        log::warn!("could not repair the Run value: {e}");
                     }
                 });
             }
@@ -1286,12 +1388,15 @@ pub fn run() {
             user_screenshots,
             launch_game,
             set_overlay_interactive,
-            show_main_window
+            show_main_window,
+            export_diagnostics,
+            report_frontend_error
         ])
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("error al iniciar la aplicación Tauri")
         .run(|app_handle, event| {
             if let tauri::RunEvent::Exit = event {
+                log::info!("Astrail exiting");
                 shutdown_for_exit(app_handle);
             }
         });

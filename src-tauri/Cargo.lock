@@ -61,6 +61,7 @@ name = "astrail"
 version = "0.3.0"
 dependencies = [
  "discord-rich-presence",
+ "log",
  "nvml-wrapper",
  "pelite",
  "serde",

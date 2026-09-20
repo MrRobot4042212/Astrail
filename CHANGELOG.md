@@ -10,6 +10,22 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
 
 ## [No publicado] — Trabajo en curso
 
+### Añadido
+- **Registro en disco y diagnóstico exportable.** Astrail escribe ahora un registro
+  en `%LOCALAPPDATA%\com.alfonso.meteor\logs\astrail.log` (1 MiB más una copia
+  rotada) con el arranque, los escaneos de biblioteca, las sesiones de juego, el
+  HUD y los procesos auxiliares de métricas. Antes, una versión instalada no dejaba
+  rastro alguno: los avisos iban a una consola que no existe. Si el programa se
+  cierra por un fallo interno, queda un `crash-<fecha>.txt` con la versión, el hilo
+  y la traza (se conservan los 5 más recientes).
+- **Ajustes → Avanzado → «Exportar diagnóstico».** Reúne el registro, los informes
+  de fallo, el resumen del equipo, el estado de MPO y los ajustes en un único
+  archivo de texto y abre su carpeta. No se envía nada a ningún sitio.
+- La variable de entorno `ASTRAIL_LOG=debug` (o `trace`) sube el nivel de detalle.
+
+### Cambiado
+- Un escaneo de tienda que falla ya no es silencioso: el motivo queda en el
+  registro (la biblioteca sigue mostrando el resto de tiendas, como antes).
 
 ### Eliminado
 - El aviso «Mando conectado» al enchufar un mando. Astrail no tiene navegación

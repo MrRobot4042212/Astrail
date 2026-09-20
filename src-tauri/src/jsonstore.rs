@@ -97,13 +97,13 @@ fn quarantine(path: &Path, file: &str, err: &str) {
         .unwrap_or(0);
     let backup = path.with_file_name(format!("{file}.corrupt-{ts}"));
     match fs::rename(path, &backup) {
-        Ok(()) => eprintln!(
-            "[storage] {file} is corrupt ({err}); moved to {} and starting from defaults",
+        Ok(()) => log::error!(
+            "{file} is corrupt ({err}); moved to {} and starting from defaults",
             backup.display()
         ),
         Err(e) => {
-            eprintln!(
-                "[storage] {file} is corrupt ({err}) and could not be quarantined ({e}); refusing to overwrite it"
+            log::error!(
+                "{file} is corrupt ({err}) and could not be quarantined ({e}); refusing to overwrite it"
             );
             poisoned()
                 .lock()

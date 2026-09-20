@@ -150,6 +150,7 @@ pub fn render(cfg: &OverlaySettings, m: &MetricsSample, monitor: MonitorGeometry
     if b == 0 {
         b = if crate::overlay_dcomp::try_init() {
             crate::overlay_diag::log("backend: DirectComposition (MPO-friendly)");
+            log::info!("HUD backend ready: DirectComposition");
             1
         } else {
             crate::overlay_diag::log(

@@ -148,8 +148,8 @@ fn ensure(s: &mut State) -> bool {
         let idx = (s.failures as usize).min(BACKOFF_SECS.len() - 1);
         let wait = BACKOFF_SECS[idx];
         if s.failures == 0 {
-            eprintln!(
-                "[discord] Rich Presence could not connect (is Discord running?); retrying with backoff"
+            log::warn!(
+                "Rich Presence could not connect (is Discord running?); retrying with backoff"
             );
         }
         s.failures = s.failures.saturating_add(1);

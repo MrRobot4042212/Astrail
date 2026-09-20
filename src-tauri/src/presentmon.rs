@@ -312,7 +312,7 @@ fn stop_etw_session() {
     // 0 = stopped. 4201 (ERROR_WMI_INSTANCE_NOT_FOUND) = already gone, which is the
     // expected result when PresentMon shut itself down cleanly.
     if status.0 != 0 && status.0 != 4201 {
-        eprintln!(
+        log::warn!(
             "could not stop the {SESSION_NAME} ETW session (error {})",
             status.0
         );
@@ -427,13 +427,14 @@ pub fn start(app: AppHandle) {
                     match find_binary(&app) {
                         Some(bin) => match spawn(&bin, want_pid) {
                             Ok(c) => {
+                                log::info!("PresentMon started (pid {}) for game pid {want_pid}", c.id());
                                 *child_lock() = Some(c);
                                 child_pid = want_pid;
                             }
                             Err(e) => {
                                 // Typically "access denied" without elevation. Mark the
                                 // PID failed so we don't hammer respawns every tick.
-                                eprintln!("PresentMon no pudo iniciarse: {e}");
+                                log::warn!("PresentMon could not be started: {e}");
                                 failed_pid = want_pid;
                             }
                         },
@@ -441,8 +442,8 @@ pub fn start(app: AppHandle) {
                             // No binary: don't re-scan the filesystem every tick either.
                             failed_pid = want_pid;
                             if !bin_missing_logged {
-                                eprintln!(
-                                    "PresentMon.exe no encontrado: FPS/frametime deshabilitados."
+                                log::warn!(
+                                    "PresentMon.exe not found: FPS and frametime disabled"
                                 );
                                 bin_missing_logged = true;
                             }
@@ -452,12 +453,13 @@ pub fn start(app: AppHandle) {
             }
 
             // Reap a child that exited on its own (game closed, ETW denied, …).
-            let exited = matches!(
-                child_lock().as_mut().map(|c| c.try_wait()),
-                Some(Ok(Some(_)))
-            );
-            if exited {
+            let exit_status = match child_lock().as_mut().map(|c| c.try_wait()) {
+                Some(Ok(Some(status))) => Some(status),
+                _ => None,
+            };
+            if let Some(status) = exit_status {
                 let dead = child_pid;
+                log::info!("PresentMon for game pid {dead} exited on its own ({status})");
                 *child_lock() = None;
                 child_pid = 0;
                 reset();

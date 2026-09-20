@@ -226,7 +226,7 @@ pub fn load_settings(app: &AppHandle) -> AppSettings {
 /// goes through here on every press.
 pub fn save_settings(app: &AppHandle, settings: &AppSettings) {
     if let Err(e) = jsonstore::save_if_changed(app, SETTINGS_FILE, settings) {
-        eprintln!("[storage] could not save {SETTINGS_FILE}: {e}");
+        log::warn!("could not save {SETTINGS_FILE}: {e}");
     }
 }
 
@@ -445,7 +445,7 @@ pub fn migrate_user_cover_filenames(app: &AppHandle) {
     }
     if changed {
         if let Err(e) = jsonstore::save(app, OVERRIDES_FILE, &overrides) {
-            eprintln!("[storage] user cover migration could not be saved: {e}");
+            log::warn!("user cover migration could not be saved: {e}");
         }
     }
 }

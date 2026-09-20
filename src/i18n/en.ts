@@ -327,6 +327,11 @@ export const en = {
     sStorage: 'Storage',
     sDisk: 'Disk',
     // Application preferences
+    aDiagnostics: 'Diagnostics',
+    aDiagnosticsBody: 'Collects the Astrail log, the crash reports and a summary of your system into a single text file. It is saved on your PC and sent nowhere: you decide whether to attach it to a report.',
+    aDiagnosticsExport: 'Export diagnostics',
+    aDiagnosticsDone: 'Saved to {{path}}',
+    aDiagnosticsFailed: 'Could not export: {{reason}}',
     aCovers: 'Covers',
     aCoversBody: 'Covers are fetched automatically and saved to disk so they load instantly. If one looks wrong or you want to fetch them all again, clear the cache and they will be downloaded anew.',
     aWorking: 'Working…',

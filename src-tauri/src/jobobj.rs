@@ -39,7 +39,7 @@ static JOB: OnceLock<usize> = OnceLock::new();
 fn job() -> Option<HANDLE> {
     let raw = *JOB.get_or_init(|| unsafe {
         let Ok(handle) = CreateJobObjectW(None, None) else {
-            eprintln!("[jobobj] CreateJobObjectW failed; sidecars fall back to explicit kill");
+            log::warn!("CreateJobObjectW failed; sidecars fall back to explicit kill");
             return 0;
         };
         let mut info = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
@@ -52,7 +52,7 @@ fn job() -> Option<HANDLE> {
             std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
         );
         if set.is_err() {
-            eprintln!("[jobobj] SetInformationJobObject failed; job not used");
+            log::warn!("SetInformationJobObject failed; job not used");
             let _ = CloseHandle(handle);
             return 0;
         }
@@ -71,12 +71,12 @@ pub fn assign(child: &Child) -> bool {
     unsafe {
         let Ok(process) = OpenProcess(PROCESS_SET_QUOTA | PROCESS_TERMINATE, false, child.id())
         else {
-            eprintln!("[jobobj] OpenProcess failed for pid {}", child.id());
+            log::warn!("OpenProcess failed for pid {}", child.id());
             return false;
         };
         let ok = AssignProcessToJobObject(job, process).is_ok();
         if !ok {
-            eprintln!("[jobobj] AssignProcessToJobObject failed for pid {}", child.id());
+            log::warn!("AssignProcessToJobObject failed for pid {}", child.id());
         }
         let _ = CloseHandle(process);
         ok

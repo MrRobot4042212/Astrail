@@ -326,6 +326,11 @@ export const es = {
     sStorage: 'Almacenamiento',
     sDisk: 'Disco',
     // Preferencias de aplicación
+    aDiagnostics: 'Diagnóstico',
+    aDiagnosticsBody: 'Reúne el registro de Astrail, los informes de fallo y un resumen de tu equipo en un único archivo de texto. Se guarda en tu PC y no se envía a ningún sitio: tú decides si lo adjuntas a un reporte.',
+    aDiagnosticsExport: 'Exportar diagnóstico',
+    aDiagnosticsDone: 'Guardado en {{path}}',
+    aDiagnosticsFailed: 'No se pudo exportar: {{reason}}',
     aCovers: 'Carátulas',
     aCoversBody: 'Las carátulas se obtienen automáticamente y se guardan en disco para que carguen al instante. Si alguna se ve mal o quieres volver a buscarlas todas, vacía la caché y se descargarán de nuevo.',
     aWorking: 'Trabajando…',

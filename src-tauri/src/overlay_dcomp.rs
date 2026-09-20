@@ -152,7 +152,7 @@ pub fn try_init() -> bool {
             true
         }
         Err(e) => {
-            eprintln!("Overlay DirectComposition no disponible, usando GDI: {e}");
+            log::error!("DirectComposition HUD could not be initialised; the HUD is disabled: {e}");
             false
         }
     }
@@ -509,7 +509,7 @@ pub fn render(cfg: &OverlaySettings, m: &MetricsSample, monitor: MonitorGeometry
         match unsafe { render_inner(d, cfg, m, monitor) } {
             Ok(()) => true,
             Err(e) => {
-                eprintln!("Overlay DComp render falló: {e}");
+                log::error!("HUD render failed; the HUD stays off for this session: {e}");
                 false
             }
         }

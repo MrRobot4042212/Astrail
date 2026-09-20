@@ -115,8 +115,8 @@ fn run_with_timeout(mut cmd: Command, timeout: Duration) -> Option<String> {
             }
         }
         if Instant::now() >= deadline {
-            eprintln!(
-                "[xbox] AppX enumeration timed out after {}s; falling back to the folder scan",
+            log::warn!(
+                "AppX enumeration timed out after {}s; falling back to the folder scan",
                 timeout.as_secs()
             );
             let _ = child.kill();
