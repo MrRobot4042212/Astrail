@@ -433,6 +433,9 @@ export const es = {
     perfMaxCpu: 'CPU máx.',
     perfMeasuredOver: 'sobre {{time}}',
     perfNote: 'Medido solo mientras el HUD estaba en pantalla con el juego en primer plano; los menús y las pantallas de carga cuentan. Los FPS y la temperatura de CPU necesitan Astrail como administrador.',
+    steamPlaytime: 'Según Steam: {{time}}',
+    steamLastPlayed: 'última vez el {{date}}',
+    steamPlaytimeNote: 'Cifra del cliente de Steam para tu cuenta en todos tus equipos, tal como estaba en su última escritura. No se suma al tiempo que mide Astrail.',
   },
   tour: {
     skip: 'Saltar guía',

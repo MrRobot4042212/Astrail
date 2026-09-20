@@ -43,6 +43,7 @@ mod screenshots;
 mod sessionperf;
 mod sidecar_integrity;
 mod steam;
+mod steam_playtime;
 mod storage;
 #[cfg(windows)]
 mod sysstat;
@@ -538,6 +539,29 @@ async fn game_dir_size(app: AppHandle, id: String) -> Result<Option<u64>, String
         };
         let dir = files::validate_dir(&folder)?;
         Ok(Some(files::dir_size(&dir)))
+    })
+    .await
+}
+
+/// What the Steam client recorded as playtime for a Steam entry: minutes across
+/// every machine of the account, as of the client's last write. Shown next to
+/// Astrail's own measurement, never added to it. `None` = not a Steam entry, no
+/// Steam account file, or Steam has no time for it.
+///
+/// Takes an id: the app id comes from our own library record, not the webview.
+#[tauri::command(async)]
+async fn steam_playtime(
+    app: AppHandle,
+    id: String,
+) -> Result<Option<steam_playtime::SteamPlaytime>, String> {
+    blocking(move || {
+        let Some(game) = resolve_game(&app, &id) else {
+            return Err(format!("Unknown entry: {id}"));
+        };
+        if game.source != GameSource::Steam {
+            return Ok(None);
+        }
+        Ok(game.app_id.and_then(steam_playtime::for_app))
     })
     .await
 }
@@ -1434,6 +1458,7 @@ pub fn run() {
             all_playtime,
             cached_library,
             game_dir_size,
+            steam_playtime,
             app_icons,
             get_discord_client_id,
             set_discord_client_id,

@@ -71,6 +71,15 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
   0.1 % por sesión; una sesión recuperada tras un cierre inesperado conserva su
   tiempo pero no su resumen. El mínimo 1 % de la sesión se calcula con un
   histograma (±0.5 % respecto al percentil exacto), no guardando todos los frames.
+- **Tiempo jugado según Steam (ficha del juego).** Los juegos de Steam muestran,
+  en una línea aparte bajo las métricas de actividad, las horas que registró el
+  cliente de Steam y la última vez que se jugó, leídas de su `localconfig.vdf`. Es
+  la cifra de Steam, no la de Astrail: cuenta todos tus equipos, está tan al día
+  como la última escritura del cliente y **nunca se suma** al tiempo que mide
+  Astrail. Límites: con varias cuentas en el equipo se usa la que Steam escribió
+  más recientemente (no se suman cuentas); un juego sin tiempo en Steam no muestra
+  nada en vez de un cero; un juego de Steam que la biblioteca muestra bajo la
+  entrada de otra tienda no tiene esta línea.
 
 ### Cambiado
 - El tiempo de juego ya no depende de haber lanzado el juego desde Astrail (ver

@@ -52,6 +52,15 @@ export interface PlayStat {
   history: Session[];
 }
 
+/** What the Steam client recorded for an app (`steam_playtime.rs`). Steam's
+ *  figure, across every machine of the account; never added to `PlayStat`. */
+export interface SteamPlaytime {
+  /** Minutes; never 0 (an unplayed app comes back as `null` instead). */
+  minutes: number;
+  /** Unix seconds. */
+  last_played: number | null;
+}
+
 export interface Game {
   id: string;
   name: string;

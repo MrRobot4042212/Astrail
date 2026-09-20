@@ -3,7 +3,7 @@
 // Additional terms under GPL-3.0 section 7 apply: see ADDITIONAL-TERMS.md
 
 import { invoke } from '@tauri-apps/api/core';
-import type { Game, CoverAnswer, Category, PlayStat, AppSettings, AppSettingsPatch, SystemInfo, MpoDiagnostics, AboutInfo, LegalDocument, UpdateOffer } from './types';
+import type { Game, CoverAnswer, Category, PlayStat, SteamPlaytime, AppSettings, AppSettingsPatch, SystemInfo, MpoDiagnostics, AboutInfo, LegalDocument, UpdateOffer } from './types';
 
 /** Unified library across every source (Steam, Epic, GOG, EA, Ubisoft, Xbox, manual). */
 export const getLibrary = () => invoke<Game[]>('get_library');
@@ -108,6 +108,12 @@ export const getPlaytime = (id: string) => invoke<PlayStat>('get_playtime', { id
 /** Play stats for every tracked game id (for sorting the library). */
 export const allPlaytime = () =>
   invoke<Record<string, PlayStat>>('all_playtime');
+
+/** What the Steam client recorded for a Steam entry (null for any other store,
+ *  an unplayed app, or when the client's file is not there). Steam's own figure:
+ *  show it next to Astrail's time, never added to it. */
+export const steamPlaytime = (id: string) =>
+  invoke<SteamPlaytime | null>('steam_playtime', { id });
 
 /** Size in bytes of a library entry install folder (null when it has none). */
 export const gameDirSize = (id: string) =>

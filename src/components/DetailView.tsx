@@ -19,6 +19,7 @@ import {
 import { coverSrc } from '@/lib/cover';
 import { SOURCE_META } from '@/lib/sources';
 import { SessionPerfSection } from './SessionPerfSection';
+import { SteamPlaytimeLine } from './SteamPlaytimeLine';
 import {
   ArrowLeftIcon,
   PlayIcon,
@@ -341,6 +342,8 @@ export function DetailView({
             value={size === undefined ? '…' : size === null ? '—' : formatSize(size)}
           />
         </div>
+        <SteamPlaytimeLine id={game.id} source={game.source} />
+
         <SessionPerfSection history={play.history} />
 
         {!isApp && (
