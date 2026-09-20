@@ -10,6 +10,11 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
 
 ## [No publicado] — Trabajo en curso
 
+### Corregido
+- Pegar como carátula una ruta o un texto con caracteres no ASCII en los primeros
+  bytes (por ejemplo `ñandú.png`) cerraba Astrail de golpe: la comprobación de
+  «¿es una URL?» cortaba el texto por bytes. Ahora se trata como una ruta normal.
+
 ## [0.3.0] — 2026-09-18
 
 ### Añadido

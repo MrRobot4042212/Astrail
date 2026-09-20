@@ -322,9 +322,15 @@ fn download(url: &str, dest: &Path) -> bool {
 
 /// Whether a cover value is a remote URL rather than a local path.
 pub fn is_remote(value: &str) -> bool {
-    let v = value.trim();
-    (v.len() >= 8 && v[..8].eq_ignore_ascii_case("https://"))
-        || (v.len() >= 7 && v[..7].eq_ignore_ascii_case("http://"))
+    // `get`, not `v[..n]`: the value is whatever the user pasted, and slicing in
+    // the middle of a multi-byte character panics (which aborts the app).
+    let starts = |scheme: &str| {
+        value
+            .trim()
+            .get(..scheme.len())
+            .is_some_and(|head| head.eq_ignore_ascii_case(scheme))
+    };
+    starts("https://") || starts("http://")
 }
 
 /// Largest user cover we download. Store art is well under 1 MB; the cap only
@@ -683,5 +689,17 @@ mod tests {
         assert_eq!(cover_ext(Some("image/jpeg"), "https://x/y"), "jpg");
         assert_eq!(cover_ext(Some("image/png; charset=binary"), "https://x/y.jpg"), "png");
         assert_eq!(cover_ext(None, "https://x/y.WEBP?size=1"), "webp");
+    }
+
+    #[test]
+    fn a_non_ascii_cover_value_is_not_remote_and_does_not_panic() {
+        // Regression: `v[..8]` sliced by bytes, so a pasted path whose 8th byte
+        // falls inside a character (`D:\Juegós\…`: `ó` spans bytes 7-8) panicked,
+        // and a panic aborts the whole app.
+        assert!(!is_remote(r"D:\Juegós\portada.jpg"));
+        assert!(!is_remote(r"C:\Fotoñ\a.png"));
+        assert!(!is_remote("httpsñ//x"));
+        assert!(!is_remote("ñ"));
+        assert!(is_remote("  https://example.com/ñ.jpg"));
     }
 }
