@@ -715,6 +715,9 @@ pub fn start(app: AppHandle) {
                 }
             }
             if game.is_none() {
+                // Nothing is measured while the game is not in front: the session
+                // summary stops counting frames here.
+                crate::sessionperf::set_sampling(false);
                 // The game is gone (not just alt-tabbed): decide the FPS and GPU
                 // sources afresh for the next one.
                 if !HAS_GAME.load(Ordering::Relaxed) {
@@ -889,6 +892,11 @@ pub fn start(app: AppHandle) {
                 session_age,
             );
             publish_fps_source(true, sidecar_fps);
+
+            // Session summary (`sessionperf`): the game is in front and being
+            // measured, so its frames count from here on, and so do these readings.
+            crate::sessionperf::set_sampling(true);
+            crate::sessionperf::record_temps(sample.gpu_temp_c, sample.cpu_temp_c);
 
             // Draw the native HUD via the overlay facade: a content-sized window backed
             // by a DirectComposition flip swapchain (MPO-friendly → the game keeps its

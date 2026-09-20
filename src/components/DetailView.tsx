@@ -18,6 +18,7 @@ import {
 } from '@/lib/tauri';
 import { coverSrc } from '@/lib/cover';
 import { SOURCE_META } from '@/lib/sources';
+import { SessionPerfSection } from './SessionPerfSection';
 import {
   ArrowLeftIcon,
   PlayIcon,
@@ -340,6 +341,7 @@ export function DetailView({
             value={size === undefined ? '…' : size === null ? '—' : formatSize(size)}
           />
         </div>
+        <SessionPerfSection history={play.history} />
 
         {!isApp && (
           <>

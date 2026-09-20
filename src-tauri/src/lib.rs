@@ -39,6 +39,7 @@ mod overlay_native;
 mod playtime;
 mod presentmon;
 mod screenshots;
+mod sessionperf;
 mod sidecar_integrity;
 mod steam;
 mod storage;

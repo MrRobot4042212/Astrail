@@ -25,10 +25,24 @@ export interface Category {
 }
 
 
+/** What the HUD measured during a session (`sessionperf.rs`). Every figure is
+ *  optional: FPS needs PresentMon, temperatures need their sensor, and all of it
+ *  is only measured while the HUD is on screen with the game in front. */
+export interface SessionPerf {
+  avg_fps?: number | null;
+  /** 99th-percentile frame time of the whole session, as FPS. */
+  low_1_fps?: number | null;
+  /** Seconds of frames the FPS figures cover — not the session length. */
+  fps_secs?: number | null;
+  max_gpu_temp_c?: number | null;
+  max_cpu_temp_c?: number | null;
+}
+
 /** One finished play session (unix timestamps, seconds). */
 export interface Session {
   start: number;
   end: number;
+  perf?: SessionPerf | null;
 }
 
 /** Accumulated play stats for a game. */

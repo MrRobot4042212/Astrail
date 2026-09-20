@@ -3,6 +3,7 @@
 // Additional terms under GPL-3.0 section 7 apply: see ADDITIONAL-TERMS.md
 
 use crate::jsonstore;
+use crate::sessionperf::SessionPerf;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -81,6 +82,11 @@ const EXCLUDE: &[&str] = &[
 pub struct Session {
     pub start: u64,
     pub end: u64,
+    /// What the HUD measured during the session, if it measured anything (see
+    /// `sessionperf`). Absent in sessions recorded before this existed, in sessions
+    /// played with the overlay off, and in sessions recovered after a crash.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub perf: Option<SessionPerf>,
 }
 
 /// Accumulated play stats for one game, keyed by `Game.id`.
@@ -137,19 +143,28 @@ pub fn all(app: &AppHandle) -> HashMap<String, PlayStat> {
     load(app)
 }
 
-/// Persist one finished session for a game.
-fn record_session(app: &AppHandle, id: &str, start: u64, end: u64) -> Result<(), String> {
-    let seconds = end.saturating_sub(start);
-    let mut map = load(app);
-    let stat = map.entry(id.to_string()).or_default();
-    stat.seconds += seconds;
+/// Add one finished session to a game's stats.
+fn push_session(stat: &mut PlayStat, start: u64, end: u64, perf: Option<SessionPerf>) {
+    stat.seconds += end.saturating_sub(start);
     stat.last_played = Some(end);
-    stat.history.push(Session { start, end });
+    stat.history.push(Session { start, end, perf });
     // Keep the newest `HISTORY_MAX`; the dropped ones stay counted in `seconds`.
     if stat.history.len() > HISTORY_MAX {
         let overflow = stat.history.len() - HISTORY_MAX;
         stat.history.drain(..overflow);
     }
+}
+
+/// Persist one finished session for a game.
+fn record_session(
+    app: &AppHandle,
+    id: &str,
+    start: u64,
+    end: u64,
+    perf: Option<SessionPerf>,
+) -> Result<(), String> {
+    let mut map = load(app);
+    push_session(map.entry(id.to_string()).or_default(), start, end, perf);
     jsonstore::save(app, STORE_FILE, &map)
 }
 
@@ -180,7 +195,8 @@ pub fn reconcile(app: &AppHandle) {
     active_save(app, &[]);
     for s in &leftovers {
         if s.last_seen.saturating_sub(s.start) >= MIN_SESSION_SECS {
-            let _ = record_session(app, &s.id, s.start, s.last_seen);
+            // What the HUD measured lived in memory and went with the crash.
+            let _ = record_session(app, &s.id, s.start, s.last_seen, None);
         }
     }
     let _ = app.emit("playtime-updated", "");
@@ -756,8 +772,12 @@ pub fn start(app: AppHandle) {
             for id in ended {
                 if let Some((start, last, _pid)) = active.remove(&id) {
                     let secs = last.saturating_sub(start);
+                    // Taken either way, so a session too short to record does not
+                    // leave its measurements behind for the next one.
+                    let perf = crate::sessionperf::take(&id);
                     if secs >= MIN_SESSION_SECS {
-                        if let Err(e) = record_session(&app, &id, start, last) {
+                        log::info!("session ended: {id} ({secs} s, measured: {perf:?})");
+                        if let Err(e) = record_session(&app, &id, start, last, perf) {
                             log::error!("could not record the session of {id}: {e}");
                         }
                         let _ = app.emit("playtime-updated", &id);
@@ -802,6 +822,9 @@ pub fn start(app: AppHandle) {
                 );
                 dbg_overlay_game = game_name.clone();
             }
+            // The session summary follows the HUD: same game, same pid. Before the
+            // sampler hears about the game, so its first reading has a session.
+            crate::sessionperf::set_target(show_metrics_for.map(String::as_str), game_pid);
             crate::metrics::set_current_game(game_name, game_pid);
 
             if !crate::discord::enabled() {
@@ -864,6 +887,49 @@ mod tests {
     /// `(pid, lowercased full executable path)`.
     fn procs(entries: &[(u32, &str)]) -> Vec<(u32, String)> {
         entries.iter().map(|(pid, path)| (*pid, path.to_lowercase())).collect()
+    }
+
+    #[test]
+    fn sessions_recorded_before_the_summary_existed_still_load() {
+        let old: PlayStat = serde_json::from_str(
+            r#"{"seconds":3600,"last_played":2,"history":[{"start":1,"end":2}]}"#,
+        )
+        .expect("old playtime record");
+        assert_eq!(old.history.len(), 1);
+        assert!(old.history[0].perf.is_none());
+    }
+
+    #[test]
+    fn a_session_nothing_was_measured_in_is_stored_as_before() {
+        let mut stat = PlayStat::default();
+        push_session(&mut stat, 100, 400, None);
+        assert_eq!(stat.seconds, 300);
+        assert_eq!(stat.last_played, Some(400));
+        let json = serde_json::to_string(&stat.history).expect("history");
+        assert_eq!(json, r#"[{"start":100,"end":400}]"#);
+    }
+
+    #[test]
+    fn a_measured_session_keeps_its_summary_and_the_history_stays_capped() {
+        let perf = SessionPerf {
+            avg_fps: Some(143.3),
+            low_1_fps: Some(98.0),
+            fps_secs: Some(1800),
+            max_gpu_temp_c: Some(74),
+            max_cpu_temp_c: None,
+        };
+        let mut stat = PlayStat::default();
+        for i in 0..(HISTORY_MAX as u64 + 5) {
+            push_session(&mut stat, i * 10, i * 10 + 5, None);
+        }
+        push_session(&mut stat, 90_000, 90_600, Some(perf.clone()));
+        assert_eq!(stat.history.len(), HISTORY_MAX);
+        // Dropped sessions stay counted in the total.
+        assert_eq!(stat.seconds, (HISTORY_MAX as u64 + 5) * 5 + 600);
+        let back: Vec<Session> =
+            serde_json::from_str(&serde_json::to_string(&stat.history).expect("history"))
+                .expect("round trip");
+        assert_eq!(back.last().and_then(|s| s.perf.clone()), Some(perf));
     }
 
     #[test]

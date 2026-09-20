@@ -59,6 +59,18 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
   a media altura y el doble llena la barra), así que muestra la forma, no valores
   absolutos; los tirones de más de 1.5 veces la mediana se pintan en el color de
   acento. La vista previa de Ajustes dibuja la misma regla.
+- **Resumen de rendimiento por sesión (ficha del juego).** Cada sesión guarda ahora
+  lo que midió el HUD: FPS medios (frames entre tiempo, no la media de las
+  lecturas), mínimo 1 % de toda la sesión y temperatura máxima de GPU y de CPU. La
+  ficha muestra las cinco últimas sesiones medidas, con el tiempo que cubren los
+  FPS junto a la cifra. Límites: solo se mide mientras el HUD está en pantalla con
+  el juego en primer plano, así que una sesión con el overlay apagado no tiene
+  resumen; los menús y las pantallas de carga cuentan; los FPS salen de PresentMon
+  (administrador) y hacen falta 30 segundos de frames para dar una cifra; el
+  contador de FPS de AMD no se usa, porque no da tiempos por frame; no hay mínimo
+  0.1 % por sesión; una sesión recuperada tras un cierre inesperado conserva su
+  tiempo pero no su resumen. El mínimo 1 % de la sesión se calcula con un
+  histograma (±0.5 % respecto al percentil exacto), no guardando todos los frames.
 
 ### Cambiado
 - El tiempo de juego ya no depende de haber lanzado el juego desde Astrail (ver

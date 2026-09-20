@@ -168,7 +168,7 @@ fn spawn(bin: &Path, pid: u32) -> std::io::Result<Child> {
     #[cfg(windows)]
     crate::jobobj::assign(&child);
     if let Some(out) = child.stdout.take() {
-        std::thread::spawn(move || parse_stdout(out));
+        std::thread::spawn(move || parse_stdout(out, pid));
     }
     Ok(child)
 }
@@ -197,6 +197,10 @@ const MIN_FRAMES_LOW_1: usize = 100;
 const MIN_FRAMES_LOW_01: usize = 1000;
 /// How often the reader thread recomputes the lows.
 const LOWS_EVERY_MS: u64 = 500;
+/// Frames the reader holds for the session summary before handing them over. It
+/// does so on the `LOWS_EVERY_MS` cadence; at 800 fps that is 400 frames, so the
+/// batch only fills up when stdout arrives in a burst.
+const SESSION_BATCH: usize = 1024;
 /// Points in the frametime graph.
 pub const GRAPH_POINTS: usize = 60;
 /// Game time one graph point covers; 60 of them are the last 12 s.
@@ -378,6 +382,12 @@ pub(crate) struct FrameParser {
     history: History,
     /// Reused copy of the history for the percentile selection, which reorders it.
     scratch: Vec<f32>,
+    /// Whether frames of the reported swapchain are also kept for the session
+    /// summary (`sessionperf`). Set by the reader from the sampler's gate.
+    collect: bool,
+    /// Those frames, until the reader hands them over. Never grows: the reader
+    /// drains it before it reaches `SESSION_BATCH`.
+    session: Vec<f32>,
 }
 
 impl FrameParser {
@@ -389,6 +399,24 @@ impl FrameParser {
             owner: None,
             history: History::new(),
             scratch: Vec::with_capacity(HISTORY_CAP),
+            collect: false,
+            session: Vec::with_capacity(SESSION_BATCH),
+        }
+    }
+
+    pub(crate) fn set_collect(&mut self, on: bool) {
+        self.collect = on;
+    }
+
+    pub(crate) fn session_batch_full(&self) -> bool {
+        self.session.len() >= SESSION_BATCH
+    }
+
+    /// Hand the collected frames to `sink` and start a new batch.
+    pub(crate) fn drain_session(&mut self, sink: impl FnOnce(&[f32])) {
+        if !self.session.is_empty() {
+            sink(&self.session);
+            self.session.clear();
         }
     }
 
@@ -491,6 +519,11 @@ impl FrameParser {
         let reported = self.reported()?;
         if reported == pos {
             self.history.push(ft);
+            // The session summary counts the frames the lows count: the reported
+            // swapchain's, without the gaps.
+            if self.collect && ft <= GAP_MS {
+                self.session.push(ft);
+            }
         }
         let best = &self.chains[reported];
         let avg_ft = best.sum / best.frames.len() as f32;
@@ -507,7 +540,8 @@ fn parse_address(field: &str) -> u64 {
 }
 
 /// Read PresentMon's CSV stream and publish the busiest swapchain's FPS/frametime.
-fn parse_stdout(out: impl std::io::Read) {
+/// `pid` is the process this PresentMon follows; it tags what goes to `sessionperf`.
+fn parse_stdout(out: impl std::io::Read, pid: u32) {
     let mut reader = BufReader::new(out);
     let mut parser = FrameParser::new();
 
@@ -527,6 +561,9 @@ fn parse_stdout(out: impl std::io::Read) {
             Err(_) => break,
         }
         let now = crate::metrics::clock_ms();
+        // Frames count towards the session summary only while the sampler is drawing
+        // over the game in the foreground: one relaxed load per frame.
+        parser.set_collect(crate::sessionperf::sampling());
         if let Some((fps, avg_ft)) = parser.feed(line.trim_end(), now) {
             FRAMETIME_X100.store((avg_ft * 100.0) as u32, Ordering::Relaxed);
             FPS_X100.store((fps * 100.0) as u32, Ordering::Relaxed);
@@ -542,6 +579,10 @@ fn parse_stdout(out: impl std::io::Read) {
                 LOW_1_X100.store(x100(low_1), Ordering::Relaxed);
                 LOW_01_X100.store(x100(low_01), Ordering::Relaxed);
             }
+            // Session summary: one lock per batch, on the same cadence.
+            if lows_due || parser.session_batch_full() {
+                parser.drain_session(|frames| crate::sessionperf::add_frames(pid, frames));
+            }
             // One lock per finished slice (5 per second), not one per frame.
             if parser.graph_version() != graph_version {
                 graph_version = parser.graph_version();
@@ -549,7 +590,9 @@ fn parse_stdout(out: impl std::io::Read) {
             }
         }
     }
-    // Stream ended (game closed / PresentMon stopped): clear stale numbers.
+    // Stream ended (game closed / PresentMon stopped): the last half second still
+    // belongs to the session, then clear stale numbers.
+    parser.drain_session(|frames| crate::sessionperf::add_frames(pid, frames));
     reset();
 }
 
@@ -909,6 +952,59 @@ mod tests {
         assert!(close(low_1, 60.0));
         assert_eq!(low_01, None);
         assert_eq!(percentile_lows(&mut []), (None, None));
+    }
+
+    #[test]
+    fn session_frames_are_the_reported_swapchain_without_gaps_and_only_when_asked() {
+        let mut p = FrameParser::new();
+        p.feed(HEADER, 1);
+        let mut t = 1u64;
+        let mut feed = |p: &mut FrameParser, chain: &str, ft: f32| {
+            t += ft as u64;
+            p.feed(&row(chain, ft), t);
+        };
+
+        // Gate closed (game in the background): nothing is kept.
+        for _ in 0..30 {
+            feed(&mut p, "0x1", FT_60);
+        }
+        p.drain_session(|_| panic!("collected with the gate closed"));
+
+        // Gate open: the game's frames, not the 5 fps UI swapchain's, not the gap.
+        p.set_collect(true);
+        for i in 0..60 {
+            feed(&mut p, "0x1", FT_60);
+            if i % 12 == 0 {
+                feed(&mut p, "0x2", 200.0);
+            }
+        }
+        feed(&mut p, "0x1", 4000.0);
+        let mut got = Vec::new();
+        p.drain_session(|frames| got.extend_from_slice(frames));
+        assert_eq!(got.len(), 60);
+        assert!(got.iter().all(|ft| (*ft - FT_60).abs() < 0.01));
+
+        // Drained means handed over once.
+        p.drain_session(|_| panic!("the batch was not cleared"));
+    }
+
+    #[test]
+    fn the_session_batch_never_reallocates() {
+        let mut p = FrameParser::new();
+        p.feed(HEADER, 1);
+        p.set_collect(true);
+        let capacity = p.session.capacity();
+        let mut handed = 0usize;
+        for i in 0..5000u64 {
+            p.feed(&row("0x1", 2.0), 1 + i * 2);
+            // What the reader does after every row.
+            if p.session_batch_full() {
+                p.drain_session(|frames| handed += frames.len());
+            }
+        }
+        p.drain_session(|frames| handed += frames.len());
+        assert_eq!(handed, 5000);
+        assert_eq!(p.session.capacity(), capacity);
     }
 
     #[test]
