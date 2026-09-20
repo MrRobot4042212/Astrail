@@ -130,7 +130,6 @@ export const en = {
     hideBody: 'Hide «{{name}}»? You can restore it from Settings.',
   },
   toast: {
-    gamepadConnected: 'Controller connected: {{id}}',
     launching: 'Launching {{name}}…',
     launchFailed: 'Could not launch: {{error}}',
     reorderCategoriesFailed: 'Could not reorder categories',

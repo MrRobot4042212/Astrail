@@ -391,15 +391,6 @@ function MainApp() {
     [],
   );
 
-  // Notificación de mando conectado
-  useEffect(() => {
-    const onConnect = (e: GamepadEvent) => {
-      flash(t('toast.gamepadConnected', { id: e.gamepad.id }));
-    };
-    window.addEventListener('gamepadconnected', onConnect);
-    return () => window.removeEventListener('gamepadconnected', onConnect);
-  }, [flash, t]);
-
   // Re-scan from scratch, showing the splash again (reset any earlier skip).
   function handleRescan() {
     setSplashDone(false);

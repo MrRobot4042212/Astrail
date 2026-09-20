@@ -129,7 +129,6 @@ export const es = {
     hideBody: '¿Ocultar «{{name}}»? Podrás restaurarlo desde Ajustes.',
   },
   toast: {
-    gamepadConnected: 'Mando conectado: {{id}}',
     launching: 'Iniciando {{name}}…',
     launchFailed: 'No se pudo iniciar: {{error}}',
     reorderCategoriesFailed: 'No se pudo reordenar las categorías',

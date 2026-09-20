@@ -10,6 +10,11 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
 
 ## [No publicado] — Trabajo en curso
 
+
+### Eliminado
+- El aviso «Mando conectado» al enchufar un mando. Astrail no tiene navegación
+  con mando, y el aviso daba a entender un soporte que no existe.
+
 ### Corregido
 - Pegar como carátula una ruta o un texto con caracteres no ASCII en los primeros
   bytes (por ejemplo `ñandú.png`) cerraba Astrail de golpe: la comprobación de
