@@ -61,6 +61,39 @@ export interface SteamPlaytime {
   last_played: number | null;
 }
 
+/** What `export_user_data` wrote (`backup.rs`). */
+export interface BackupExportReport {
+  path: string;
+  covers: number;
+  /** Covers left out because the file would have grown past its cap. */
+  covers_skipped: number;
+  /** Store files that exist but could not be read; they are not in the backup. */
+  unreadable: string[];
+}
+
+/** What a picked backup holds, shown before the user confirms the import. Every
+ *  value comes from the file, validated in Rust. */
+export interface BackupSummary {
+  file_name: string;
+  /** Unix seconds; 0 when the file does not say. */
+  created: number;
+  app_version: string;
+  manual_apps: number;
+  played_games: number;
+  favorites: number;
+  hidden: number;
+  categories: number;
+  covers: number;
+  includes_settings: boolean;
+}
+
+/** What `apply_user_data_backup` did. */
+export interface BackupImportReport {
+  covers: number;
+  /** Where the data that was replaced went. */
+  safety_copy: string;
+}
+
 export interface Game {
   id: string;
   name: string;

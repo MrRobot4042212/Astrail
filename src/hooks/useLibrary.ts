@@ -378,6 +378,19 @@ export function useLibrary(autoScan: boolean) {
     };
   }, [refreshPlaytimes]);
 
+  // A backup was imported (Settings → "Copia de tus datos"): manual apps, hidden
+  // entries, favorites, categories and chosen covers all changed on disk at once.
+  // The scan is what applies them; play time arrives through `playtime-updated`.
+  useEffect(() => {
+    const un = listen('user-data-imported', () => {
+      refresh();
+      refreshCategories();
+    });
+    return () => {
+      un.then((f) => f());
+    };
+  }, [refresh, refreshCategories]);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {

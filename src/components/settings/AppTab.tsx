@@ -6,6 +6,7 @@
 
 import { useTranslation } from 'react-i18next';
 import type { SettingsModel } from '@/hooks/useSettingsModel';
+import { DataBackupCard } from '../DataBackupCard';
 import { DiagnosticsCard } from '../DiagnosticsCard';
 import { ExternalGamesCard } from '../ExternalGamesCard';
 import { UpdateChannelCard } from '../UpdateChannelCard';
@@ -163,6 +164,7 @@ export function AppTab({ model, onStartTour }: { model: SettingsModel; onStartTo
 
         <ExternalGamesCard />
         <UpdateChannelCard />
+        <DataBackupCard />
         <DiagnosticsCard />
       </div>
     </div>

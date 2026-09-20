@@ -60,6 +60,7 @@ dependencies = [
 name = "astrail"
 version = "0.3.0"
 dependencies = [
+ "base64 0.22.1",
  "discord-rich-presence",
  "log",
  "nvml-wrapper",

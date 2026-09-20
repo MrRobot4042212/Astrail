@@ -80,6 +80,22 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
   más recientemente (no se suman cuentas); un juego sin tiempo en Steam no muestra
   nada en vez de un cero; un juego de Steam que la biblioteca muestra bajo la
   entrada de otra tienda no tiene esta línea.
+- **Copia de tus datos (Ajustes → Aplicación).** «Exportar» guarda en un único
+  archivo lo que un escaneo no puede reconstruir: aplicaciones añadidas a mano,
+  tiempo jugado y sesiones, favoritos, categorías (con sus nombres e iconos),
+  entradas ocultas, tipos cambiados, carátulas elegidas por ti (con la imagen
+  dentro del archivo) y los ajustes. «Importar» muestra primero qué trae el
+  archivo y pide confirmación: **sustituye** los datos actuales, no los mezcla.
+  Antes de tocar nada guarda una copia de seguridad de lo que había en la carpeta
+  de datos (`backups/`, se conservan las dos últimas); si esa copia no se puede
+  escribir, no se importa nada. Lo que el archivo no contiene se deja como está.
+  Límites: el archivo se trata como no fiable (cada parte se valida con su tipo
+  real, una carátula con nombre raro o un archivo cambiado entre la vista previa
+  y la confirmación rechazan la copia entera), pero una aplicación manual apunta
+  al ejecutable que diga el archivo, así que importa solo copias hechas por ti;
+  no incluye la caché de carátulas de IGDB, iconos ni registros; tamaño máximo
+  160 MB (20 MB por carátula); un juego en marcha durante la importación añade su
+  sesión a los datos importados; los motivos de error se muestran en inglés.
 
 ### Cambiado
 - El tiempo de juego ya no depende de haber lanzado el juego desde Astrail (ver
@@ -141,6 +157,8 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
 - Pegar como carátula una ruta o un texto con caracteres no ASCII en los primeros
   bytes (por ejemplo `ñandú.png`) cerraba Astrail de golpe: la comprobación de
   «¿es una URL?» cortaba el texto por bytes. Ahora se trata como una ruta normal.
+- Dos sesiones que terminaban a la vez podían pisarse al escribir el tiempo
+  jugado (lectura-modificación-escritura sin bloqueo); ahora se serializan.
 
 ## [0.3.0] — 2026-09-18
 

@@ -14,19 +14,19 @@ use crate::models::{AppSettings, Category, Game};
 use std::collections::HashMap;
 use std::fs;
 
-const STORE_FILE: &str = "manual_apps.json";
-const OVERRIDES_FILE: &str = "cover_overrides.json";
-const HIDDEN_FILE: &str = "hidden.json";
+pub(crate) const STORE_FILE: &str = "manual_apps.json";
+pub(crate) const OVERRIDES_FILE: &str = "cover_overrides.json";
+pub(crate) const HIDDEN_FILE: &str = "hidden.json";
 const HIDDEN_CACHE_FILE: &str = "hidden_cache.json";
-const FAVORITES_FILE: &str = "favorites.json";
-const CATEGORIES_FILE: &str = "categories.json";
-const CATEGORY_NAMES_FILE: &str = "category_names.json";
-const CATEGORY_ICONS_FILE: &str = "category_icons.json";
-const DISCORD_FILE: &str = "discord.json";
+pub(crate) const FAVORITES_FILE: &str = "favorites.json";
+pub(crate) const CATEGORIES_FILE: &str = "categories.json";
+pub(crate) const CATEGORY_NAMES_FILE: &str = "category_names.json";
+pub(crate) const CATEGORY_ICONS_FILE: &str = "category_icons.json";
+pub(crate) const DISCORD_FILE: &str = "discord.json";
 /// User overrides for an entry's kind: id → "app" | "game". Lets the user fix a
 /// mis-classified item (a game detected as an app, or vice versa).
-const TYPE_OVERRIDES_FILE: &str = "type_overrides.json";
-const SETTINGS_FILE: &str = "app_settings.json";
+pub(crate) const TYPE_OVERRIDES_FILE: &str = "type_overrides.json";
+pub(crate) const SETTINGS_FILE: &str = "app_settings.json";
 
 use tauri::AppHandle;
 
@@ -58,7 +58,7 @@ pub fn save_discord_client_id(app: &AppHandle, id: &str) -> Result<(), String> {
 }
 
 /// Allowed image extensions for a user-supplied (dropped/picked) cover.
-const COVER_EXTS: &[&str] = &["png", "jpg", "jpeg", "webp", "gif", "bmp"];
+pub(crate) const COVER_EXTS: &[&str] = &["png", "jpg", "jpeg", "webp", "gif", "bmp"];
 
 /// Save a user-supplied cover image (dropped or picked from disk) into the
 /// `user_covers` dir under app data, replacing any previous one for this id, and

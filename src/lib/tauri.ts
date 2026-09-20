@@ -3,7 +3,7 @@
 // Additional terms under GPL-3.0 section 7 apply: see ADDITIONAL-TERMS.md
 
 import { invoke } from '@tauri-apps/api/core';
-import type { Game, CoverAnswer, Category, PlayStat, SteamPlaytime, AppSettings, AppSettingsPatch, SystemInfo, MpoDiagnostics, AboutInfo, LegalDocument, UpdateOffer } from './types';
+import type { Game, CoverAnswer, Category, PlayStat, SteamPlaytime, AppSettings, AppSettingsPatch, SystemInfo, MpoDiagnostics, AboutInfo, LegalDocument, UpdateOffer, BackupExportReport, BackupSummary, BackupImportReport } from './types';
 
 /** Unified library across every source (Steam, Epic, GOG, EA, Ubisoft, Xbox, manual). */
 export const getLibrary = () => invoke<Game[]>('get_library');
@@ -196,6 +196,23 @@ export const checkUpdate = () => invoke<UpdateOffer | null>('check_update');
 /** Write the log, crash reports and a system summary into one local text file and
  *  open its folder. Resolves to the file path. Nothing is uploaded. */
 export const exportDiagnostics = () => invoke<string>('export_diagnostics');
+
+/** Save the user's own data (manual apps, play time, favorites, categories, hidden
+ *  entries, chosen covers, settings) to a file picked in a dialog Rust opens.
+ *  Resolves to `null` when the dialog is closed. */
+export const exportUserData = () => invoke<BackupExportReport | null>('export_user_data');
+
+/** Pick a backup and validate it; nothing is written. The path stays in Rust: the
+ *  confirmation acts on "the file that was just checked", never on a path from
+ *  here. Resolves to `null` when the dialog is closed. */
+export const pickUserDataBackup = () => invoke<BackupSummary | null>('pick_user_data_backup');
+
+/** Replace the user's data with the picked backup. Rejects when nothing is picked
+ *  or the file changed since it was checked. */
+export const applyUserDataBackup = () => invoke<BackupImportReport>('apply_user_data_backup');
+
+/** Forget the picked backup. */
+export const discardUserDataBackup = () => invoke<void>('discard_user_data_backup');
 
 /** Append a webview error to the app log. Rust sanitizes and rate-limits it. */
 export const reportFrontendError = (message: string) =>

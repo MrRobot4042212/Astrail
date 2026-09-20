@@ -32,7 +32,12 @@ static FOREGROUND_DIRTY: AtomicBool = AtomicBool::new(false);
 /// no process work at all.
 static WAKE: (Mutex<u64>, Condvar) = (Mutex::new(0), Condvar::new());
 
-const STORE_FILE: &str = "playtime.json";
+pub(crate) const STORE_FILE: &str = "playtime.json";
+/// Serializes every read-modify-write of `playtime.json`. The watcher appends a
+/// session by loading the whole map, pushing and saving; a restore from a backup
+/// replaces the file. Without this a session ending during a restore would write
+/// the pre-restore map back over the restored one.
+static STORE_LOCK: Mutex<()> = Mutex::new(());
 /// In-flight sessions, persisted so an Astrail crash/close doesn't lose time.
 const ACTIVE_FILE: &str = "active_sessions.json";
 /// Snapshot of the library the watcher matches processes against.
@@ -45,7 +50,7 @@ const FULL_SCAN_SECS: u64 = 20;
 /// Cap on stored sessions per game. `playtime.json` is rewritten whole on every
 /// session end, so an unbounded history makes that write grow forever; the
 /// overflow is folded into `seconds`, which is what the UI actually shows.
-const HISTORY_MAX: usize = 500;
+pub(crate) const HISTORY_MAX: usize = 500;
 /// Sessions shorter than this are ignored (a crash, a wrong-process match…).
 const MIN_SESSION_SECS: u64 = 30;
 /// While the tracked set is unchanged, `active_sessions.json` is rewritten at most
@@ -155,6 +160,11 @@ fn push_session(stat: &mut PlayStat, start: u64, end: u64, perf: Option<SessionP
     }
 }
 
+/// Hold this across anything that rewrites `playtime.json` (see `STORE_LOCK`).
+pub(crate) fn store_guard() -> std::sync::MutexGuard<'static, ()> {
+    STORE_LOCK.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
 /// Persist one finished session for a game.
 fn record_session(
     app: &AppHandle,
@@ -163,6 +173,7 @@ fn record_session(
     end: u64,
     perf: Option<SessionPerf>,
 ) -> Result<(), String> {
+    let _guard = store_guard();
     let mut map = load(app);
     push_session(map.entry(id.to_string()).or_default(), start, end, perf);
     jsonstore::save(app, STORE_FILE, &map)

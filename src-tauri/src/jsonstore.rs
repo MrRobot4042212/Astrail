@@ -63,7 +63,7 @@ fn poisoned() -> &'static Mutex<HashSet<String>> {
     POISONED.get_or_init(|| Mutex::new(HashSet::new()))
 }
 
-fn is_poisoned(file: &str) -> bool {
+pub(crate) fn is_poisoned(file: &str) -> bool {
     poisoned()
         .lock()
         .unwrap_or_else(|e| e.into_inner())
