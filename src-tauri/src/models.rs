@@ -109,6 +109,16 @@ pub struct AppSettings {
     /// stable channel a day or two later, unchanged, if nothing breaks.
     #[serde(default)]
     pub update_channel: UpdateChannel,
+    /// Whether a library game started outside Astrail (from its store client, a
+    /// desktop shortcut…) is timed and gets the HUD too. Detection is a foreground
+    /// window event, not a process poll (see `fgwatch.rs`). On by default, also for
+    /// a settings file written before the field existed.
+    #[serde(default = "default_track_external_games")]
+    pub track_external_games: bool,
+}
+
+fn default_track_external_games() -> bool {
+    true
 }
 
 /// Release channel followed by the updater (see `updates.rs`).

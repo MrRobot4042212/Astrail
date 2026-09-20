@@ -334,6 +334,11 @@ export const en = {
     sStorage: 'Storage',
     sDisk: 'Disk',
     // Application preferences
+    aExternal: 'Games started outside Astrail',
+    aExternalBody:
+      'Counts playtime and shows the HUD also when you start a game from your library through its store or a shortcut. Astrail finds out when the game window comes to the front: it does not check processes on a timer and loads nothing into the game.',
+    aExternalLimit:
+      'Games without a store that Astrail detects from the Windows registry start counting on their own after you have opened them once from here; otherwise any unknown tool would start a session. Applications never count.',
     aBeta: 'Beta versions',
     aBetaBody:
       'Get each version a day or two before everyone else. It is exactly the same build that later moves to the stable channel if nobody finds a serious bug.',

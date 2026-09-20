@@ -32,8 +32,22 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
   más nueva, así que nunca se queda atrás. El aviso de actualización indica
   cuándo la versión ofrecida viene del canal beta.
 - La variable de entorno `ASTRAIL_LOG=debug` (o `trace`) sube el nivel de detalle.
+- **Juegos abiertos fuera de Astrail (Ajustes → Avanzado, activado por defecto).**
+  Un juego de tu biblioteca abierto desde Steam, Epic, otra tienda o un acceso
+  directo cuenta ahora tiempo de juego, muestra el HUD y, si lo tienes activado,
+  el estado de Discord, igual que si lo hubieras lanzado desde Astrail. Astrail se
+  entera cuando la ventana del juego pasa a primer plano (un aviso de Windows que
+  llega a nuestro propio proceso): no revisa los procesos cada cierto tiempo y no
+  carga nada dentro del juego. Límites: las aplicaciones nunca abren una sesión
+  por pasar a primer plano, y un juego sin tienda detectado desde el registro de
+  Windows solo cuenta por su cuenta después de haberlo abierto una vez desde
+  Astrail (o de marcarlo como juego); si no, cualquier herramienta desconocida
+  abriría una sesión.
 
 ### Cambiado
+- El tiempo de juego ya no depende de haber lanzado el juego desde Astrail (ver
+  arriba). Quien prefiera el comportamiento anterior puede desactivar «Juegos
+  abiertos fuera de Astrail».
 - Las actualizaciones se comprueban al arrancar **y cada 6 horas**. Antes solo al
   arrancar: un Astrail que vive en la bandeja durante días no se enteraba de una
   versión nueva hasta reiniciarlo.

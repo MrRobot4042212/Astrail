@@ -131,6 +131,12 @@ export interface AppSettings {
   discord_enabled: boolean;
   /** Releases the updater offers. `beta` is opt-in. */
   update_channel: UpdateChannel;
+  /**
+   * Time a library game (and show its HUD) when it was started outside Astrail.
+   * On by default. Registry-detected entries only count once played from Astrail
+   * (or marked as a game); applications never do.
+   */
+  track_external_games: boolean;
 }
 
 export type UpdateChannel = 'stable' | 'beta';

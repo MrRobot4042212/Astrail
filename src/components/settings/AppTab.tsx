@@ -7,6 +7,7 @@
 import { useTranslation } from 'react-i18next';
 import type { SettingsModel } from '@/hooks/useSettingsModel';
 import { DiagnosticsCard } from '../DiagnosticsCard';
+import { ExternalGamesCard } from '../ExternalGamesCard';
 import { UpdateChannelCard } from '../UpdateChannelCard';
 import { ShortcutInput } from './ShortcutInput';
 import { Button, Card, TabHeader, Toggle } from './primitives';
@@ -160,6 +161,7 @@ export function AppTab({ model, onStartTour }: { model: SettingsModel; onStartTo
         </Card>
         )}
 
+        <ExternalGamesCard />
         <UpdateChannelCard />
         <DiagnosticsCard />
       </div>

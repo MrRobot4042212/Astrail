@@ -15,6 +15,7 @@ mod discord;
 mod battlenet;
 mod ea;
 mod epic;
+mod fgwatch;
 mod files;
 mod fingerprint;
 mod gog;
@@ -867,6 +868,10 @@ fn settings_changed(app: &AppHandle, previous: &AppSettings, next: &AppSettings)
         apply_overlay_settings(app, next);
     }
     discord::set_enabled(next.discord_enabled);
+    if previous.track_external_games != next.track_external_games {
+        log::info!("external game tracking: {}", next.track_external_games);
+        playtime::set_external_tracking(next.track_external_games);
+    }
     if previous.update_channel != next.update_channel {
         log::info!("update channel: {:?} -> {:?}", previous.update_channel, next.update_channel);
         // The update prompt checks again right away instead of at the next start.
@@ -1303,6 +1308,9 @@ pub fn run() {
             presentmon::start(handle.clone());
             cputemp::start(handle.clone());
             playtime::start(handle.clone());
+            // Foreground hook for games started outside Astrail. After the watcher:
+            // its first notification (a game already in front) needs someone to wake.
+            playtime::set_external_tracking(settings.track_external_games);
             // Register the global shortcuts
             register_shortcuts(&handle, &settings.shortcuts);
 
@@ -1454,6 +1462,17 @@ mod tests {
         assert_eq!(beta.update_channel, models::UpdateChannel::Beta);
         assert!(apply_settings_patch(&current, serde_json::json!({ "update_channel": "nightly" })).is_err());
         assert!(apply_settings_patch(&current, serde_json::json!({ "update_channel": "Beta" })).is_err());
+    }
+
+    #[test]
+    fn games_started_outside_astrail_are_tracked_unless_a_patch_turns_it_off() {
+        // A settings file written before the field existed must read as on: a
+        // plain `#[serde(default)]` would silently disable it for every upgrade.
+        let current = settings();
+        assert!(current.track_external_games);
+        let off = apply_settings_patch(&current, serde_json::json!({ "track_external_games": false })).unwrap();
+        assert!(!off.track_external_games);
+        assert!(apply_settings_patch(&current, serde_json::json!({ "track_external_games": "no" })).is_err());
     }
 
     #[test]

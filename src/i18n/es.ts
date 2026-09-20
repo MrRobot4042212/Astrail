@@ -333,6 +333,11 @@ export const es = {
     sStorage: 'Almacenamiento',
     sDisk: 'Disco',
     // Preferencias de aplicación
+    aExternal: 'Juegos abiertos fuera de Astrail',
+    aExternalBody:
+      'Cuenta el tiempo de juego y muestra el HUD también cuando abres un juego de tu biblioteca desde su tienda o un acceso directo. Astrail se entera cuando la ventana del juego pasa a primer plano: no revisa los procesos cada cierto tiempo ni carga nada dentro del juego.',
+    aExternalLimit:
+      'Los juegos sin tienda que Astrail detecta desde el registro de Windows empiezan a contarse solos después de abrirlos una vez desde aquí; si no, cualquier herramienta desconocida abriría una sesión. Las aplicaciones nunca cuentan.',
     aBeta: 'Versiones beta',
     aBetaBody:
       'Recibe cada versión uno o dos días antes que el resto. Es exactamente la misma compilación que después pasa al canal estable si nadie encuentra un fallo grave.',

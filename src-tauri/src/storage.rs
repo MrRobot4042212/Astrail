@@ -219,6 +219,7 @@ pub fn load_settings(app: &AppHandle) -> AppSettings {
             language: "system".to_string(),
             discord_enabled: false,
             update_channel: Default::default(),
+            track_external_games: true,
         },
     }
 }

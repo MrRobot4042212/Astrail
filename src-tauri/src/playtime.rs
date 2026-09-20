@@ -5,11 +5,22 @@
 use crate::jsonstore;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Condvar, Mutex, PoisonError};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter};
 
+/// Games the watcher may match, as `(id, registered at)`: the ones launched from
+/// Astrail, plus, while external tracking is on, the ones whose window came to the
+/// foreground on their own (`register_external`). Everything else in the library is
+/// never looked for.
 static LAUNCHED_FROM_ASTRAIL: Mutex<Vec<(String, u64)>> = Mutex::new(Vec::new());
+
+/// Whether games started outside Astrail are picked up (setting
+/// `track_external_games`, see `fgwatch.rs`).
+static EXTERNAL_TRACKING: AtomicBool = AtomicBool::new(false);
+/// Set by the foreground hook, consumed by the watcher.
+static FOREGROUND_DIRTY: AtomicBool = AtomicBool::new(false);
 
 /// Wake signal for the watcher thread: a generation counter plus a condvar.
 ///
@@ -187,6 +198,33 @@ pub fn notify_launched(id: &str) {
     list.push((id.to_string(), now()));
     drop(list);
     wake();
+}
+
+/// Turn the detection of games started outside Astrail on or off. Sessions already
+/// in progress are not affected.
+pub fn set_external_tracking(on: bool) {
+    EXTERNAL_TRACKING.store(on, Ordering::Relaxed);
+    crate::fgwatch::set_enabled(on);
+}
+
+/// The foreground window now belongs to another process (called from the hook
+/// thread in `fgwatch.rs`). Only a flag and a wake: the watcher does the matching.
+pub fn foreground_changed() {
+    FOREGROUND_DIRTY.store(true, Ordering::Relaxed);
+    wake();
+}
+
+/// Register a game that was started outside Astrail, exactly as a launch from here
+/// would have been. Returns `false` when it was registered already.
+fn register_external(id: &str) -> bool {
+    let mut list = LAUNCHED_FROM_ASTRAIL
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
+    if list.iter().any(|(i, _)| i == id) {
+        return false;
+    }
+    list.push((id.to_string(), now()));
+    true
 }
 
 /// Wake the watcher thread (a launch happened, or the library changed).
@@ -382,6 +420,74 @@ fn find_pid(
     pick(&|path| under_install_dir(path, &dir))
 }
 
+/// Whether an install dir is specific enough to claim a process nobody launched from
+/// here. A drive root (`D:\`) would claim every executable on the drive.
+fn is_specific_dir(dir: &str) -> bool {
+    dir.split(['\\', '/']).filter(|c| !c.is_empty()).count() >= 2
+}
+
+/// Library entry that owns the foreground process (`path`, lowercased), for games
+/// started outside Astrail. Mirrors `find_pid`'s tiers so that whatever is matched
+/// here is found again by the scan: the exact executable first, then the install
+/// dir. When install dirs nest, the deepest one wins; on a tie, library order does.
+///
+/// Applications take part on purpose: a tool installed inside a game's folder owns
+/// its own process, and the game must not claim it. Whether the owner may start a
+/// session by itself is `tracked_when_started_outside`'s call, not this one's.
+fn match_foreground<'a>(index: &'a [IndexEntry], path: &str) -> Option<&'a IndexEntry> {
+    let exact = index.iter().find(|e| {
+        e.executable
+            .as_deref()
+            .is_some_and(|x| !x.is_empty() && x.to_lowercase() == path)
+    });
+    if exact.is_some() {
+        return exact;
+    }
+
+    let mut best: Option<(usize, &IndexEntry)> = None;
+    for e in index {
+        let Some(dir) = e.install_dir.as_deref().map(str::to_lowercase) else { continue };
+        if !is_specific_dir(&dir) || !under_install_dir(path, &dir) {
+            continue;
+        }
+        let depth = dir.trim_end_matches(['\\', '/']).len();
+        if best.is_none_or(|(d, _)| depth > d) {
+            best = Some((depth, e));
+        }
+    }
+    best.map(|(_, e)| e)
+}
+
+/// What counts as the user's word that a `Windows` entry is a game: the explicit
+/// "game" type override, or having played it from Astrail before (`kind` and `stat`
+/// are the entry's own records).
+fn is_confirmed_game(kind: Option<&str>, stat: Option<&PlayStat>) -> bool {
+    kind == Some("game") || stat.is_some_and(|s| s.last_played.is_some())
+}
+
+/// Whether an entry may start a play session just by coming to the foreground.
+///
+/// - Applications never: bringing a browser to the front is not a play session.
+/// - `Windows` entries are "probably a game": the registry scan puts everything its
+///   application list does not know there. A guess is good enough to show a tile,
+///   not to time a session, draw the HUD and publish a Discord status over what may
+///   be a tool. They only qualify with the user's word for it (`confirmed_as_game`,
+///   see `is_confirmed_game`; lazy because answering it reads two files).
+/// - Store games and manually added entries always.
+///
+/// Every one of them is still timed when launched from Astrail.
+fn tracked_when_started_outside(
+    source: &crate::models::GameSource,
+    confirmed_as_game: impl FnOnce() -> bool,
+) -> bool {
+    use crate::models::GameSource::{App, Windows};
+    match source {
+        App => false,
+        Windows => confirmed_as_game(),
+        _ => true,
+    }
+}
+
 /// Whether the foreground process (`fg_path`) should replace the tracked pid
 /// (`tracked_path`, `None` when unreadable) between full scans. Mirrors `find_pid`'s
 /// tiers: the exact executable is never displaced by a mere install-dir hit.
@@ -448,9 +554,20 @@ fn proc_alive(pid: u32) -> bool {
     }
 }
 
-/// Start the global playtime watcher: a background thread that polls every
-/// running process and matches them against the **whole library**, so a game is
-/// timed no matter how it was launched (Astrail, Steam, a desktop shortcut…).
+/// Re-read the index only when `get_library` actually rewrote the cache.
+fn refresh_index(app: &AppHandle, index: &mut Vec<IndexEntry>, index_mtime: &mut Option<SystemTime>) {
+    let mtime = library_cache_mtime(app);
+    if mtime != *index_mtime {
+        *index_mtime = mtime;
+        *index = library_index(app);
+    }
+}
+
+/// Start the playtime watcher: a background thread that times the games it was
+/// told about, and nothing else. A game gets there by being launched from Astrail
+/// (`notify_launched`) or, while external tracking is on, by coming to the
+/// foreground on its own (`foreground_changed`). It parks with no timeout while
+/// there is nothing to track; it never enumerates processes on a timer for nobody.
 /// Sessions are accumulated per game id and the frontend is notified on end.
 pub fn start(app: AppHandle) {
     std::thread::spawn(move || {
@@ -458,10 +575,13 @@ pub fn start(app: AppHandle) {
         let mut active: HashMap<String, (u64, u64, u32)> = HashMap::new();
         let mut index = library_index(&app);
         let mut index_mtime = library_cache_mtime(&app);
-        // Seconds since the last full process enumeration. While a game is confirmed
+        // When the last full process enumeration ran. While a game is confirmed
         // running we only do cheap per-PID liveness checks between full scans, so the
         // watcher costs O(active games) instead of O(all processes) during play.
-        let mut since_full = 0u64;
+        // A timestamp, not a tick count: a wake is not always a 5 s poll any more
+        // (every foreground change is one), and counting wakes would turn a few
+        // alt-tabs into a full scan.
+        let mut last_full = 0u64;
         // Game id currently shown in Discord Rich Presence (None = nothing).
         let mut presence: Option<String> = None;
         // Debug: last game name published to the overlay, to log only on change.
@@ -490,6 +610,32 @@ pub fn start(app: AppHandle) {
             );
 
             let ts = now();
+
+            // The foreground moved to another process while external tracking is on:
+            // is it a library game nobody launched from here? Registering it is all
+            // that happens in this block; the scan below picks it up like a launch.
+            #[cfg(windows)]
+            if FOREGROUND_DIRTY.swap(false, Ordering::Relaxed) && EXTERNAL_TRACKING.load(Ordering::Relaxed) {
+                let fg = crate::overlay::foreground_pid();
+                if fg != 0 && fg != std::process::id() && !active.values().any(|v| v.2 == fg) {
+                    refresh_index(&app, &mut index, &mut index_mtime);
+                    let hit = process_path(fg).and_then(|path| {
+                        let owner = match_foreground(&index, &path)?;
+                        tracked_when_started_outside(&owner.source, || {
+                            is_confirmed_game(
+                                crate::storage::load_type_overrides(&app).get(&owner.id).map(String::as_str),
+                                load(&app).get(&owner.id),
+                            )
+                        })
+                        .then(|| owner.id.clone())
+                    });
+                    if let Some(id) = hit {
+                        if !active.contains_key(&id) && register_external(&id) {
+                            log::info!("started outside Astrail: {id} (pid {fg})");
+                        }
+                    }
+                }
+            }
 
             // Mantenemos en la lista de "lanzados" a los juegos que sigan en progreso
             // o que hayan sido lanzados hace menos de 2 minutos (por si tardan en abrir).
@@ -520,12 +666,7 @@ pub fn start(app: AppHandle) {
                 continue;
             }
 
-            // Re-read the index only when `get_library` actually rewrote it.
-            let mtime = library_cache_mtime(&app);
-            if mtime != index_mtime {
-                index_mtime = mtime;
-                index = library_index(&app);
-            }
+            refresh_index(&app, &mut index, &mut index_mtime);
 
             // Full enumeration vs. cheap liveness. A full scan is needed while a
             // launch is still pending (we have no PID yet) and periodically to
@@ -533,7 +674,7 @@ pub fn start(app: AppHandle) {
             // tracked PID is enough. Off-Windows there is no cheap liveness
             // primitive, so always scan.
             #[cfg(windows)]
-            let mut do_full = pending_launch || since_full >= FULL_SCAN_SECS;
+            let mut do_full = pending_launch || ts.saturating_sub(last_full) >= FULL_SCAN_SECS;
             #[cfg(not(windows))]
             let do_full = true;
 
@@ -542,7 +683,6 @@ pub fn start(app: AppHandle) {
 
             #[cfg(windows)]
             if !do_full {
-                since_full += POLL_SECS;
                 // Cheap path: confirm each tracked game's PID is still alive (1 syscall
                 // each) instead of enumerating every process on the system.
                 let mut fg_path: Option<Option<String>> = None;
@@ -574,12 +714,13 @@ pub fn start(app: AppHandle) {
             }
 
             if do_full {
-                since_full = 0;
+                last_full = ts;
                 // (pid, lowercased exe path) captured once, reused for matching + pid.
                 let procs = running_processes();
 
                 for e in &index {
-                    // OPT-IN: only games that are active or were launched via Astrail.
+                    // OPT-IN: only games that are active or were registered (launched
+                    // from Astrail, or seen in the foreground with external tracking on).
                     let is_active = active.contains_key(&e.id);
                     let was_launched = launched.iter().any(|(l_id, _)| l_id == &e.id);
                     if !is_active && !was_launched {
@@ -640,8 +781,8 @@ pub fn start(app: AppHandle) {
                 .max_by_key(|(_, s)| *s)
                 .map(|(id, _)| id);
 
-            // Publish the foreground game (name + pid) to the metrics overlay
-            // ONLY if it was launched from Astrail.
+            // Publish the foreground game (name + pid) to the metrics overlay ONLY
+            // if it was registered (see `LAUNCHED_FROM_ASTRAIL`).
             let show_metrics_for = primary
                 .as_ref()
                 .filter(|id| launched.iter().any(|(l_id, _)| l_id == *id));
@@ -881,5 +1022,134 @@ mod tests {
         assert!(should_persist_active(&one, &one, Some(1_000), 1_000 + ACTIVE_PERSIST_SECS));
         // A session ending is written at once, whatever the interval says.
         assert!(should_persist_active(&one, &[], Some(1_000), 1_005));
+    }
+    fn entry(id: &str, source: crate::models::GameSource, dir: Option<&str>, exe: Option<&str>) -> IndexEntry {
+        IndexEntry {
+            id: id.to_string(),
+            name: id.to_string(),
+            install_dir: dir.map(str::to_string),
+            executable: exe.map(str::to_string),
+            source,
+        }
+    }
+
+    #[test]
+    fn a_game_started_outside_astrail_is_matched_by_its_foreground_process() {
+        use crate::models::GameSource::{Gog, Steam};
+        let index = vec![
+            entry("steam:10", Steam, Some(r"D:\SteamLibrary\steamapps\common\Foo"), None),
+            entry("gog:20", Gog, Some(r"C:\GOG Games\Bar"), Some(r"C:\GOG Games\Bar\bin\Bar.exe")),
+        ];
+        let hit = |path: &str| match_foreground(&index, path).map(|e| e.id.as_str());
+        assert_eq!(hit(r"d:\steamlibrary\steamapps\common\foo\foo.exe"), Some("steam:10"));
+        assert_eq!(hit(r"c:\gog games\bar\bin\bar.exe"), Some("gog:20"));
+        // Anything else in front (a browser, the store client) is nobody's game.
+        assert_eq!(hit(r"c:\program files\mozilla firefox\firefox.exe"), None);
+        assert_eq!(hit(r"c:\program files (x86)\steam\steam.exe"), None);
+        // A sibling that only shares a textual prefix is not inside the install dir.
+        assert_eq!(hit(r"d:\steamlibrary\steamapps\common\foobar\foobar.exe"), None);
+        // Helpers under the install dir never start a session.
+        assert_eq!(hit(r"d:\steamlibrary\steamapps\common\foo\easyanticheat\easyanticheat.exe"), None);
+        assert_eq!(hit(r"d:\steamlibrary\steamapps\common\foo\unitycrashhandler64.exe"), None);
+    }
+
+    #[test]
+    fn an_application_in_front_is_never_a_play_session() {
+        // Browsers and tools are in the library too. Focusing one must not start a
+        // session (or put the HUD over it); they are only timed when launched here.
+        use crate::models::GameSource::{App, Steam};
+        let index = vec![
+            entry("app:firefox", App, Some(r"C:\Program Files\Mozilla Firefox"), Some(r"C:\Program Files\Mozilla Firefox\firefox.exe")),
+            // The Steam client as an app: its dir contains every game of the default library.
+            entry("app:steam", App, Some(r"C:\Program Files (x86)\Steam"), None),
+            entry("steam:10", Steam, Some(r"C:\Program Files (x86)\Steam\steamapps\common\Foo"), None),
+        ];
+        let hit = |path: &str| {
+            match_foreground(&index, path)
+                .filter(|e| tracked_when_started_outside(&e.source, || true))
+                .map(|e| e.id.as_str())
+        };
+        assert_eq!(hit(r"c:\program files\mozilla firefox\firefox.exe"), None);
+        assert_eq!(hit(r"c:\program files (x86)\steam\steam.exe"), None);
+        assert_eq!(hit(r"c:\program files (x86)\steam\steamapps\common\foo\foo.exe"), Some("steam:10"));
+    }
+
+    #[test]
+    fn a_tool_inside_a_game_folder_is_not_the_game() {
+        // The application owns its process: the game around it must not claim it.
+        use crate::models::GameSource::{App, Steam};
+        let index = vec![
+            entry("steam:10", Steam, Some(r"D:\Games\Foo"), None),
+            entry("app:modtool", App, Some(r"D:\Games\Foo\ModTool"), None),
+        ];
+        let owner = match_foreground(&index, r"d:\games\foo\modtool\modtool.exe").map(|e| e.id.as_str());
+        assert_eq!(owner, Some("app:modtool"));
+    }
+
+    #[test]
+    fn a_registry_guess_needs_the_user_to_confirm_it_is_a_game() {
+        // `Windows` means "the application list did not know it", which is also true
+        // of every unknown tool. Focusing one must not time a session, draw the HUD
+        // and publish a Discord status.
+        use crate::models::GameSource::{App, Manual, Steam, Windows};
+        assert!(!tracked_when_started_outside(&Windows, || false));
+        assert!(tracked_when_started_outside(&Windows, || true));
+        assert!(!tracked_when_started_outside(&App, || true));
+        // Store games and hand-added entries never need the override, so its file is
+        // not even read for them.
+        assert!(tracked_when_started_outside(&Steam, || unreachable!("not consulted")));
+        assert!(tracked_when_started_outside(&Manual, || unreachable!("not consulted")));
+
+        // The user's word: the explicit override, or having played it from Astrail.
+        let played = PlayStat { seconds: 60, last_played: Some(1), history: Vec::new() };
+        let never = PlayStat { seconds: 0, last_played: None, history: Vec::new() };
+        assert!(is_confirmed_game(Some("game"), None));
+        assert!(is_confirmed_game(None, Some(&played)));
+        assert!(!is_confirmed_game(None, Some(&never)));
+        assert!(!is_confirmed_game(Some("app"), None));
+        assert!(!is_confirmed_game(None, None));
+    }
+
+    #[test]
+    fn nested_install_dirs_resolve_to_the_deepest_and_the_exact_executable_wins() {
+        use crate::models::GameSource::{Steam, Windows};
+        let index = vec![
+            // A registry entry whose "install location" is the folder holding several games.
+            entry("windows:pack", Windows, Some(r"D:\Games"), None),
+            entry("steam:10", Steam, Some(r"D:\Games\Foo"), None),
+            entry("windows:tool", Windows, Some(r"D:\Games\Foo\Tools"), Some(r"D:\Games\Foo\Tools\Editor.exe")),
+        ];
+        let hit = |path: &str| match_foreground(&index, path).map(|e| e.id.as_str());
+        assert_eq!(hit(r"d:\games\foo\foo.exe"), Some("steam:10"));
+        assert_eq!(hit(r"d:\games\other\other.exe"), Some("windows:pack"));
+        assert_eq!(hit(r"d:\games\foo\tools\editor.exe"), Some("windows:tool"));
+        // Whatever is matched here must be found again by the scan, or the launch
+        // stays pending and forces full scans for two minutes.
+        let procs = procs(&[(7, r"D:\Games\Foo\Foo.exe")]);
+        assert_eq!(find_pid(&procs, Some(r"D:\Games\Foo"), None, 7), Some(7));
+    }
+
+    #[test]
+    fn a_drive_root_never_claims_a_foreground_process() {
+        use crate::models::GameSource::Windows;
+        let index = vec![
+            entry("windows:root", Windows, Some(r"D:\"), None),
+            entry("windows:bare", Windows, Some("D:"), None),
+            entry("windows:empty", Windows, Some(""), None),
+        ];
+        assert!(match_foreground(&index, r"d:\anything\tool.exe").is_none());
+        assert!(is_specific_dir(r"d:\witcher3"));
+        assert!(!is_specific_dir(r"d:\"));
+    }
+
+    #[test]
+    fn an_external_game_is_registered_once() {
+        let id = "test:registered-once";
+        assert!(register_external(id));
+        assert!(!register_external(id));
+        LAUNCHED_FROM_ASTRAIL
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .retain(|(i, _)| i != id);
     }
 }
