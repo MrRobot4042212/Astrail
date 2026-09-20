@@ -1,0 +1,74 @@
+name: promote
+
+# Move a published version from the beta channel to the stable one.
+#
+# `release.yml` publishes every version as a GitHub pre-release, which only
+# installations that opted in to beta see. Once it has been out for a day or two
+# without trouble, run this with the version (`0.3.1`, no `v`): it clears the
+# pre-release flag and marks the release as latest, so
+# "releases/latest/download/latest.json" starts serving it. Nothing is rebuilt; the
+# binary the beta users ran is the one everybody gets.
+#
+# READ THIS BEFORE RUNNING: a promotion offers the version to every installation
+# at its next update check (start-up, then every six hours). It cannot be taken
+# back: the updater never downgrades, so the only fix for a bad stable release is a
+# newer one.
+#
+# `point-beta` repeats only the last step of `release.yml` (copy `latest.json` to
+# the `channel-beta` release), for when the publish went through but that step
+# failed. `release.yml` itself cannot be re-run then: the version is already tagged.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to act on, as X.Y.Z (no "v")'
+        required: true
+        type: string
+      action:
+        description: 'promote = beta -> stable. point-beta = repair the beta pointer.'
+        required: true
+        type: choice
+        default: promote
+        options:
+          - promote
+          - point-beta
+
+# Read-only by default; only the job is granted write.
+permissions:
+  contents: read
+
+# Shares no group with `release.yml` on purpose: a promotion of 0.3.1 must not wait
+# behind a publish of 0.3.2. Two promotions never overlap.
+concurrency:
+  group: promote
+  cancel-in-progress: false
+
+jobs:
+  channel:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      # The script comes from the default branch, never from an arbitrary ref: it
+      # runs with a token that can edit releases.
+      - name: Refuse to run from a ref other than master
+        if: github.ref != 'refs/heads/master'
+        shell: pwsh
+        run: |
+          Write-Error "Run this workflow from master (got '$env:GITHUB_REF')."
+          exit 1
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          sparse-checkout: scripts
+
+      # The inputs reach the script through the environment, never interpolated
+      # into it: a workflow input is free text.
+      - name: ${{ inputs.action }} v${{ inputs.version }}
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTION: ${{ inputs.action }}
+          VERSION: ${{ inputs.version }}
+        run: ./scripts/release-channel.ps1 -Action $env:ACTION -Version $env:VERSION -Repo $env:GITHUB_REPOSITORY

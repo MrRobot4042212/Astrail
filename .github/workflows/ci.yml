@@ -69,6 +69,11 @@ jobs:
       - name: Licensing (SPDX headers and third-party notices)
         run: npm run check:legal
 
+      # The guards that keep an update channel from moving backwards. They only
+      # run for real on a publish, so this is the one place they are exercised.
+      - name: Release channel script self-test
+        run: pwsh scripts/release-channel.ps1 -Action self-test
+
       - name: Build frontend
         run: npm run build
 

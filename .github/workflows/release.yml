@@ -5,12 +5,23 @@ name: release
 # The flow is: work on master → merge master into deploy → this runs. The version
 # comes from the tree (all five files must already agree), and the tag `vX.Y.Z` is
 # created by tauri-action, not by hand. tauri-action creates the GitHub Release and
-# uploads `latest.json`, which the in-app updater reads from the
-# "releases/latest/download/latest.json" endpoint.
+# uploads `latest.json`.
 #
-# READ THIS BEFORE MERGING: there is no draft step. A merge into `deploy` publishes
-# to every existing installation, which auto-updates within minutes. Merge when you
-# mean to ship, not to "save progress".
+# Two channels, one build:
+#   - The release is created as a GitHub *pre-release*. GitHub never serves a
+#     pre-release from "releases/latest/download/latest.json" (the stable endpoint),
+#     so installations on the stable channel do not see it yet.
+#   - Its `latest.json` is then copied to the fixed `channel-beta` release, which is
+#     what installations that opted in to beta read.
+#   - Once the beta has been out for a day or two without trouble, run the `promote`
+#     workflow with the version: it clears the pre-release flag and marks the
+#     release as latest. The binary the beta users ran is the one everybody gets;
+#     nothing is rebuilt.
+#
+# READ THIS BEFORE MERGING: a merge into `deploy` reaches every beta installation
+# within hours, and there is no draft step. Merge when you mean to ship, not to
+# "save progress". A beta that turns out bad is never promoted: fix it, bump the
+# version and merge again.
 on:
   push:
     branches: [deploy]
@@ -171,4 +182,18 @@ jobs:
           releaseName: 'Astrail v__VERSION__'
           releaseBody: 'See CHANGELOG.md for what changed in this version.'
           releaseDraft: false
-          prerelease: false
+          # Beta first: see the header. `promote.yml` clears this flag.
+          prerelease: true
+
+      # Beta installations read `latest.json` from this fixed release, because
+      # GitHub has no "newest release including pre-releases" download URL. The
+      # asset URLs inside it point at the versioned tag, so they stay valid after
+      # the promotion. If this step fails the release itself is fine: beta users
+      # simply get it with everybody else (they also ask the stable endpoint), and
+      # `promote.yml` with action `point-beta` repeats just this step.
+      - name: Point the beta channel at this release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: ./scripts/release-channel.ps1 -Action point-beta -Version $env:VERSION -Repo $env:GITHUB_REPOSITORY -Target $env:GITHUB_SHA
