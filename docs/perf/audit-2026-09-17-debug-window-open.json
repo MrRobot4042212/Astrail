@@ -1,0 +1,38 @@
+﻿{
+    "label":  "audit-2026-09-17-debug-window-open",
+    "captured_utc":  "2026-09-17T00:15:49.6366143Z",
+    "commit":  "9d1b337",
+    "minutes":  2,
+    "machine":  {
+                    "os":  "Microsoft Windows 11 Pro",
+                    "cpu":  "AMD Ryzen 7 7800X3D 8-Core Processor           ",
+                    "cores":  16,
+                    "ram_gb":  31.2
+                },
+    "idle":  {
+                 "cpu_percent_mean":  0.001,
+                 "cpu_percent_max":  0.019,
+                 "context_switches_s":  158312.8,
+                 "threads":  24,
+                 "meteor_private_mb":  9.4,
+                 "meteor_workingset_mb":  42.2,
+                 "webview_processes":  6,
+                 "webview_workingset_mb":  420.6,
+                 "files_written":  [
+                                       "library_cache.json",
+                                       "library_fingerprint.json"
+                                   ],
+                 "files_written_count":  2,
+                 "nvml_loaded":  false,
+                 "adlx_loaded":  false
+             },
+    "caches":  {
+                   "covers_mb":  1.9,
+                   "app_icons_mb":  3.1
+               },
+    "artifacts":  {
+                      "meteor_exe_mb":  null,
+                      "cputemp_exe_mb":  12.9,
+                      "installer_mb":  null
+                  }
+}

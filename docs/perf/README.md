@@ -49,4 +49,4 @@ powershell -File docs\perf\capture.ps1 -Label fase3 -Minutes 10 -Compare docs\pe
 
 | Fichero | Cuándo | Nota |
 |---|---|---|
-| _(pendiente)_ | | Ejecuta la captura `baseline` antes de la Fase 3 |
+| `audit-2026-09-17-debug-window-open.json` | 2026-09-17, commit `9d1b337` | Build **debug** con la ventana **abierta**, 2 min. No es la baseline del procedimiento de arriba; sigue pendiente una de release con la app en bandeja. Claves `meteor_*`: es anterior al renombrado, el script emite `astrail_*` |
