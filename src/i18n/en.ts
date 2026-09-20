@@ -193,6 +193,7 @@ export const en = {
     lows: '1% / 0.1% lows',
     frametime: 'Frametime',
     frametimeGraph: 'Frametime graph',
+    gpuBusy: 'GPU busy (game)',
     gpuUsage: 'GPU usage',
     gpuTemp: 'GPU temp',
     vram: 'VRAM',

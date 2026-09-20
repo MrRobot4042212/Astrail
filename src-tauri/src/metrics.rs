@@ -147,6 +147,8 @@ pub struct MetricsSample {
     pub fps_low_1: Option<f32>,
     pub fps_low_01: Option<f32>,
     pub frametime_graph: Option<crate::presentmon::FrameGraph>,
+    /// PresentMon only: share of the game's frame time its GPU work took.
+    pub gpu_busy_pct: Option<f32>,
 }
 
 /// Apply overlay settings live (called on startup, on settings change, on hotkey).
@@ -156,7 +158,8 @@ pub fn configure(overlay: &crate::models::OverlaySettings) {
         overlay.show_fps
             || overlay.show_frametime
             || overlay.show_lows
-            || overlay.show_frametime_graph,
+            || overlay.show_frametime_graph
+            || overlay.show_gpu_busy,
         Ordering::Relaxed,
     );
     GPU_WANTED.store(
@@ -577,6 +580,7 @@ fn apply_sidecar_fps(sample: &mut MetricsSample, fps: f32) {
     sample.fps_low_1 = None;
     sample.fps_low_01 = None;
     sample.frametime_graph = None;
+    sample.gpu_busy_pct = None;
 }
 
 /// Start the sampler thread. Spawned once from `setup`.
@@ -816,6 +820,7 @@ pub fn start(app: AppHandle) {
                 fps_low_1: None,
                 fps_low_01: None,
                 frametime_graph: None,
+                gpu_busy_pct: None,
             };
             // The LibreHardwareMonitor sidecar's latest reading. CPU temperature is
             // None unless it runs with admin + a loadable driver.
@@ -830,6 +835,7 @@ pub fn start(app: AppHandle) {
             sample.frametime_ms = frames.frametime_ms;
             sample.fps_low_1 = frames.low_1;
             sample.fps_low_01 = frames.low_01;
+            sample.gpu_busy_pct = frames.gpu_busy_pct;
             // The graph is the one reading that takes a lock: only when it is drawn.
             if cfg.as_ref().is_some_and(|c| c.show_frametime_graph) {
                 sample.frametime_graph = crate::presentmon::graph();
@@ -1101,6 +1107,7 @@ mod tests {
             fps_low_1: None,
             fps_low_01: None,
             frametime_graph: None,
+            gpu_busy_pct: None,
         }
     }
 
@@ -1113,12 +1120,14 @@ mod tests {
         s.fps_low_1 = Some(97.0);
         s.fps_low_01 = Some(61.0);
         s.frametime_graph = Some(crate::presentmon::FrameGraph::from_points(&[6.9, 7.1]));
+        s.gpu_busy_pct = Some(93.0);
         apply_sidecar_fps(&mut s, 143.0);
         assert_eq!(s.fps, Some(143.0));
         assert_eq!(s.frametime_ms, None);
         // Per-frame statistics of another source do not survive next to it either.
         assert_eq!((s.fps_low_1, s.fps_low_01), (None, None));
         assert!(s.frametime_graph.is_none());
+        assert_eq!(s.gpu_busy_pct, None);
     }
 
     #[test]

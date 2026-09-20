@@ -133,6 +133,8 @@ export interface OverlaySettings {
   show_lows: boolean;
   /** Frametime graph under the rows. PresentMon only; off by default. */
   show_frametime_graph: boolean;
+  /** Share of the game's frame time its GPU work took. PresentMon only; off by default. */
+  show_gpu_busy: boolean;
   show_gpu: boolean;
   show_gpu_temp: boolean;
   show_vram: boolean;
@@ -299,5 +301,8 @@ export interface MetricsSample {
   fps_low_01?: number | null;
   /** Worst frametime (ms) of each 200 ms slice, oldest first, at most 60. PresentMon only. */
   frametime_graph?: number[] | null;
+  /** GPU work as a share (0-100) of the game's frame time over the last second.
+   *  PresentMon only, and only while every frame carries a reading. */
+  gpu_busy_pct?: number | null;
 }
 

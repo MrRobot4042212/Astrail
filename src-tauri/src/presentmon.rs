@@ -33,6 +33,9 @@ static FRAMETIME_X100: AtomicU32 = AtomicU32::new(0);
 /// 1 % / 0.1 % low FPS as hundredths (0 = not enough frames yet).
 static LOW_1_X100: AtomicU32 = AtomicU32::new(0);
 static LOW_01_X100: AtomicU32 = AtomicU32::new(0);
+/// GPU busy share of the frame time as tenths of a percent, plus one (0 = no data,
+/// so a measured 0.0 % is still distinguishable from "nothing to report").
+static GPU_BUSY_X10: AtomicU32 = AtomicU32::new(0);
 /// `metrics::clock_ms()` of the last published frame (0 = never).
 static LAST_UPDATE_MS: AtomicU64 = AtomicU64::new(0);
 /// Latest frametime graph. Written by the reader thread once per finished slice,
@@ -66,6 +69,8 @@ pub struct FrameStats {
     /// See [`percentile_lows`] for the exact definition.
     pub low_1: Option<f32>,
     pub low_01: Option<f32>,
+    /// See [`FrameParser::gpu_busy_pct`] for the exact definition.
+    pub gpu_busy_pct: Option<f32>,
 }
 
 fn is_live() -> bool {
@@ -91,6 +96,10 @@ pub fn current() -> FrameStats {
         frametime_ms: opt(&FRAMETIME_X100),
         low_1: opt(&LOW_1_X100),
         low_01: opt(&LOW_01_X100),
+        gpu_busy_pct: match GPU_BUSY_X10.load(Ordering::Relaxed) {
+            0 => None,
+            v => Some((v - 1) as f32 / 10.0),
+        },
     }
 }
 
@@ -109,6 +118,7 @@ fn reset() {
     FRAMETIME_X100.store(0, Ordering::Relaxed);
     LOW_1_X100.store(0, Ordering::Relaxed);
     LOW_01_X100.store(0, Ordering::Relaxed);
+    GPU_BUSY_X10.store(0, Ordering::Relaxed);
     LAST_UPDATE_MS.store(0, Ordering::Relaxed);
     *GRAPH.lock().unwrap_or_else(PoisonError::into_inner) = FrameGraph::EMPTY;
 }
@@ -201,6 +211,10 @@ const LOWS_EVERY_MS: u64 = 500;
 /// does so on the `LOWS_EVERY_MS` cadence; at 800 fps that is 400 frames, so the
 /// batch only fills up when stdout arrives in a burst.
 const SESSION_BATCH: usize = 1024;
+/// The GPU busy share needs this much of the window filled, and this many frames,
+/// before it is a share of anything: one long frame is not a trend.
+const MIN_BUSY_WINDOW_MS: f32 = 500.0;
+const MIN_BUSY_FRAMES: usize = 10;
 /// Points in the frametime graph.
 pub const GRAPH_POINTS: usize = 60;
 /// Game time one graph point covers; 60 of them are the last 12 s.
@@ -357,8 +371,17 @@ struct Chain {
     id: u64,
     frames: VecDeque<f32>,
     sum: f32,
+    /// `msGPUActive` of the same frames, in lockstep with `frames`; a frame whose
+    /// row carried no usable value holds `GPU_UNKNOWN`.
+    gpu: VecDeque<f32>,
+    gpu_sum: f32,
+    /// Frames in the window that do carry a value.
+    gpu_known: usize,
     last_ms: u64,
 }
+
+/// Marks a frame without a GPU reading. Negative, so it can never be a real one.
+const GPU_UNKNOWN: f32 = -1.0;
 
 /// Parses PresentMon's CSV and keeps one frame window **per swapchain**.
 ///
@@ -376,6 +399,8 @@ struct Chain {
 pub(crate) struct FrameParser {
     ft_col: Option<usize>,
     sc_col: Option<usize>,
+    /// `msGPUActive`. Optional: PresentMon only writes it while it tracks GPU work.
+    gpu_col: Option<usize>,
     chains: Vec<Chain>,
     /// Swapchain whose frames `history` holds.
     owner: Option<u64>,
@@ -395,6 +420,7 @@ impl FrameParser {
         Self {
             ft_col: None,
             sc_col: None,
+            gpu_col: None,
             chains: Vec::new(),
             owner: None,
             history: History::new(),
@@ -461,6 +487,26 @@ impl FrameParser {
         std::mem::take(&mut self.history.cleared)
     }
 
+    /// Share of the reported swapchain's last second that the GPU spent working on
+    /// its frames: `sum(msGPUActive) / sum(msBetweenPresents)`, as a percentage.
+    ///
+    /// Near 100 % the GPU is what limits the frame rate. A low share only says the
+    /// GPU is **not** the limit; it cannot tell a CPU limit from a frame cap or
+    /// VSync, so nothing here names the CPU.
+    ///
+    /// `None` unless every frame in the window carried a reading, the window is at
+    /// least half full, and the GPU did some work in it: a PresentMon that cannot see
+    /// GPU events writes 0 on every row, which is "unknown", not "0 % busy". GPU work
+    /// of pipelined frames overlaps, so the sum can pass the frame time: capped at 100.
+    pub(crate) fn gpu_busy_pct(&self) -> Option<f32> {
+        let owner = self.owner?;
+        let chain = self.chains.iter().find(|c| c.id == owner)?;
+        let complete = chain.gpu_known == chain.frames.len()
+            && chain.frames.len() >= MIN_BUSY_FRAMES
+            && chain.sum >= MIN_BUSY_WINDOW_MS;
+        (complete && chain.gpu_sum > 0.0).then(|| (chain.gpu_sum / chain.sum * 100.0).min(100.0))
+    }
+
     /// Feed one CSV line read at `now_ms`. Returns `(fps, avg_frametime_ms)` of the
     /// reported swapchain after a valid data row, `None` otherwise.
     pub(crate) fn feed(&mut self, line: &str, now_ms: u64) -> Option<(f32, f32)> {
@@ -474,6 +520,8 @@ impl FrameParser {
                     self.ft_col = Some(i);
                 } else if c == "swapchainaddress" {
                     self.sc_col = Some(i);
+                } else if c == "msgpuactive" {
+                    self.gpu_col = Some(i);
                 }
             }
             return None;
@@ -483,14 +531,18 @@ impl FrameParser {
         // per-line allocation.
         let mut ft: Option<f32> = None;
         let mut chain_id: u64 = 0;
+        let mut gpu: Option<f32> = None;
         for (i, field) in line.split(',').enumerate() {
             if i == ft_idx {
                 ft = field.trim().parse::<f32>().ok();
             } else if Some(i) == self.sc_col {
                 chain_id = parse_address(field);
+            } else if Some(i) == self.gpu_col {
+                gpu = field.trim().parse::<f32>().ok();
             }
         }
         let ft = ft.filter(|v| v.is_finite() && *v > 0.0)?;
+        let gpu = gpu.filter(|v| v.is_finite() && *v >= 0.0);
 
         self.chains.retain(|c| now_ms.saturating_sub(c.last_ms) <= CHAIN_TTL_MS);
         let pos = match self.chains.iter().position(|c| c.id == chain_id) {
@@ -501,7 +553,15 @@ impl FrameParser {
                         self.chains.swap_remove(oldest);
                     }
                 }
-                self.chains.push(Chain { id: chain_id, frames: VecDeque::new(), sum: 0.0, last_ms: now_ms });
+                self.chains.push(Chain {
+                    id: chain_id,
+                    frames: VecDeque::new(),
+                    sum: 0.0,
+                    gpu: VecDeque::new(),
+                    gpu_sum: 0.0,
+                    gpu_known: 0,
+                    last_ms: now_ms,
+                });
                 self.chains.len() - 1
             }
         };
@@ -510,9 +570,18 @@ impl FrameParser {
         chain.last_ms = now_ms;
         chain.frames.push_back(ft);
         chain.sum += ft;
+        chain.gpu.push_back(gpu.unwrap_or(GPU_UNKNOWN));
+        if let Some(g) = gpu {
+            chain.gpu_sum += g;
+            chain.gpu_known += 1;
+        }
         while chain.sum > WINDOW_MS && chain.frames.len() > 1 {
             if let Some(old) = chain.frames.pop_front() {
                 chain.sum -= old;
+            }
+            if let Some(old) = chain.gpu.pop_front().filter(|g| *g >= 0.0) {
+                chain.gpu_sum = (chain.gpu_sum - old).max(0.0);
+                chain.gpu_known = chain.gpu_known.saturating_sub(1);
             }
         }
 
@@ -567,6 +636,10 @@ fn parse_stdout(out: impl std::io::Read, pid: u32) {
         if let Some((fps, avg_ft)) = parser.feed(line.trim_end(), now) {
             FRAMETIME_X100.store((avg_ft * 100.0) as u32, Ordering::Relaxed);
             FPS_X100.store((fps * 100.0) as u32, Ordering::Relaxed);
+            GPU_BUSY_X10.store(
+                parser.gpu_busy_pct().map_or(0, |p| (p * 10.0).round() as u32 + 1),
+                Ordering::Relaxed,
+            );
             LAST_UPDATE_MS.store(now, Ordering::Relaxed);
 
             // The lows move slowly and cost a copy of the history: twice a second,
@@ -1122,6 +1195,124 @@ mod tests {
         let json = serde_json::to_string(&FrameGraph::from_points(&[16.5, 33.0])).expect("json");
         assert_eq!(json, "[16.5,33.0]");
     }
+
+    /// The same stream with GPU tracking on: the parser finds columns by name, so
+    /// only the two names matter here, not their position.
+    const GPU_HEADER: &str = "Application,ProcessID,SwapChainAddress,Runtime,SyncInterval,PresentFlags,Dropped,TimeInSeconds,msInPresentAPI,msBetweenPresents,msUntilRenderStart,msGPUActive";
+
+    fn gpu_row(chain: &str, ft: f32, gpu: &str) -> String {
+        format!("game.exe,1234,{chain},DXGI,0,0,0,1.0,0.1,{ft},0.5,{gpu}")
+    }
+
+    /// `count` frames of 10 ms on one swapchain, each with the same GPU field.
+    fn gpu_feed(p: &mut FrameParser, start_ms: u64, count: u64, gpu: &str) -> u64 {
+        for i in 0..count {
+            p.feed(&gpu_row("0x00000001", 10.0, gpu), start_ms + i * 10);
+        }
+        start_ms + count * 10
+    }
+
+    #[test]
+    fn gpu_busy_is_the_gpu_share_of_the_frame_time() {
+        let mut p = FrameParser::new();
+        p.feed(GPU_HEADER, 1);
+        gpu_feed(&mut p, 1, 150, "9.3");
+        let busy = p.gpu_busy_pct().expect("a full window of readings");
+        assert!((busy - 93.0).abs() < 0.1, "busy {busy}");
+    }
+
+    #[test]
+    fn without_the_gpu_column_nothing_is_reported() {
+        let mut p = FrameParser::new();
+        p.feed(HEADER, 1);
+        for i in 0..150 {
+            p.feed(&row("0x00000001", 10.0), 1 + i * 10);
+        }
+        assert_eq!(p.gpu_busy_pct(), None);
+    }
+
+    #[test]
+    fn an_all_zero_gpu_column_is_unknown_not_idle() {
+        // A PresentMon that cannot see GPU events still writes the column, as zeros.
+        let mut p = FrameParser::new();
+        p.feed(GPU_HEADER, 1);
+        gpu_feed(&mut p, 1, 150, "0.000");
+        assert_eq!(p.gpu_busy_pct(), None);
+    }
+
+    #[test]
+    fn a_missing_gpu_reading_hides_the_share_until_it_leaves_the_window() {
+        let mut p = FrameParser::new();
+        p.feed(GPU_HEADER, 1);
+        let t = gpu_feed(&mut p, 1, 100, "5.0");
+        assert!(p.gpu_busy_pct().is_some());
+        let t = gpu_feed(&mut p, t, 1, "NA");
+        let t = gpu_feed(&mut p, t, 50, "5.0");
+        assert_eq!(p.gpu_busy_pct(), None, "a partial sum would read low");
+        gpu_feed(&mut p, t, 120, "5.0");
+        let busy = p.gpu_busy_pct().expect("the gap rolled out of the window");
+        assert!((busy - 50.0).abs() < 0.1, "busy {busy}");
+    }
+
+    #[test]
+    fn gpu_busy_waits_for_half_a_window() {
+        let mut p = FrameParser::new();
+        p.feed(GPU_HEADER, 1);
+        let t = gpu_feed(&mut p, 1, 49, "8.0");
+        assert_eq!(p.gpu_busy_pct(), None, "490 ms of frames");
+        gpu_feed(&mut p, t, 1, "8.0");
+        assert!(p.gpu_busy_pct().is_some(), "500 ms of frames");
+
+        // Enough time, too few frames: a slideshow says nothing about the GPU.
+        let mut slow = FrameParser::new();
+        slow.feed(GPU_HEADER, 1);
+        for i in 0..5 {
+            slow.feed(&gpu_row("0x00000001", 190.0, "100.0"), 1 + i * 190);
+        }
+        assert_eq!(slow.gpu_busy_pct(), None);
+    }
+
+    #[test]
+    fn overlapping_gpu_work_is_capped_at_100() {
+        let mut p = FrameParser::new();
+        p.feed(GPU_HEADER, 1);
+        gpu_feed(&mut p, 1, 150, "14.0");
+        assert_eq!(p.gpu_busy_pct(), Some(100.0));
+    }
+
+    #[test]
+    fn gpu_busy_follows_the_reported_swapchain() {
+        // The 30 fps embedded UI barely uses the GPU; the share shown next to the
+        // game's FPS must be the game's.
+        let mut p = FrameParser::new();
+        p.feed(GPU_HEADER, 1);
+        let (ft_game, ft_ui) = (1000.0f32 / 144.0, 1000.0f32 / 30.0);
+        let (mut t_game, mut t_ui) = (0.0f32, 0.0f32);
+        while t_game < 3000.0 {
+            if t_ui <= t_game {
+                p.feed(&gpu_row("0x000002AA", ft_ui, "1.0"), 1 + t_ui as u64);
+                t_ui += ft_ui;
+            } else {
+                let gpu = format!("{}", ft_game * 0.9);
+                p.feed(&gpu_row("0x000001BB", ft_game, &gpu), 1 + t_game as u64);
+                t_game += ft_game;
+            }
+        }
+        let busy = p.gpu_busy_pct().expect("the game swapchain has readings");
+        assert!((busy - 90.0).abs() < 0.5, "busy {busy}");
+    }
+
+    #[test]
+    fn nothing_is_reported_without_a_fresh_frame() {
+        // The only test that touches the published statics.
+        LOW_1_X100.store(5_000, Ordering::Relaxed);
+        GPU_BUSY_X10.store(931, Ordering::Relaxed);
+        *GRAPH.lock().unwrap_or_else(PoisonError::into_inner) = FrameGraph::from_points(&[10.0, 12.0]);
+        reset();
+        assert_eq!(current(), FrameStats::default());
+        assert_eq!(graph(), None);
+    }
+
     #[test]
     fn swapchain_addresses_parse_with_or_without_prefix() {
         assert_eq!(parse_address(" 0x0000020F3A1B2C40 "), 0x0000_020F_3A1B_2C40);

@@ -59,6 +59,18 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
   a media altura y el doble llena la barra), así que muestra la forma, no valores
   absolutos; los tirones de más de 1.5 veces la mediana se pintan en el color de
   acento. La vista previa de Ajustes dibuja la misma regla.
+- **Fila «GPU busy» en el HUD (opcional, desactivada por defecto).** Qué parte del
+  tiempo de frame del juego se fue en trabajo de GPU durante el último segundo
+  (suma de `msGPUActive` de PresentMon entre suma de tiempos de frame, con tope en
+  100 % porque el trabajo de frames consecutivos se solapa). Cerca del 100 % la GPU
+  es lo que limita los FPS, y la fila pasa al color de acento a partir del 95 %.
+  Un valor bajo solo dice que la GPU **no** es el límite: puede ser la CPU, un
+  límite de FPS o VSync, y esta medida no los distingue, así que Astrail no señala
+  a la CPU. La fila solo aparece si todos los frames de la ventana traen lectura y
+  hay al menos medio segundo de datos; una columna toda a cero (PresentMon sin
+  acceso a los eventos de GPU) se trata como «sin dato», no como 0 %. Requiere
+  PresentMon (administrador); con el contador de FPS de AMD no se muestra. Aún no
+  se ha validado con un juego real: por eso viene apagada.
 - **Resumen de rendimiento por sesión (ficha del juego).** Cada sesión guarda ahora
   lo que midió el HUD: FPS medios (frames entre tiempo, no la media de las
   lecturas), mínimo 1 % de toda la sesión y temperatura máxima de GPU y de CPU. La

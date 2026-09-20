@@ -222,6 +222,11 @@ pub struct OverlaySettings {
     /// the HUD redraw on every tick instead of only when a number changes.
     #[serde(default)]
     pub show_frametime_graph: bool,
+    /// Share of the game's frame time its GPU work took (PresentMon `msGPUActive`).
+    /// Off by default: not every driver reports it, and the row is only drawn while
+    /// every frame in the window carries a reading.
+    #[serde(default)]
+    pub show_gpu_busy: bool,
     #[serde(default = "yes")]
     pub show_gpu: bool,
     #[serde(default = "yes")]
@@ -272,6 +277,7 @@ impl Default for OverlaySettings {
             show_frametime: true,
             show_lows: true,
             show_frametime_graph: false,
+            show_gpu_busy: false,
             show_gpu: true,
             show_gpu_temp: true,
             show_cpu_temp: false,

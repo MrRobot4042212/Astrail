@@ -15,6 +15,7 @@ export const OVERLAY_METRICS: { key: OverlayMetricKey; tKey: string }[] = [
   { key: 'show_lows', tKey: 'metrics.lows' },
   { key: 'show_frametime', tKey: 'metrics.frametime' },
   { key: 'show_frametime_graph', tKey: 'metrics.frametimeGraph' },
+  { key: 'show_gpu_busy', tKey: 'metrics.gpuBusy' },
   { key: 'show_gpu', tKey: 'metrics.gpuUsage' },
   { key: 'show_gpu_temp', tKey: 'metrics.gpuTemp' },
   { key: 'show_vram', tKey: 'metrics.vram' },
@@ -48,8 +49,19 @@ export const PREVIEW_SAMPLE: MetricsSample = {
   fps_low_1: 112,
   fps_low_01: 84,
   frametime_graph: PREVIEW_GRAPH,
+  gpu_busy_pct: 97,
   cpu_temp_c: 68,
 };
+
+/** Same threshold as the native HUD (`overlay::GPU_BOUND_PCT`). */
+export const GPU_BOUND_PCT = 95;
+
+/** Whether the GPU is what limits the frame rate. A share below the threshold only
+ *  says "not the GPU": it can be the CPU, a frame cap or VSync, so nothing is
+ *  highlighted for it. */
+export function gpuBound(busyPct: number): boolean {
+  return Number.isFinite(busyPct) && busyPct >= GPU_BOUND_PCT;
+}
 
 /** A bar never disappears: a very fast slice still leaves a mark. */
 const GRAPH_MIN_BAR = 0.06;

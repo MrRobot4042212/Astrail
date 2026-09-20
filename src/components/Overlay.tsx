@@ -7,7 +7,7 @@
 import { useEffect } from 'react';
 import { setOverlayInteractive } from '@/lib/tauri';
 import type { MetricsSample, OverlaySettings } from '@/lib/types';
-import { graphBar, graphBaseline } from '@/lib/overlayMetrics';
+import { gpuBound, graphBar, graphBaseline } from '@/lib/overlayMetrics';
 import { OverlaySettingsScreen } from './OverlaySettingsScreen';
 
 /** Corner placement → fixed-position classes. */
@@ -94,6 +94,13 @@ export function OverlayPanel({
   }
   if (cfg.show_frametime && sample.frametime_ms != null) {
     rows.push({ label: 'Frame', value: `${sample.frametime_ms.toFixed(1)} ms`, color: valueColor });
+  }
+  if (cfg.show_gpu_busy && sample.gpu_busy_pct != null) {
+    rows.push({
+      label: 'GPU busy',
+      value: `${sample.gpu_busy_pct.toFixed(0)}%`,
+      color: gpuBound(sample.gpu_busy_pct) ? accentColor : valueColor,
+    });
   }
   if (cfg.show_gpu && sample.gpu_usage != null) {
     rows.push({ label: 'GPU', value: `${sample.gpu_usage}%`, color: accentColor });

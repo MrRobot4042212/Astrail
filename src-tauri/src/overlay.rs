@@ -65,6 +65,16 @@ pub(crate) fn temp_rgb(c: u32) -> (u8, u8, u8) {
     }
 }
 
+/// From this share of the frame time up, the GPU is what limits the frame rate and
+/// the row takes the accent colour. Below it the row stays neutral on purpose: a low
+/// share means "not the GPU", which can be the CPU, a frame cap or VSync, and this
+/// reading cannot tell them apart. Mirrored by `GPU_BOUND_PCT` in `overlayMetrics.ts`.
+pub(crate) const GPU_BOUND_PCT: f32 = 95.0;
+
+pub(crate) fn gpu_bound(busy_pct: f32) -> bool {
+    busy_pct >= GPU_BOUND_PCT
+}
+
 /// Build the HUD title + visible rows from the config + sample (single source of
 /// truth shared by both backends, so the metric list never drifts).
 pub(crate) fn build_rows(cfg: &OverlaySettings, m: &MetricsSample) -> (Option<String>, Vec<HudRow>) {
@@ -90,6 +100,12 @@ pub(crate) fn build_rows(cfg: &OverlaySettings, m: &MetricsSample) -> (Option<St
     if cfg.show_frametime {
         if let Some(ft) = m.frametime_ms {
             rows.push(HudRow { label: "Frame", value: format!("{:.1} ms", ft), rgb: value });
+        }
+    }
+    if cfg.show_gpu_busy {
+        if let Some(p) = m.gpu_busy_pct {
+            let rgb = if gpu_bound(p) { accent } else { value };
+            rows.push(HudRow { label: "GPU busy", value: format!("{:.0}%", p), rgb });
         }
     }
     if cfg.show_gpu {
@@ -333,7 +349,32 @@ mod tests {
             fps_low_1: None,
             fps_low_01: None,
             frametime_graph: None,
+            gpu_busy_pct: None,
         }
+    }
+
+    #[test]
+    fn the_gpu_busy_row_is_opt_in_and_only_accents_a_gpu_limit() {
+        let on = OverlaySettings { show_gpu_busy: true, ..OverlaySettings::default() };
+        let accent = parse_rgb(&on.accent_color);
+        let value = parse_rgb(&on.value_color);
+        assert_ne!(accent, value, "the test needs two colours to tell apart");
+        let mut m = sample(None);
+        m.frametime_ms = Some(7.0);
+        let row = |cfg: &OverlaySettings, m: &MetricsSample| {
+            build_rows(cfg, m).1.into_iter().find(|r| r.label == "GPU busy")
+        };
+        assert!(row(&on, &m).is_none(), "no reading, no row");
+        m.gpu_busy_pct = Some(62.4);
+        assert!(row(&OverlaySettings::default(), &m).is_none(), "off by default");
+        let low = row(&on, &m).expect("row");
+        assert_eq!((low.value.as_str(), low.rgb), ("62%", value));
+        m.gpu_busy_pct = Some(97.2);
+        let high = row(&on, &m).expect("row");
+        assert_eq!((high.value.as_str(), high.rgb), ("97%", accent));
+        // Right after the frametime it explains.
+        let labels: Vec<_> = build_rows(&on, &m).1.iter().map(|r| r.label).collect();
+        assert_eq!(labels, ["Frame", "GPU busy", "RAM"]);
     }
 
     #[test]

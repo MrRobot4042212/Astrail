@@ -7,9 +7,11 @@ import { describe, expect, it } from 'vitest';
 import { en } from '../i18n/en';
 import { es } from '../i18n/es';
 import {
+  GPU_BOUND_PCT,
   GRAPH_POINTS,
   OVERLAY_METRICS,
   PREVIEW_SAMPLE,
+  gpuBound,
   graphBar,
   graphBaseline,
 } from './overlayMetrics';
@@ -53,5 +55,19 @@ describe('overlay metric switches', () => {
   it('lists every switch once', () => {
     const keys = OVERLAY_METRICS.map((m) => m.key);
     expect(new Set(keys).size).toBe(keys.length);
+  });
+});
+
+describe('gpu busy', () => {
+  it('only a share at the threshold or above counts as a GPU limit', () => {
+    expect(gpuBound(GPU_BOUND_PCT)).toBe(true);
+    expect(gpuBound(100)).toBe(true);
+    expect(gpuBound(GPU_BOUND_PCT - 0.1)).toBe(false);
+    expect(gpuBound(0)).toBe(false);
+    expect(gpuBound(Number.NaN)).toBe(false);
+  });
+
+  it('the preview shows the highlighted state', () => {
+    expect(gpuBound(PREVIEW_SAMPLE.gpu_busy_pct ?? 0)).toBe(true);
   });
 });
