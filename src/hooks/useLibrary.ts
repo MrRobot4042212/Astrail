@@ -6,19 +6,37 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { listen } from '@tauri-apps/api/event';
-import type { Game, Category, PlayStat } from '@/lib/types';
+import type { Game, Category, CoverAnswer, PlayStat } from '@/lib/types';
 import {
   getLibrary,
   cachedLibrary,
-  resolveCover,
+  resolveCovers,
   listCategories,
-  appIcon,
+  appIcons,
   allPlaytime,
   libraryChanged,
 } from '@/lib/tauri';
+import {
+  applyLedger,
+  chunks,
+  clearLedger,
+  copyLedger,
+  COVER_BATCH,
+  coverKey,
+  coverRecord,
+  ICON_BATCH,
+  iconKey,
+  mergeScan,
+  newLedger,
+  nextRetry,
+  pendingCovers,
+  pendingIcons,
+  ScanClock,
+  shouldStopPass,
+  type PassOutcome,
+  type PassToken,
+} from '@/lib/libraryState';
 
-/** Resolve covers a few at a time to stay under IGDB's ~4 req/s rate limit. */
-const COVER_CONCURRENCY = 3;
 /** How often to look for newly installed/removed games. */
 const REFRESH_INTERVAL_MS = 15 * 60 * 1000;
 /** Art results are applied in batches this often, instead of one render each. */
@@ -46,31 +64,40 @@ export function useLibrary(autoScan: boolean) {
   const booted = useRef(false);
   // Ensures the initial scan fires at most once.
   const started = useRef(false);
-  // Bumped on each refresh so a stale in-flight cover pass can bail out.
-  const runId = useRef(0);
-  // Ids already resolved (or confirmed coverless) this session, so a refresh does
-  // not re-ask the backend for art it has already answered.
-  const artDone = useRef(new Set<string>());
+  // Which scan owns the screen and which art pass is alive (rules and their
+  // history in `libraryState.ts`).
+  const clock = useRef(new ScanClock());
+  // Mirror of `booting` for code that runs outside render.
+  const splashOn = useRef(false);
+  // What the backend has answered this session (see `libraryState.ts`), so a
+  // refresh does not re-ask for art it already has an answer for.
+  const ledger = useRef(newLedger());
 
   // --- Batched art application ---------------------------------------------
   // The cover pass resolves hundreds of entries; applying each one with its own
   // `setGames` produced one React commit per item (and, with the grid rendered
-  // from this state, a full filter+sort each time). Results are collected here
-  // and flushed together.
-  const pendingArt = useRef(new Map<string, Partial<Game>>());
+  // from this state, a full filter+sort each time). Answers go into the ledger
+  // and the list is re-dressed from it once per batch.
+  const artDirty = useRef(false);
   const flushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const flushArt = useCallback(() => {
-    flushTimer.current = null;
-    if (pendingArt.current.size === 0) return;
-    const batch = pendingArt.current;
-    pendingArt.current = new Map();
-    setGames((prev) => prev.map((g) => (batch.has(g.id) ? { ...g, ...batch.get(g.id) } : g)));
+    if (flushTimer.current !== null) {
+      clearTimeout(flushTimer.current);
+      flushTimer.current = null;
+    }
+    if (!artDirty.current) return;
+    artDirty.current = false;
+    // A snapshot, so the updater does not read a ref that keeps changing.
+    const answers = copyLedger(ledger.current);
+    setGames((prev) => applyLedger(prev, answers));
   }, []);
 
-  const queueArt = useCallback(
-    (id: string, patch: Partial<Game>) => {
-      pendingArt.current.set(id, { ...pendingArt.current.get(id), ...patch });
+  const recordArt = useCallback(
+    (kind: 'covers' | 'icons', key: string, value: string | null) => {
+      ledger.current[kind].set(key, value);
+      if (!value) return;
+      artDirty.current = true;
       if (flushTimer.current === null) {
         flushTimer.current = setTimeout(flushArt, ART_FLUSH_MS);
       }
@@ -85,77 +112,148 @@ export function useLibrary(autoScan: boolean) {
     [],
   );
 
-  const resolveCovers = useCallback(
-    async (list: Game[], myRun: number) => {
-      // IGDB is a *games* database, so resolving covers for apps yields wrong art
-      // (e.g. the Brave browser → the movie "Brave"). Apps use their exe icon
-      // instead; only fetch covers for entries that still lack one and aren't apps.
-      const pending = list.filter(
-        (g) => !g.cover_url && g.source !== 'app' && !artDone.current.has(g.id),
-      );
+  const endSplash = useCallback(() => {
+    booted.current = true;
+    splashOn.current = false;
+    setBooting(false);
+  }, []);
+
+  // One pass over the entries that still need a cover, one IPC call per chunk.
+  // Concurrency and IGDB's rate limit are the backend's business (`resolve_covers`).
+  const coverPass = useCallback(
+    async (list: Game[], pass: PassToken): Promise<PassOutcome> => {
+      const live = () => clock.current.isLive(pass);
+      const pending = pendingCovers(list, ledger.current);
       const total = pending.length;
-      // The progress bar only exists during the first-run splash.
-      if (booted.current === false) setCoverProgress({ done: 0, total });
-      let i = 0;
+      const outcome: PassOutcome = { answered: 0, unavailable: 0 };
+      // The progress bar only exists while the splash is up.
+      if (splashOn.current) setCoverProgress({ done: 0, total });
       let done = 0;
 
-      const worker = async () => {
-        while (i < pending.length) {
-          const game = pending[i++];
-          if (runId.current !== myRun) return; // a newer refresh superseded us
-          try {
-            const url = await resolveCover(game.name);
-            if (url && runId.current === myRun) queueArt(game.id, { cover_url: url });
-            // Remember the answer either way: a miss is cached in Rust for days,
-            // so asking again on the next refresh only burns IPC round-trips.
-            artDone.current.add(game.id);
-          } catch {
-            // Leave the placeholder; one missing cover shouldn't break the rest.
-          } finally {
-            done++;
-            if (runId.current === myRun && booted.current === false) {
-              setCoverProgress({ done, total });
-            }
-          }
+      for (const chunk of chunks(pending, COVER_BATCH)) {
+        if (!live()) break; // a newer scan took over, or the cache was wiped
+        let answers: CoverAnswer[] = [];
+        try {
+          answers = await resolveCovers(chunk.map((g) => g.name));
+        } catch {
+          // Nothing recorded, so these names are asked again; one failed call
+          // does not break the rest.
         }
-      };
+        chunk.forEach((game, n) => {
+          const value = coverRecord(answers[n]);
+          if (value === undefined) {
+            // Nobody could be asked. That is not an answer and is never recorded:
+            // it used to arrive as `null`, which made an offline start mark every
+            // cover as missing for the whole session.
+            outcome.unavailable++;
+            return;
+          }
+          outcome.answered++;
+          // Recorded even if a newer pass has taken over meanwhile: the answer is
+          // about the name, not about the run. A miss is recorded too: Rust caches
+          // it for days, so asking again on the next refresh only burns IPC.
+          if (clock.current.sameCache(pass)) recordArt('covers', coverKey(game.name), value);
+        });
+        done += chunk.length;
+        if (live() && splashOn.current) setCoverProgress({ done, total });
+        if (shouldStopPass(answers)) {
+          // A whole chunk without an answer: the service is unreachable, so the
+          // rest would only queue up behind the same timeouts.
+          outcome.unavailable += total - done;
+          break;
+        }
+      }
 
-      await Promise.all(Array.from({ length: Math.min(COVER_CONCURRENCY, total) }, worker));
       flushArt();
+      return outcome;
     },
-    [flushArt, queueArt],
+    [flushArt, recordArt],
+  );
+
+  // The cover pass that is waiting to ask again, and how many passes in a row got
+  // no answer at all (rules in `libraryState.ts::nextRetry`).
+  const coverRetry = useRef<{ timer: ReturnType<typeof setTimeout>; cancel: () => void } | null>(
+    null,
+  );
+  const fruitless = useRef(0);
+  const disposed = useRef(false);
+
+  const cancelCoverRetry = useCallback(() => {
+    const waiting = coverRetry.current;
+    if (waiting === null) return;
+    coverRetry.current = null;
+    clearTimeout(waiting.timer);
+    waiting.cancel();
+  }, []);
+
+  /** Resolves `true` when the delay elapsed, `false` when it was cancelled. */
+  const waitForRetry = useCallback(
+    (delayMs: number) =>
+      new Promise<boolean>((resolve) => {
+        const timer = setTimeout(() => {
+          coverRetry.current = null;
+          resolve(true);
+        }, delayMs);
+        coverRetry.current = { timer, cancel: () => resolve(false) };
+      }),
+    [],
+  );
+
+  useEffect(() => {
+    disposed.current = false;
+    return () => {
+      disposed.current = true;
+      cancelCoverRetry();
+    };
+  }, [cancelCoverRetry]);
+
+  // The cover pass, and then again for whatever could not be asked (offline at
+  // start-up, IGDB rate limit). Nothing else would ask: the periodic refresh only
+  // scans when a store changed.
+  const resolveCoversFor = useCallback(
+    async (list: Game[], pass: PassToken) => {
+      let outcome: PassOutcome;
+      try {
+        outcome = await coverPass(list, pass);
+      } finally {
+        // The latest pass closes the splash, whichever scan opened it. Only the
+        // first pass does: a retry runs long after the splash is gone.
+        if (clock.current.isLatest(pass)) endSplash();
+      }
+      while (!disposed.current && clock.current.isLive(pass)) {
+        const retry = nextRetry(outcome, fruitless.current);
+        fruitless.current = retry.fruitless;
+        if (retry.delayMs === null) return;
+        if (!(await waitForRetry(retry.delayMs))) return;
+        if (disposed.current || !clock.current.isLive(pass)) return;
+        outcome = await coverPass(list, pass);
+      }
+    },
+    [coverPass, endSplash, waitForRetry],
   );
 
   // Resolve real exe icons for apps that have no cover and no known brand logo.
-  // Local extraction (no network/rate limit), so a higher concurrency is fine.
-  const resolveIcons = useCallback(
-    async (list: Game[], myRun: number) => {
-      const pending = list.filter(
-        (g) =>
-          g.source === 'app' &&
-          !g.cover_url &&
-          !g.icon &&
-          g.executable &&
-          !artDone.current.has(g.id),
-      );
-      let i = 0;
-      const worker = async () => {
-        while (i < pending.length) {
-          const game = pending[i++];
-          if (runId.current !== myRun) return;
-          try {
-            const path = await appIcon(game.executable as string);
-            if (path && runId.current === myRun) queueArt(game.id, { icon: path });
-            artDone.current.add(game.id);
-          } catch {
-            // No icon is fine: the card falls back to the letter placeholder.
-          }
+  // Asked by id: the backend looks the executable up itself, the webview never
+  // names a path.
+  const resolveIconsFor = useCallback(
+    async (list: Game[], pass: PassToken) => {
+      const pending = pendingIcons(list, ledger.current);
+      for (const chunk of chunks(pending, ICON_BATCH)) {
+        if (!clock.current.isLive(pass)) break;
+        try {
+          const icons = await appIcons(chunk.map((g) => g.id));
+          if (!clock.current.sameCache(pass)) break;
+          chunk.forEach((game, n) => {
+            // `pendingIcons` only returns entries with an executable.
+            recordArt('icons', iconKey(game.executable as string), icons[n] ?? null);
+          });
+        } catch {
+          // No icon is fine: the card falls back to the letter placeholder.
         }
-      };
-      await Promise.all(Array.from({ length: Math.min(6, pending.length) }, worker));
+      }
       flushArt();
     },
-    [flushArt, queueArt],
+    [flushArt, recordArt],
   );
 
   // Dev-only fixture for profiling the grid at realistic sizes:
@@ -174,29 +272,56 @@ export function useLibrary(autoScan: boolean) {
   }, [mockCount]);
 
   /**
-   * Forget which entries have already been asked about, so the next pass asks
-   * again.
+   * Forget what the backend has answered, so the next pass asks again.
    *
-   * `artDone` exists to stop a routine refresh re-asking the backend for art it
+   * The ledger exists to stop a routine refresh re-asking the backend for art it
    * already answered. It was only ever added to, which quietly broke the one
    * feature whose entire purpose is re-downloading art: after "vaciar caché de
-   * portadas" every id was already in the set, so the pending list came out empty
-   * and not a single cover was fetched until the app restarted.
+   * portadas" everything was already answered, so the pending list came out
+   * empty and not a single cover was fetched until the app restarted.
+   *
+   * Callers follow this with `refresh()`: the scan is what drops the covers
+   * that pointed at the deleted files.
    */
   const resetArt = useCallback(() => {
-    artDone.current.clear();
-  }, []);
+    clearLedger(ledger.current);
+    clock.current.wipe();
+    artDirty.current = false;
+    cancelCoverRetry();
+  }, [cancelCoverRetry]);
+
+  // Put a scan result on screen and (re)start the art passes for it.
+  const applyScan = useCallback(
+    (list: Game[]) => {
+      const pass = clock.current.startPass();
+      // A pass waiting to ask again belongs to the list this one replaces.
+      cancelCoverRetry();
+      fruitless.current = 0;
+      const answers = copyLedger(ledger.current);
+      setGames((prev) => mergeScan(prev, list, answers));
+      setLoading(false);
+      // A background scan that succeeds makes an earlier scan error stale.
+      setError(null);
+      // Both passes filter on the ledger, so starting them for a list that needs
+      // nothing costs two array walks. Starting them every time is what
+      // guarantees the pass cancelled above has a successor.
+      resolveIconsFor(list, pass);
+      resolveCoversFor(list, pass);
+    },
+    [cancelCoverRetry, resolveCoversFor, resolveIconsFor],
+  );
 
   const refresh = useCallback(
     async (showSplash = false) => {
-      const myRun = ++runId.current;
+      const myScan = clock.current.claimScan();
       // An explicit re-scan is a request to redo the work, not to reuse what this
       // session happens to remember.
-      if (showSplash) artDone.current.clear();
+      if (showSplash) clearLedger(ledger.current);
       // Splash shows on the very first run, or whenever explicitly requested
       // (e.g. the "volver a escanear" button) so a re-scan feels like a reload.
       const splash = showSplash || !booted.current;
       if (splash) {
+        splashOn.current = true;
         setBooting(true);
         setCoverProgress({ done: 0, total: 0 });
       }
@@ -204,64 +329,30 @@ export function useLibrary(autoScan: boolean) {
       setError(null);
       try {
         const list = mockCount > 0 ? mockLibrary() : await getLibrary();
-        if (runId.current !== myRun) return;
-        setGames(list);
-        setLoading(false);
-        resolveIcons(list, myRun);
-        const pass = resolveCovers(list, myRun);
-        if (splash) {
-          pass.finally(() => {
-            if (runId.current === myRun) {
-              booted.current = true;
-              setBooting(false);
-            }
-          });
-        }
+        if (!clock.current.ownsScreen(myScan)) return; // a newer refresh took over
+        applyScan(list);
       } catch (e) {
-        if (runId.current === myRun) {
-          setError(String(e));
-          setLoading(false);
-          booted.current = true;
-          setBooting(false);
-        }
+        if (!clock.current.ownsScreen(myScan)) return;
+        setError(String(e));
+        setLoading(false);
+        endSplash();
       }
     },
-    [mockCount, mockLibrary, resolveCovers, resolveIcons],
+    [applyScan, endSplash, mockCount, mockLibrary],
   );
 
   const silentRefresh = useCallback(async () => {
-    const myRun = ++runId.current;
+    // Does not claim a scan number: if a `refresh` starts while this scan is
+    // running, that one wins and this result is dropped.
+    const seen = clock.current.watchScan();
     try {
       const list = await getLibrary();
-      if (runId.current !== myRun) return;
-
-      setGames((prev) => {
-        // Index once instead of scanning `prev` per entry (this was O(n²)).
-        const byId = new Map(prev.map((g) => [g.id, g]));
-        const sameSet =
-          prev.length === list.length && list.every((g) => byId.has(g.id));
-        if (sameSet) return prev;
-
-        // Preserve existing covers/icons to prevent blinking
-        const mergedList = list.map((newGame) => {
-          const oldGame = byId.get(newGame.id);
-          return oldGame
-            ? { ...newGame, cover_url: newGame.cover_url ?? oldGame.cover_url, icon: oldGame.icon }
-            : newGame;
-        });
-
-        // Resolve art for any brand new games in the background
-        setTimeout(() => {
-          resolveIcons(mergedList, myRun);
-          resolveCovers(mergedList, myRun);
-        }, 0);
-
-        return mergedList;
-      });
+      if (!clock.current.ownsScreen(seen)) return;
+      applyScan(list);
     } catch {
-      // Fail silently in background
+      // Background work: keep what is on screen, and the pass in flight.
     }
-  }, [resolveCovers, resolveIcons]);
+  }, [applyScan]);
 
   const refreshCategories = useCallback(async () => {
     try {

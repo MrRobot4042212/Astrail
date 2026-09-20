@@ -3,7 +3,7 @@
 // Additional terms under GPL-3.0 section 7 apply: see ADDITIONAL-TERMS.md
 
 import { invoke } from '@tauri-apps/api/core';
-import type { Game, Category, PlayStat, AppSettings, AppSettingsPatch, SystemInfo, MpoDiagnostics, AboutInfo, LegalDocument, UpdateOffer } from './types';
+import type { Game, CoverAnswer, Category, PlayStat, AppSettings, AppSettingsPatch, SystemInfo, MpoDiagnostics, AboutInfo, LegalDocument, UpdateOffer } from './types';
 
 /** Unified library across every source (Steam, Epic, GOG, EA, Ubisoft, Xbox, manual). */
 export const getLibrary = () => invoke<Game[]>('get_library');
@@ -27,9 +27,11 @@ export const libraryChanged = () => invoke<boolean>('library_changed');
 export const resolveCoverHires = (name: string) =>
   invoke<string | null>('resolve_cover_hires', { name });
 
-/** Resolve a cover image URL for a game name (SteamGridDB → Steam CDN, cached). */
-export const resolveCover = (name: string) =>
-  invoke<string | null>('resolve_cover', { name });
+/** Grid covers for a list of game names (IGDB, cached on disk). One answer per
+ *  name, in the order asked; at most 64 names per call. Tri-state: "there is no
+ *  cover" and "could not ask" are different answers. */
+export const resolveCovers = (names: string[]) =>
+  invoke<CoverAnswer[]>('resolve_covers', { names });
 
 /** Set (or clear) a cover override. A remote URL is downloaded by Rust and the
  *  stored local path comes back, which is what the grid must render. */
@@ -111,9 +113,11 @@ export const allPlaytime = () =>
 export const gameDirSize = (id: string) =>
   invoke<number | null>('game_dir_size', { id });
 
-/** Extract the real icon embedded in an app's executable (cached local .ico path). */
-export const appIcon = (path: string) =>
-  invoke<string | null>('app_icon', { path });
+/** The real icon embedded in each entry's executable (cached local .ico path, or
+ *  null). One answer per id, in the order asked; at most 64 ids per call. The
+ *  backend looks the executable up itself: the webview never names a file. */
+export const appIcons = (ids: string[]) =>
+  invoke<(string | null)[]>('app_icons', { ids });
 
 /** The saved Discord Rich Presence client id ('' = disabled). */
 export const getDiscordClientId = () => invoke<string>('get_discord_client_id');

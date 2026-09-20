@@ -83,12 +83,41 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
   elige el canal; la ventana ya no tiene permiso para lanzarla por su cuenta.
 - Un escaneo de tienda que falla ya no es silencioso: el motivo queda en el
   registro (la biblioteca sigue mostrando el resto de tiendas, como antes).
+- Las carátulas y los iconos de aplicaciones se piden al núcleo **por lotes**
+  (8 nombres o 16 entradas por llamada) en vez de una llamada por entrada. El
+  límite de consultas simultáneas a IGDB lo aplica Rust, no la ventana; una
+  llamada admite como mucho 64 elementos.
+- Los iconos de aplicaciones se piden por identificador de entrada: el núcleo
+  busca el ejecutable en la biblioteca. Antes la ventana enviaba la ruta del
+  archivo a leer.
 
 ### Eliminado
 - El aviso «Mando conectado» al enchufar un mando. Astrail no tiene navegación
   con mando, y el aviso daba a entender un soporte que no existe.
 
 ### Corregido
+- Arrancar Astrail sin conexión (o con IGDB saturado) dejaba sin carátula, durante
+  toda la sesión, a todos los juegos que aún no la tenían: «no se pudo preguntar»
+  llegaba a la ventana igual que «IGDB no tiene carátula» y se daba por
+  respondido. Ahora son respuestas distintas: lo que no se pudo preguntar no se
+  anota, la pasada se corta en cuanto un lote entero queda sin respuesta y se
+  reintenta sola al cabo de 1, 5 y 15 minutos. Lo mismo valía para una respuesta
+  mal formada de IGDB. En disco nunca se guardó como fallo: bastaba reiniciar.
+- Los iconos de las aplicaciones desaparecían hasta reiniciar Astrail después de
+  cambiar el tipo de una entrada, renombrar o borrar una categoría, o cualquier
+  otra acción que recarga la biblioteca.
+- Una entrada pasada de «aplicación» a «juego» (o al revés) no recibía su
+  carátula o su icono hasta reiniciar.
+- La actualización en segundo plano de la biblioteca ignoraba los cambios que no
+  añadían ni quitaban entradas (por ejemplo, un juego movido a otra carpeta).
+- Una actualización en segundo plano que fallaba, o que no traía nada nuevo,
+  cancelaba la descarga de carátulas en curso y nadie la reanudaba; si coincidía
+  con la pantalla de carga, esta podía no cerrarse.
+- «Volver a escanear» mostraba la pantalla de carga sin progreso de carátulas.
+- Una carátula que llegaba justo cuando empezaba otro escaneo se descartaba y no
+  se volvía a pedir en toda la sesión.
+- Un error de escaneo antiguo seguía en pantalla aunque un escaneo posterior
+  hubiera ido bien.
 - Las acciones sobre varias entradas a la vez (favoritos, categorías, ocultar)
   anunciaban que todo había ido bien aunque alguna escritura fallara. Ahora, si
   algo no se guarda, la biblioteca se recarga con el estado real y un aviso dice

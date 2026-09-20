@@ -12,8 +12,9 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 //
 // There is deliberately **no fallback constant**: an embedded client secret is
 // extractable from any shipped binary, so a build without the variables simply
-// ships without IGDB cover lookups (`resolve_cover` returns `None` and logs
-// once) instead of leaking one shared credential to every user.
+// ships without IGDB cover lookups (`resolve_cover` returns
+// `Lookup::Unavailable` and logs once) instead of leaking one shared credential
+// to every user.
 const CLIENT_ID: Option<&str> = option_env!("IGDB_CLIENT_ID");
 const CLIENT_SECRET: Option<&str> = option_env!("IGDB_CLIENT_SECRET");
 

@@ -70,6 +70,14 @@ export interface Game {
   icon?: string;
 }
 
+/** One answer of `resolve_covers` (mirrors `art::Cover`). `unavailable` means
+ *  nobody could be asked (offline, rate limited, no credentials): it says nothing
+ *  about the game and must not be remembered as a miss. */
+export type CoverAnswer =
+  | { status: 'found'; path: string }
+  | { status: 'not_found' }
+  | { status: 'unavailable' };
+
 export type OverlayPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
 
 /** In-game metrics overlay configuration (part of AppSettings). */

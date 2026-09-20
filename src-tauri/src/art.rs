@@ -138,8 +138,62 @@ fn image_id_from_url(url: &str) -> String {
         .to_string()
 }
 
+/// The answer to "what is the cover for this name?".
+///
+/// Three states on purpose. The frontend remembers an answer for the whole
+/// session, so "IGDB said there is none" and "IGDB could not be asked" (offline,
+/// rate limited, no credentials, a malformed reply) must not look the same: the
+/// first is a fact worth remembering, the second has to be asked again.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "status", content = "path", rename_all = "snake_case")]
+pub enum Cover {
+    /// A local file path, or the remote IGDB URL when the download failed.
+    Found(String),
+    /// IGDB answered and has no cover for this name (or a recent miss is cached).
+    NotFound,
+    /// Nobody could be asked. Nothing was cached; ask again later.
+    Unavailable,
+}
+
+impl Cover {
+    pub fn into_path(self) -> Option<String> {
+        match self {
+            Cover::Found(path) => Some(path),
+            Cover::NotFound | Cover::Unavailable => None,
+        }
+    }
+}
+
+/// What an IGDB lookup means for the URL cache.
+#[derive(Debug, PartialEq, Eq)]
+enum Verdict {
+    /// A usable image id: cache it and download.
+    Id(String),
+    /// A real "no cover": cache the miss for `NEGATIVE_TTL`.
+    Miss,
+    /// Not an answer. The cache stays untouched so the next attempt asks again.
+    Unknown,
+}
+
+fn verdict(lookup: igdb::Lookup) -> Verdict {
+    match lookup {
+        igdb::Lookup::Found(id) if is_valid_image_id(&id) => Verdict::Id(id),
+        igdb::Lookup::Found(bad) => {
+            // Never cache something that is not an id: it would compose into a
+            // malformed image URL and stay wrong until the cache is wiped by hand.
+            log::warn!("ignoring malformed IGDB image id: {bad}");
+            Verdict::Unknown
+        }
+        // A network failure used to be stored as an empty entry and honoured as
+        // "this game has no cover" for the whole negative TTL, so one offline scan
+        // blanked the library for days.
+        igdb::Lookup::Unavailable => Verdict::Unknown,
+        igdb::Lookup::NotFound => Verdict::Miss,
+    }
+}
+
 /// Resolve the **grid** cover for a game name (downloading it if needed).
-pub fn resolve(app: &AppHandle, name: &str) -> Option<String> {
+pub fn resolve(app: &AppHandle, name: &str) -> Cover {
     let _span = crate::perf::Span::new("art::resolve");
     resolve_variant(app, name, VARIANT_GRID)
 }
@@ -147,7 +201,7 @@ pub fn resolve(app: &AppHandle, name: &str) -> Option<String> {
 /// Resolve the **high-resolution** cover for the detail page hero. Reuses the
 /// cached image id, so it costs a download at most — never a search.
 pub fn resolve_hires(app: &AppHandle, name: &str) -> Option<String> {
-    resolve_variant(app, name, VARIANT_HIRES)
+    resolve_variant(app, name, VARIANT_HIRES).into_path()
 }
 
 /// The cached cover path for a name, or `None` — **never touches the network**.
@@ -164,22 +218,24 @@ pub fn cached_path(app: &AppHandle, name: &str) -> Option<String> {
     file.exists().then(|| file.to_string_lossy().to_string())
 }
 
-fn resolve_variant(app: &AppHandle, name: &str, variant: &str) -> Option<String> {
+fn resolve_variant(app: &AppHandle, name: &str, variant: &str) -> Cover {
     let key = name.trim().to_lowercase();
     if key.is_empty() {
-        return None;
+        return Cover::NotFound;
     }
 
     // 1. Already downloaded? Serve the local file — no lock, no network.
-    let file = cover_file(app, &key, variant).ok()?;
+    let Ok(file) = cover_file(app, &key, variant) else {
+        return Cover::Unavailable;
+    };
     if file.exists() {
-        return Some(file.to_string_lossy().to_string());
+        return Cover::Found(file.to_string_lossy().to_string());
     }
 
     // 2. Known image id (cached) avoids re-hitting the IGDB search API.
-    let cached = {
-        let cache = cache(app).read().ok()?;
-        cache.get(&key).cloned()
+    let cached = match cache(app).read() {
+        Ok(cache) => cache.get(&key).cloned(),
+        Err(_) => return Cover::Unavailable,
     };
     let image_id = match cached {
         Some(entry) if entry.is_hit() => {
@@ -190,26 +246,14 @@ fn resolve_variant(app: &AppHandle, name: &str, variant: &str) -> Option<String>
             }
         }
         // A recent miss: don't ask again until the negative TTL expires.
-        Some(entry) if !is_stale(entry.ts) => return None,
+        Some(entry) if !is_stale(entry.ts) => return Cover::NotFound,
         _ => {
             // 3. Ask IGDB once and remember the result — but only when IGDB
-            //    actually answered. A network failure used to be stored as an empty
-            //    entry and honoured as "this game has no cover" for the whole
-            //    negative TTL, so one offline scan blanked the library for days.
-            let variants = name_variants(name);
-            let resolved = match igdb::resolve_cover(&variants) {
-                igdb::Lookup::Found(id) if is_valid_image_id(&id) => id,
-                igdb::Lookup::Found(bad) => {
-                    // Never cache something that is not an id: it would compose
-                    // into a malformed image URL and stay wrong until the cache is
-                    // wiped by hand.
-                    eprintln!("[art] ignoring malformed IGDB image id: {bad}");
-                    return None;
-                }
-                // Could not ask: leave the cache untouched so the next attempt
-                // retries instead of inheriting a fabricated miss.
-                igdb::Lookup::Unavailable => return None,
-                igdb::Lookup::NotFound => String::new(),
+            //    actually answered (see `verdict`).
+            let resolved = match verdict(igdb::resolve_cover(&name_variants(name))) {
+                Verdict::Id(id) => id,
+                Verdict::Miss => String::new(),
+                Verdict::Unknown => return Cover::Unavailable,
             };
             if let Ok(mut cache) = cache(app).write() {
                 cache.insert(
@@ -223,7 +267,7 @@ fn resolve_variant(app: &AppHandle, name: &str, variant: &str) -> Option<String>
             }
             save_cache(app, false);
             if resolved.is_empty() {
-                return None;
+                return Cover::NotFound;
             }
             resolved
         }
@@ -232,9 +276,9 @@ fn resolve_variant(app: &AppHandle, name: &str, variant: &str) -> Option<String>
     let url = image_url(&image_id, variant);
     // Download to disk; serve the local file, or the remote URL if it failed.
     if download(&url, &file) {
-        Some(file.to_string_lossy().to_string())
+        Cover::Found(file.to_string_lossy().to_string())
     } else {
-        Some(url)
+        Cover::Found(url)
     }
 }
 
@@ -583,6 +627,37 @@ pub(crate) fn prune_lru(dir: &Path, cap: u64) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_a_real_answer_from_igdb_reaches_the_cache() {
+        // A23: offline, rate limited or a malformed reply is "unknown", never a
+        // miss. A miss is cached for three days and remembered by the frontend for
+        // the whole session, so fabricating one blanks a cover that exists.
+        assert_eq!(
+            verdict(igdb::Lookup::Found("co1r76".into())),
+            Verdict::Id("co1r76".into())
+        );
+        assert_eq!(verdict(igdb::Lookup::NotFound), Verdict::Miss);
+        assert_eq!(verdict(igdb::Lookup::Unavailable), Verdict::Unknown);
+        assert_eq!(
+            verdict(igdb::Lookup::Found("https://images.igdb.com/x/co1r76.jpg".into())),
+            Verdict::Unknown
+        );
+    }
+
+    #[test]
+    fn a_cover_answer_serializes_as_a_tagged_status() {
+        // The shape `src/lib/types.ts::CoverAnswer` mirrors.
+        let json = |c: Cover| serde_json::to_string(&c).unwrap_or_default();
+        assert_eq!(
+            json(Cover::Found("C:\\covers\\a.jpg".into())),
+            r#"{"status":"found","path":"C:\\covers\\a.jpg"}"#
+        );
+        assert_eq!(json(Cover::NotFound), r#"{"status":"not_found"}"#);
+        assert_eq!(json(Cover::Unavailable), r#"{"status":"unavailable"}"#);
+        assert_eq!(Cover::Unavailable.into_path(), None);
+        assert_eq!(Cover::Found("p".into()).into_path(), Some("p".into()));
+    }
 
     #[test]
     fn a_full_url_is_never_accepted_as_an_image_id() {

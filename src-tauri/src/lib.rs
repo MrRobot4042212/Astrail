@@ -8,6 +8,7 @@ mod applog;
 mod apps_db;
 mod art;
 mod autostart;
+mod batch;
 mod cputemp;
 #[cfg(windows)]
 mod elevation;
@@ -191,7 +192,7 @@ fn get_library_inner(app: AppHandle) -> Result<Vec<Game>, String> {
     library::apply_overlays(&mut games, &aliases, &overlays);
 
     // Fill in covers we already downloaded. Without this the frontend re-queued
-    // every non-Steam entry through `resolve_cover` on *every* refresh, even
+    // every non-Steam entry through `resolve_covers` on *every* refresh, even
     // though the image was sitting on disk: N IPC round-trips and N re-renders
     // for nothing.
     for game in &mut games {
@@ -306,11 +307,30 @@ fn set_cover_image(
     Ok(path)
 }
 
-/// Resolve a cover image for a game name via IGDB, cached on disk. The frontend
-/// calls this lazily for entries without artwork.
+/// Threads one `resolve_covers` call may use. Equal to IGDB's in-flight cap
+/// (`igdb::MAX_INFLIGHT`): more would only queue on that semaphore.
+const COVER_WORKERS: usize = 4;
+/// Threads one `app_icons` call may use (disk reads plus a PE parse each).
+const ICON_WORKERS: usize = 4;
+
+/// Resolve the grid covers for a list of game names via IGDB, cached on disk. One
+/// answer per name, in the order asked.
+///
+/// A batch, not one command per game: a first scan used to cost one IPC round trip
+/// per entry without artwork. The answer is tri-state (`art::Cover`) so the
+/// frontend can tell "there is no cover" from "could not ask" and only remember the
+/// first.
 #[tauri::command(async)]
-async fn resolve_cover(app: AppHandle, name: String) -> Result<Option<String>, String> {
-    blocking(move || Ok(art::resolve(&app, &name))).await
+async fn resolve_covers(app: AppHandle, names: Vec<String>) -> Result<Vec<art::Cover>, String> {
+    batch::check_len(names.len())?;
+    blocking(move || {
+        let answers = batch::map_ordered(&names, COVER_WORKERS, |name| art::resolve(&app, name));
+        Ok(answers
+            .into_iter()
+            .map(|answer| answer.unwrap_or(art::Cover::Unavailable))
+            .collect())
+    })
+    .await
 }
 
 /// Whether anything that feeds the library has changed since the last scan.
@@ -522,11 +542,43 @@ async fn game_dir_size(app: AppHandle, id: String) -> Result<Option<u64>, String
     .await
 }
 
-/// Extract the real icon embedded in an app's executable (cached PNG path), used
-/// as the icon for apps without a cover or known brand logo.
+/// The file to read an icon from for each id asked, in order. `None` for an id
+/// that is not in the library or has no executable. The manual store wins over the
+/// cache, as in `resolve_game`.
+fn icon_sources(ids: &[String], manual: &[Game], cached: &[Game]) -> Vec<Option<String>> {
+    ids.iter()
+        .map(|id| {
+            manual
+                .iter()
+                .chain(cached)
+                .find(|game| &game.id == id)
+                .and_then(|game| game.executable.clone())
+                .filter(|exe| !exe.trim().is_empty())
+        })
+        .collect()
+}
+
+/// Extract the real icon embedded in each entry's executable (cached `.ico` path),
+/// used for apps without a cover or known brand logo. One answer per id, in the
+/// order asked.
+///
+/// Takes ids, never paths: this used to be `app_icon(path)`, which parsed whatever
+/// file the webview named and added any `.ico` it named to the asset scope.
 #[tauri::command(async)]
-async fn app_icon(app: AppHandle, path: String) -> Result<Option<String>, String> {
-    blocking(move || Ok(appicons::extract(&app, &path))).await
+async fn app_icons(app: AppHandle, ids: Vec<String>) -> Result<Vec<Option<String>>, String> {
+    batch::check_len(ids.len())?;
+    blocking(move || {
+        let manual = storage::load_manual(&app).unwrap_or_else(|e| {
+            log::warn!("manual apps unreadable while resolving icons: {e}");
+            Vec::new()
+        });
+        let sources = icon_sources(&ids, &manual, &read_library_cache(&app));
+        let icons = batch::map_ordered(&sources, ICON_WORKERS, |source| {
+            source.as_deref().and_then(|exe| appicons::extract(&app, exe))
+        });
+        Ok(icons.into_iter().map(Option::flatten).collect())
+    })
+    .await
 }
 
 /// Seconds the main window must stay hidden before we ask WebView2 to trim its
@@ -1356,7 +1408,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             get_library,
-            resolve_cover,
+            resolve_covers,
             resolve_cover_hires,
             library_changed,
             set_cover,
@@ -1382,7 +1434,7 @@ pub fn run() {
             all_playtime,
             cached_library,
             game_dir_size,
-            app_icon,
+            app_icons,
             get_discord_client_id,
             set_discord_client_id,
             get_autostart,
@@ -1424,6 +1476,56 @@ mod tests {
 
     fn settings() -> AppSettings {
         serde_json::from_str("{}").expect("every settings field has a default")
+    }
+
+    fn app_entry(id: &str, executable: Option<&str>) -> Game {
+        Game {
+            id: id.to_string(),
+            name: id.to_string(),
+            source: GameSource::App,
+            app_id: None,
+            executable: executable.map(str::to_string),
+            install_dir: None,
+            cover_url: None,
+            launch_uri: None,
+            favorite: false,
+            categories: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn icons_are_read_from_library_entries_never_from_a_path_the_webview_names() {
+        // A23: `app_icon(path)` parsed any file the webview pointed at. The batch
+        // takes ids; an id that is not in the library, or a path passed off as an
+        // id, resolves to nothing.
+        let manual = vec![app_entry("manual:notes", Some("C:\\Tools\\notes.exe"))];
+        let cached = vec![
+            app_entry("app:calc", Some("C:\\Apps\\calc.exe")),
+            app_entry("manual:notes", Some("C:\\Stale\\notes.exe")),
+            app_entry("app:blank", Some("  ")),
+            app_entry("app:none", None),
+        ];
+        let ids: Vec<String> = [
+            "app:calc",
+            "C:\\Windows\\System32\\cmd.exe",
+            "manual:notes",
+            "app:blank",
+            "app:none",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+        assert_eq!(
+            icon_sources(&ids, &manual, &cached),
+            vec![
+                Some("C:\\Apps\\calc.exe".to_string()),
+                None,
+                Some("C:\\Tools\\notes.exe".to_string()),
+                None,
+                None,
+            ],
+            "same order and length as asked; the manual store wins over the cache"
+        );
     }
 
     #[test]
