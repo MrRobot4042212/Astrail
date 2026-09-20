@@ -29,6 +29,7 @@ import { Empty, SkeletonGrid, Toast } from '@/components/LibraryPlaceholders';
 import { Splash } from '@/components/Splash';
 import { IntroSplash } from '@/components/IntroSplash';
 import { Footer } from '@/components/Footer';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { Home } from '@/components/Home';
 import { TopBar } from '@/components/TopBar';
@@ -268,6 +269,7 @@ function MainApp() {
         />
 
         <main className="flex min-w-0 flex-1 flex-col">
+          <ErrorBoundary scope="view" resetKey={selectedId ?? filter}>
           {selected ? (
             <DetailView
               game={selected}
@@ -339,6 +341,7 @@ function MainApp() {
               </section>
             </>
           )}
+          </ErrorBoundary>
           <Footer />
         </main>
       </div>

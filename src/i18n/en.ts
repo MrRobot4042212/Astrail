@@ -249,6 +249,12 @@ export const en = {
     scanLibrary: 'Scan my library',
     next: 'Next',
   },
+  errors: {
+    boundaryTitle: 'Something went wrong on this screen',
+    boundaryBody: 'Astrail has logged the error. You can retry, reload the window, or export the diagnostics to attach them to a report.',
+    boundaryRetry: 'Retry',
+    boundaryReload: 'Reload Astrail',
+  },
   about: {
     title: 'About Astrail',
     desc: 'Version, authorship and the licenses of the software Astrail ships.',

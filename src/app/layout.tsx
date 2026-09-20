@@ -6,6 +6,7 @@ import type { Metadata } from 'next';
 import { Oxanium, Source_Code_Pro } from 'next/font/google';
 import './globals.css';
 import { I18nProvider } from '@/i18n/I18nProvider';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 // Oxanium is the UI font (body + display); Source Code Pro for monospace bits.
 // Explicit weights: without them next/font ships the whole variable axis, which
@@ -37,7 +38,9 @@ export default function RootLayout({
   return (
     <html lang="es" className={`dark ${oxanium.variable} ${mono.variable}`}>
       <body className="font-sans no-select">
-        <I18nProvider>{children}</I18nProvider>
+        <I18nProvider>
+          <ErrorBoundary scope="app">{children}</ErrorBoundary>
+        </I18nProvider>
       </body>
     </html>
   );

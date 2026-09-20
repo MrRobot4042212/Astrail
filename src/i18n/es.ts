@@ -248,6 +248,12 @@ export const es = {
     scanLibrary: 'Escanear mi biblioteca',
     next: 'Siguiente',
   },
+  errors: {
+    boundaryTitle: 'Algo ha fallado en esta pantalla',
+    boundaryBody: 'Astrail ha registrado el error. Puedes reintentar, recargar la ventana o exportar el diagnóstico para adjuntarlo a un reporte.',
+    boundaryRetry: 'Reintentar',
+    boundaryReload: 'Recargar Astrail',
+  },
   about: {
     title: 'Acerca de Astrail',
     desc: 'Versión, autoría y licencias del software que Astrail incluye.',

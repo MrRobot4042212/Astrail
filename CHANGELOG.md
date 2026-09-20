@@ -21,6 +21,10 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
 - **Ajustes → Avanzado → «Exportar diagnóstico».** Reúne el registro, los informes
   de fallo, el resumen del equipo, el estado de MPO y los ajustes en un único
   archivo de texto y abre su carpeta. No se envía nada a ningún sitio.
+- **Pantalla de recuperación en vez de ventana en blanco.** Si una pantalla falla al
+  dibujarse, Astrail muestra el error con las opciones de reintentar, recargar o
+  exportar el diagnóstico, y el resto de la ventana sigue funcionando. Los errores
+  de la interfaz quedan también en el registro.
 - La variable de entorno `ASTRAIL_LOG=debug` (o `trace`) sube el nivel de detalle.
 
 ### Cambiado
