@@ -16,6 +16,10 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
   con mando, y el aviso daba a entender un soporte que no existe.
 
 ### Corregido
+- Los interruptores de Ajustes no tenían nombre accesible: un lector de pantalla
+  solo anunciaba «interruptor». Ahora llevan el título de su tarjeta.
+- El aviso de «guardado» de Discord podía actualizar una ventana de Ajustes ya
+  cerrada.
 - Pegar como carátula una ruta o un texto con caracteres no ASCII en los primeros
   bytes (por ejemplo `ñandú.png`) cerraba Astrail de golpe: la comprobación de
   «¿es una URL?» cortaba el texto por bytes. Ahora se trata como una ruta normal.

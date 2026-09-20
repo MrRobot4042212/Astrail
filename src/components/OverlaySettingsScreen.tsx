@@ -10,6 +10,7 @@ import { listen } from '@tauri-apps/api/event';
 import { getAppSettings, patchAppSettings } from '@/lib/tauri';
 import type { OverlaySettings, OverlayPosition } from '@/lib/types';
 import { DEFAULT_SHORTCUTS, formatShortcut } from '@/lib/shortcuts';
+import { OVERLAY_METRICS } from '@/lib/overlayMetrics';
 import { CloseIcon } from './icons';
 import { OverlayMpoPanel } from './OverlayMpoPanel';
 
@@ -18,17 +19,6 @@ const OVERLAY_POSITIONS: { value: OverlayPosition; tKey: string }[] = [
   { value: 'top-right', tKey: 'overlayScreen.posTopRight' },
   { value: 'bottom-left', tKey: 'overlayScreen.posBottomLeft' },
   { value: 'bottom-right', tKey: 'overlayScreen.posBottomRight' },
-];
-
-const OVERLAY_METRICS: { key: keyof OverlaySettings; tKey: string }[] = [
-  { key: 'show_fps', tKey: 'metrics.fps' },
-  { key: 'show_frametime', tKey: 'metrics.frametime' },
-  { key: 'show_gpu', tKey: 'metrics.gpuUsage' },
-  { key: 'show_gpu_temp', tKey: 'metrics.gpuTemp' },
-  { key: 'show_vram', tKey: 'metrics.vram' },
-  { key: 'show_cpu', tKey: 'metrics.cpuUsage' },
-  { key: 'show_cpu_temp', tKey: 'metrics.cpuTemp' },
-  { key: 'show_ram', tKey: 'metrics.ram' },
 ];
 
 export function OverlaySettingsScreen({ onClose }: { onClose: () => void }) {
@@ -122,13 +112,11 @@ export function OverlaySettingsScreen({ onClose }: { onClose: () => void }) {
             <h3 className="mb-3 text-sm font-medium text-ink">{t('overlayScreen.metricsShow')}</h3>
             <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
               {OVERLAY_METRICS.map((m) => {
-                const on = overlay[m.key] as boolean;
+                const on = overlay[m.key];
                 return (
                   <button
                     key={m.key}
-                    onClick={() =>
-                      updateOverlay({ [m.key]: !on } as Partial<OverlaySettings>)
-                    }
+                    onClick={() => updateOverlay({ [m.key]: !on })}
                     className={`flex items-center justify-between border px-2.5 py-2 text-xs transition ${
                       on ? 'border-accent/40 bg-elevated text-ink' : 'border-line text-muted'
                     }`}
