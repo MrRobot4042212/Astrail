@@ -5,9 +5,11 @@
 // Hardware sidecar for Astrail's metrics overlay (built as cputemp.exe).
 //
 //   --cpu        CPU package temperature. LibreHardwareMonitor reads it (Ryzen
-//                Tctl/Tdie, Intel core) through a kernel driver it loads at runtime,
-//                so this needs admin; without it no temperature sensor appears and
-//                the key is simply left out.
+//                Tctl/Tdie, Intel core) through the PawnIO kernel driver, which the
+//                user installs separately (pawnio.eu); this LHM build carries no
+//                driver of its own and installs none. Needs admin and PawnIO;
+//                without either no temperature sensor appears and the key is
+//                simply left out.
 //   --gpu <sel>  AMD GPU telemetry and FPS, read through AMD's display library
 //                (ADL) that ships with the graphics driver. No admin and no kernel
 //                driver of ours, elevated or not (see AmdGpus). <sel> is "auto" (the
@@ -22,14 +24,12 @@
 //   cpu_temp=54 gpu_usage=9 gpu_temp=44 gpu_power=27.4 gpu_clock=152 vram_used=4340 vram_total=16304 fps=144
 //
 // Shutdown protocol: the parent closes our stdin, we see EOF, call computer.Close()
-// and exit. This matters more than it looks — with --cpu, Open() makes
-// LibreHardwareMonitor load a kernel driver and only Close() unloads it (with
-// --gpu, Close() stops ADL's frame-metrics and power logging). Being
-// TerminateProcess'd (which is what a kill or the parent's kill-on-close Job
-// Object does) skips .NET finalizers, so the driver would stay loaded and
-// registered for the rest of the boot. That residue is what vulnerable-driver
-// blocklists and kernel anti-cheats look for, so it must not depend on the happy
-// path alone.
+// and exit. With --gpu, Close() stops ADL's frame-metrics and power logging, which
+// outlive a TerminateProcess (a kill, or the parent's kill-on-close Job Object,
+// skips .NET finalizers). With --cpu it releases the PawnIO modules LHM loaded;
+// the PawnIO service itself belongs to its own installer and stays either way.
+// Older LHM builds installed WinRing0 from Open() and only Close() removed it,
+// which is why this protocol exists; it stays so neither path depends on luck.
 
 using System.Globalization;
 using System.Reflection;
@@ -273,9 +273,8 @@ static class GpuSensors
 }
 
 // Opens only LibreHardwareMonitor's AMD GPU group. Computer.Open() would also run
-// Ring0.Open(), SMBIOS parsing and the CPU probes of the Intel GPU group, and
-// Ring0.Open() installs LHM's kernel driver whenever the process is elevated
-// (Astrail run as admin) — for numbers ADL gives without it. The group type is
+// SMBIOS parsing, the CPU probes of the Intel GPU group and, when elevated, open
+// the PawnIO driver — for numbers ADL gives without any of it. The group type is
 // internal, hence the reflection; --self-test resolves it, so a
 // LibreHardwareMonitorLib update that renames it fails CI instead of the HUD.
 static class AmdGpus

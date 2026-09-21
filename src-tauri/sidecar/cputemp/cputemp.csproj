@@ -2,9 +2,11 @@
 
   <!-- Tiny sidecar: streams the CPU package temperature and AMD GPU telemetry as
        key=value lines to stdout once per second, read by Rust (cputemp.rs).
-       LibreHardwareMonitor loads a kernel driver to read Ryzen Tctl / Intel core
-       temps, so the CPU half needs admin; the GPU half goes through the AMD
-       driver's ADL and does not (see Program.cs). -->
+       LibreHardwareMonitor reads Ryzen Tctl / Intel core temps through the PawnIO
+       kernel driver (installed separately by the user), so the CPU half needs
+       admin and PawnIO; the GPU half goes through the AMD driver's ADL and needs
+       neither (see Program.cs). Do not move to a stable LHM release before one
+       ships PawnIO: 0.9.4 still carries WinRing0, which Defender flags. -->
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
@@ -57,7 +59,7 @@
     <TrimmerRootAssembly Include="System.Management" />
   </ItemGroup>
 
-  <!-- Lock transitive NuGet versions: this process loads a kernel driver, so its
+  <!-- Lock transitive NuGet versions: this process talks to a kernel driver, so its
        dependency set must be reproducible and reviewable, not resolved afresh on
        every build. Locked mode makes a restore that disagrees with the lock file
        fail instead of silently rewriting it. Refresh with:
