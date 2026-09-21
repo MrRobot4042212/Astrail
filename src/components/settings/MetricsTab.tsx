@@ -13,7 +13,8 @@ import { GPU_KIND_KEYS } from '@/lib/systemFormat';
 import { OverlayPanel } from '../Overlay';
 import { OverlayMpoPanel } from '../OverlayMpoPanel';
 import { ColorPicker } from './ColorPicker';
-import { Button, Card, SegmentedControl, TabHeader, Toggle } from './primitives';
+import { MetricsAccessPanel } from './MetricsAccessPanel';
+import { Card, SegmentedControl, TabHeader, Toggle } from './primitives';
 
 const OVERLAY_POSITIONS: { value: OverlayPosition; tKey: string }[] = [
   { value: 'top-left', tKey: 'overlayScreen.posTopLeft' },
@@ -23,11 +24,9 @@ const OVERLAY_POSITIONS: { value: OverlayPosition; tKey: string }[] = [
 ];
 
 export function MetricsTab({ model }: { model: SettingsModel }) {
-  const { sys, overlay, updateOverlay, elevated, restartAdmin, shortcuts } = model;
+  const { sys, overlay, updateOverlay, access, restartAdmin, shortcuts } = model;
   const { t } = useTranslation();
   const toggleKey = formatShortcut(shortcuts?.overlay_toggle ?? DEFAULT_SHORTCUTS.overlay_toggle, t('common.keySpace')).join('+');
-  // Admin is only actually needed for CPU temp (and NVIDIA FPS via PresentMon).
-  const needsAdmin = !!overlay?.show_cpu_temp;
   return (
     <div>
       <TabHeader
@@ -38,19 +37,12 @@ export function MetricsTab({ model }: { model: SettingsModel }) {
         <p className="text-sm text-muted">{t('settings.loading')}</p>
       ) : (
         <div className="space-y-6">
-          {elevated === false && (
-            <div className={`border p-4 ${needsAdmin ? 'border-accent/50 bg-accent/5' : 'border-line bg-elevated/30'}`}>
-              <p className="mb-1 text-sm font-medium text-ink">{t('settings.mAdminTitle')}</p>
-              <p className="mb-3 text-xs leading-relaxed text-muted">
-                <Trans i18nKey="settings.mAdminBody" components={[<strong key="0" />, <strong key="1" />]} />
-              </p>
-              <Button onClick={restartAdmin} className="w-auto px-4">
-                {t('settings.mRestartAdmin')}
-              </Button>
-            </div>
-          )}
-          {elevated === true && (
-            <p className="text-xs text-info">{t('settings.mRunningAdmin')}</p>
+          {access && (
+            <MetricsAccessPanel
+              access={access}
+              cpuTempWanted={overlay.show_cpu_temp}
+              onRestartAdmin={restartAdmin}
+            />
           )}
           <Card
             title={t('settings.mOverlayTitle')}

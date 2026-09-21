@@ -13,9 +13,11 @@
 //! fields are simply omitted.
 //!
 //! FPS / frametime come from the sidecar (AMD, no admin, exclusive fullscreen only;
-//! borderless games report nothing) or the PresentMon ETW controller (admin only) —
+//! borderless games report nothing) or the PresentMon ETW controller (admin, or
+//! the Performance Log Users group) —
 //! both degrade silently to `None`.
-//! Everything except CPU temperature and PresentMon works without admin.
+//! Everything except CPU temperature works without admin; PresentMon also needs
+//! Performance Log Users when not elevated.
 
 use serde::Serialize;
 use std::sync::atomic::{AtomicBool, AtomicIsize, AtomicU32, AtomicU64, AtomicU8, Ordering};
@@ -828,7 +830,7 @@ pub fn start(app: AppHandle) {
             sample.cpu_temp_c = reading.and_then(|r| r.cpu_temp_c);
 
             // FPS / frametime from the PresentMon controller (None unless it's
-            // running with admin + the bundled binary). The sidecar path below may
+            // able to open an ETW session + the bundled binary). The sidecar path below may
             // override this with AMD's native FPS.
             let frames = crate::presentmon::current();
             sample.fps = frames.fps;

@@ -3,7 +3,7 @@
 // Additional terms under GPL-3.0 section 7 apply: see ADDITIONAL-TERMS.md
 
 import { invoke } from '@tauri-apps/api/core';
-import type { Game, CoverAnswer, Category, PlayStat, SteamPlaytime, AppSettings, AppSettingsPatch, SystemInfo, MpoDiagnostics, AboutInfo, LegalDocument, UpdateOffer, BackupExportReport, BackupSummary, BackupImportReport } from './types';
+import type { Game, CoverAnswer, Category, PlayStat, SteamPlaytime, AppSettings, AppSettingsPatch, SystemInfo, MetricsAccess, MpoDiagnostics, AboutInfo, LegalDocument, UpdateOffer, BackupExportReport, BackupSummary, BackupImportReport } from './types';
 
 /** Unified library across every source (Steam, Epic, GOG, EA, Ubisoft, Xbox, manual). */
 export const getLibrary = () => invoke<Game[]>('get_library');
@@ -176,8 +176,8 @@ export const overlayMpoDiagnostics = () =>
 /** The OS user's display/full name (or login name) for the Home greeting. */
 export const username = () => invoke<string>('username');
 
-/** Whether Astrail runs elevated (admin) — needed for CPU temp / NVIDIA FPS. */
-export const isElevated = () => invoke<boolean>('is_elevated');
+/** What the privileged metrics can use: elevation, ETW access (FPS) and PawnIO (CPU temp). */
+export const metricsAccess = () => invoke<MetricsAccess>('metrics_access');
 
 /** Relaunch Astrail as administrator (UAC), then the current instance exits. */
 export const restartAsAdmin = () => invoke<void>('restart_as_admin');

@@ -2,15 +2,53 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Additional terms under GPL-3.0 section 7 apply: see ADDITIONAL-TERMS.md
 
-//! Process elevation helpers for the admin-only metrics (CPU temp via the LHM
-//! sidecar, NVIDIA FPS via PresentMon). Windows can't elevate a running process,
-//! so the UI offers a "Restart as admin" action that relaunches via the `runas`
-//! verb (UAC prompt); the old instance then exits.
+//! Process elevation helpers for the admin-only metrics. Windows can't elevate a
+//! running process, so the UI offers a "Restart as admin" action that relaunches
+//! via the `runas` verb (UAC prompt); the old instance then exits.
+//!
+//! Only CPU temperature (LHM sidecar, kernel driver) truly needs admin. FPS via
+//! PresentMon needs an ETW realtime session, which Windows also grants to members
+//! of the built-in **Performance Log Users** group (`can_trace_etw`).
 
 
 use windows::Win32::Foundation::{CloseHandle, HANDLE};
 use windows::Win32::Security::{GetTokenInformation, TokenElevation, TOKEN_ELEVATION, TOKEN_QUERY};
 use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
+
+/// True if this process's token has the built-in Performance Log Users group
+/// (`S-1-5-32-559`) enabled.
+///
+/// Looked up by well-known SID, never by name: the group name is localized
+/// ("Usuarios del registro de rendimiento" on Spanish Windows). Membership is
+/// fixed at logon, so it only has to be read once per process.
+pub fn in_performance_log_users() -> bool {
+    use windows::core::BOOL;
+    use windows::Win32::Security::{
+        CheckTokenMembership, CreateWellKnownSid, WinBuiltinPerfLoggingUsersSid, PSID,
+        SECURITY_MAX_SID_SIZE,
+    };
+    let mut buf = [0u8; SECURITY_MAX_SID_SIZE as usize];
+    let mut size = buf.len() as u32;
+    let sid = PSID(buf.as_mut_ptr().cast());
+    // SAFETY: `buf` is SECURITY_MAX_SID_SIZE bytes, the maximum any SID needs, and
+    // `size` says so; the SID is only used while `buf` is alive.
+    if unsafe { CreateWellKnownSid(WinBuiltinPerfLoggingUsersSid, None, Some(sid), &mut size) }.is_err() {
+        return false;
+    }
+    let mut member = BOOL(0);
+    // SAFETY: `None` = the calling thread's effective token; `sid` is valid (above).
+    let ok = unsafe { CheckTokenMembership(None, sid, &mut member) }.is_ok();
+    ok && member.as_bool()
+}
+
+/// Whether PresentMon can open its ETW realtime session from this process:
+/// elevated, or a member of Performance Log Users (the documented alternative,
+/// PresentMon `MainThread.cpp`). Measured 2026-09-21 on a non-elevated token in
+/// the group: frames, display and `msGPUActive` columns all arrive, and the
+/// session can be stopped by name without admin.
+pub fn can_trace_etw() -> bool {
+    is_elevated() || in_performance_log_users()
+}
 
 /// True if this process is running with an elevated (administrator) token.
 pub fn is_elevated() -> bool {
@@ -146,6 +184,20 @@ mod tests {
 
     fn args(v: &[&str]) -> Vec<String> {
         v.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn performance_log_users_membership_agrees_with_whoami() {
+        // `whoami /groups` lists the group by SID whatever the display language.
+        // 559 is never a deny-only SID (UAC filters only admin-class groups), so
+        // "listed" and "member" are the same thing for it.
+        let whoami = std::path::Path::new(&std::env::var("SystemRoot").unwrap_or_else(|_| r"C:\Windows".into()))
+            .join(r"System32\whoami.exe");
+        let Ok(out) = std::process::Command::new(whoami).args(["/groups", "/fo", "csv"]).output() else {
+            return; // no whoami (stripped image): nothing to compare against
+        };
+        let listed = String::from_utf8_lossy(&out.stdout).contains("\"S-1-5-32-559\"");
+        assert_eq!(in_performance_log_users(), listed);
     }
 
     #[test]

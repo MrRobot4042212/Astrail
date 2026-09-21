@@ -15,7 +15,11 @@
 //! Requirements (both needed for FPS to appear; everything degrades silently to
 //! `None` otherwise, so the rest of the overlay always works):
 //!   1. The `PresentMon.exe` binary present (see `binaries/README.md`).
-//!   2. Astrail running **elevated** — ETW realtime sessions require admin.
+//!   2. An ETW realtime session: Astrail running **elevated**, or the user in the
+//!      built-in Performance Log Users group (`elevation::can_trace_etw`). Without
+//!      admin PresentMon warns that processes of *other accounts* show up as
+//!      `<unknown>`; we target by `--process_id` and watch the game's exit
+//!      ourselves, so neither limit applies to a game the user started.
 
 use serde::{Serialize, Serializer};
 use std::collections::VecDeque;
@@ -770,22 +774,23 @@ pub fn shutdown() {
 /// game is running; it (re)targets PresentMon at the current game's PID.
 pub fn start(app: AppHandle) {
     std::thread::spawn(move || {
-        // PresentMon's ETW realtime session requires admin. Elevation can't change at
-        // runtime, so check once: when not elevated we never even attempt to spawn it
-        // (no access-denied spam, no overhead). FPS on NVIDIA therefore only appears
-        // when Astrail is already running as admin; AMD gets fullscreen FPS from the
+        // PresentMon's ETW realtime session needs admin or Performance Log Users.
+        // Neither can change while the process runs (group membership is fixed at
+        // logon), so check once: without it we never even attempt to spawn it (no
+        // access-denied spam, no overhead). AMD still gets fullscreen FPS from the
         // cputemp sidecar regardless.
-        let elevated = {
+        let can_trace = {
             #[cfg(windows)]
             {
-                crate::elevation::is_elevated()
+                crate::elevation::can_trace_etw()
             }
             #[cfg(not(windows))]
             {
                 false
             }
         };
-        if !elevated {
+        if !can_trace {
+            log::info!("PresentMon disabled: not elevated and not in Performance Log Users");
             return;
         }
         let mut child_pid: u32 = 0;

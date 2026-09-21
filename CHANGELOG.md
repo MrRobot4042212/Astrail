@@ -11,6 +11,16 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
 ## [No publicado] — Trabajo en curso
 
 ### Añadido
+- **FPS sin ejecutar como administrador.** Si tu usuario pertenece al grupo de
+  Windows «Usuarios del registro de rendimiento» (Performance Log Users), el HUD
+  mide FPS, 1 % low y GPU busy sin reiniciar Astrail como administrador. Ajustes →
+  Métricas muestra ahora qué necesita cada métrica en tu equipo y cómo
+  conseguirlo, en lugar de pedir siempre permisos de administrador.
+- **La temperatura de CPU indica que necesita el driver PawnIO.** La librería de
+  sensores ya no usa el driver WinRing0 (marcado como vulnerable por Windows
+  Defender) y no instala ningún driver por su cuenta. Sin PawnIO, Astrail ya no
+  arranca el proceso de sensores elevado para nada: lo explica y enlaza a
+  pawnio.eu.
 - **Registro en disco y diagnóstico exportable.** Astrail escribe ahora un registro
   en `%LOCALAPPDATA%\com.alfonso.meteor\logs\astrail.log` (1 MiB más una copia
   rotada) con el arranque, los escaneos de biblioteca, las sesiones de juego, el

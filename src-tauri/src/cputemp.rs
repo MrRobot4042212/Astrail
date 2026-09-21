@@ -6,8 +6,12 @@
 //! built from `sidecar/cputemp/`; the name predates its GPU mode).
 //!
 //! - **CPU temperature** (`--cpu`): LHM reads Ryzen Tctl / Intel core temps through
-//!   a kernel driver, so this needs **admin** and an HVCI-compatible driver. It is
-//!   only requested when Astrail is elevated.
+//!   the **PawnIO** kernel driver, so this needs **admin** and PawnIO installed.
+//!   The LHM build we ship (0.9.7-pre704, after LHM PR #1857) no longer carries
+//!   WinRing0 and never installs a driver itself: it opens PawnIO's device, which
+//!   the user installs separately (pawnio.eu). It is only requested when Astrail
+//!   is elevated *and* PawnIO is installed (`pawnio_installed`); otherwise a 13 MB
+//!   elevated process would run for the whole session and never read anything.
 //! - **AMD GPU telemetry and FPS** (`--gpu <selector>`): read through ADL, which
 //!   ships with AMD's graphics driver. No admin and no kernel driver. The sampler
 //!   decides when the sidecar is the GPU source (`metrics::sidecar_gpu`).
@@ -114,12 +118,29 @@ impl Mode {
     }
 }
 
+/// Whether the PawnIO driver is installed: the uninstall entry its installer
+/// writes, the same key LibreHardwareMonitor looks for. Read once per process;
+/// installing PawnIO while Astrail runs takes a restart to be noticed.
+pub fn pawnio_installed() -> bool {
+    #[cfg(windows)]
+    {
+        use winreg::enums::{HKEY_LOCAL_MACHINE, KEY_READ};
+        winreg::RegKey::predef(HKEY_LOCAL_MACHINE)
+            .open_subkey_with_flags(r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\PawnIO", KEY_READ)
+            .is_ok()
+    }
+    #[cfg(not(windows))]
+    {
+        false
+    }
+}
+
 /// The mode the overlay wants right now. CPU temperature is only asked for when
-/// elevated: without admin the driver cannot load and the reading never comes.
-fn wanted_mode(elevated: bool) -> Mode {
+/// it can be read (`cpu_temp_readable`): elevated, with PawnIO installed.
+fn wanted_mode(cpu_temp_readable: bool) -> Mode {
     use crate::metrics::{has_game, sidecar_gpu, sidecar_gpu_pending, want_cpu_temp};
     mode_for(
-        elevated && want_cpu_temp() && has_game(),
+        cpu_temp_readable && want_cpu_temp() && has_game(),
         sidecar_gpu_pending(),
         sidecar_gpu(),
     )
@@ -296,11 +317,16 @@ pub fn shutdown() {
 /// it down (unloading its driver) when nothing is wanted.
 pub fn start(app: AppHandle) {
     std::thread::spawn(move || {
-        // Elevation cannot change while we run, so check once.
+        // Neither elevation nor the driver install is re-read while we run.
         #[cfg(windows)]
         let elevated = crate::elevation::is_elevated();
         #[cfg(not(windows))]
         let elevated = false;
+        let pawnio = pawnio_installed();
+        if elevated && !pawnio {
+            log::info!("CPU temperature unavailable: PawnIO driver not installed");
+        }
+        let cpu_temp_readable = elevated && pawnio;
 
         let mut bin_missing_logged = false;
         let mut seen: u64 = 0;
@@ -313,10 +339,10 @@ pub fn start(app: AppHandle) {
             // Park until the overlay config, the running game or the GPU route
             // changes; only poll periodically while the sidecar is wanted or up (to
             // reap it).
-            let busy = running.is_some() || !wanted_mode(elevated).is_idle();
+            let busy = running.is_some() || !wanted_mode(cpu_temp_readable).is_idle();
             crate::metrics::wait_sidecar(&mut seen, busy.then(|| Duration::from_millis(500)));
 
-            let want = wanted_mode(elevated);
+            let want = wanted_mode(cpu_temp_readable);
             if want != last_want {
                 // A fresh request (next game, setting or GPU changed) gets a try at once.
                 last_unexpected_exit = None;

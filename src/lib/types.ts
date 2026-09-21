@@ -250,6 +250,16 @@ export interface DisplayInfo {
   primary: boolean;
 }
 
+/** Mirror of `lib.rs::MetricsAccess`: what the privileged metrics can use. */
+export interface MetricsAccess {
+  /** Astrail runs as administrator. */
+  elevated: boolean;
+  /** PresentMon can open its ETW session: elevated or in Performance Log Users (FPS). */
+  etw: boolean;
+  /** The PawnIO driver is installed (CPU temperature, together with `elevated`). */
+  pawnio: boolean;
+}
+
 /** Hardware/system info for the "Mi equipo" panel. */
 export interface SystemInfo {
   cpu: string;

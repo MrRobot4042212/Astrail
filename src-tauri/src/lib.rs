@@ -778,12 +778,12 @@ fn diagnostics_header(settings: &AppSettings) -> String {
         serde_json::to_string_pretty(value).unwrap_or_else(|e| format!("<not serializable: {e}>"))
     }
     format!(
-        "Astrail {} diagnostics\ntime: {}\nelevated: {}\n\n===== system =====\n{}\n\n===== overlay / MPO =====\n{}\n\n===== settings =====\n{}\n",
+        "Astrail {} diagnostics\ntime: {}\nmetrics access: {:?}\n\n===== system =====\n{}\n\n===== overlay / MPO =====\n{}\n\n===== settings =====\n{}\n",
         env!("CARGO_PKG_VERSION"),
         applog::timestamp(
             SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis()
         ),
-        is_elevated(),
+        metrics_access(),
         json(&system::collect()),
         json(&system::mpo_diagnostics()),
         json(settings),
@@ -966,9 +966,20 @@ fn username() -> String {
         .unwrap_or_default()
 }
 
-/// Whether Astrail is running elevated (admin). Admin is required for CPU temp and
-/// for FPS on NVIDIA (PresentMon). False on non-Windows.
-#[tauri::command]
+/// What the privileged metrics can use in this process, for the settings screen.
+///
+/// Each field is a fact the UI turns into advice: FPS through PresentMon needs
+/// `etw` (admin *or* Performance Log Users), CPU temperature needs `elevated`
+/// *and* `pawnio`. Group membership is fixed at logon; PawnIO can be installed
+/// while Astrail runs, so the screen re-asks each time it opens.
+#[derive(serde::Serialize, Clone, Copy, Debug)]
+pub struct MetricsAccess {
+    pub elevated: bool,
+    pub etw: bool,
+    pub pawnio: bool,
+}
+
+/// Whether Astrail is running elevated (admin). False on non-Windows.
 fn is_elevated() -> bool {
     #[cfg(windows)]
     {
@@ -977,6 +988,22 @@ fn is_elevated() -> bool {
     #[cfg(not(windows))]
     {
         false
+    }
+}
+
+#[tauri::command(async)]
+fn metrics_access() -> MetricsAccess {
+    #[cfg(windows)]
+    {
+        MetricsAccess {
+            elevated: elevation::is_elevated(),
+            etw: elevation::can_trace_etw(),
+            pawnio: cputemp::pawnio_installed(),
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        MetricsAccess { elevated: false, etw: false, pawnio: false }
     }
 }
 
@@ -1596,7 +1623,7 @@ pub fn run() {
             legal_document,
             overlay_mpo_diagnostics,
             username,
-            is_elevated,
+            metrics_access,
             restart_as_admin,
             prepare_for_update,
             abort_update,

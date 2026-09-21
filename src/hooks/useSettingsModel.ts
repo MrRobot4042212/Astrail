@@ -20,10 +20,10 @@ import {
   getAppSettings,
   patchAppSettings,
   systemInfo,
-  isElevated,
+  metricsAccess,
   restartAsAdmin,
 } from '@/lib/tauri';
-import type { OverlaySettings, ShortcutsSettings, SystemInfo } from '@/lib/types';
+import type { MetricsAccess, OverlaySettings, ShortcutsSettings, SystemInfo } from '@/lib/types';
 
 /** How long the "saved" confirmation stays next to the Discord field. */
 const SAVED_FLASH_MS = 2000;
@@ -42,7 +42,8 @@ export interface SettingsModel {
   overlay: OverlaySettings | null;
   shortcuts: ShortcutsSettings | null;
   sys: SystemInfo | null;
-  elevated: boolean | null;
+  /** `null` = not loaded, or the read failed: the permissions panel stays hidden. */
+  access: MetricsAccess | null;
   language: string;
   setDiscordId: (id: string) => void;
   updateOverlay: (patch: Partial<OverlaySettings>) => void;
@@ -76,7 +77,7 @@ export function useSettingsModel({
   const [overlay, setOverlay] = useState<OverlaySettings | null>(null);
   const [shortcuts, setShortcuts] = useState<ShortcutsSettings | null>(null);
   const [sys, setSys] = useState<SystemInfo | null>(null);
-  const [elevated, setElevated] = useState<boolean | null>(null);
+  const [access, setAccess] = useState<MetricsAccess | null>(null);
   const [language, setLanguageState] = useState<string>('system');
   const savedFlash = useRef<number | null>(null);
 
@@ -84,9 +85,9 @@ export function useSettingsModel({
     systemInfo()
       .then(setSys)
       .catch(() => setSys(null));
-    isElevated()
-      .then(setElevated)
-      .catch(() => setElevated(null));
+    metricsAccess()
+      .then(setAccess)
+      .catch(() => setAccess(null));
     hiddenCount()
       .then(setHidden)
       .catch(() => setHidden(null));
@@ -218,7 +219,7 @@ export function useSettingsModel({
     overlay,
     shortcuts,
     sys,
-    elevated,
+    access,
     language,
     setDiscordId,
     updateOverlay,
