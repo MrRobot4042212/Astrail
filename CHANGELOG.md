@@ -143,6 +143,10 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
   con mando, y el aviso daba a entender un soporte que no existe.
 
 ### Corregido
+- Un juego jugado desde una tienda que luego quedaba tapado por otra copia del
+  mismo juego (por ejemplo, instalado después también en Steam) mostraba 0 horas:
+  el tiempo se había guardado con la entrada anterior. Ahora la ficha suma el
+  tiempo de todas las copias fusionadas; el archivo de tiempos no se reescribe.
 - «Iniciar con Windows» abría la ventana de la biblioteca en cada inicio de
   sesión. Ahora Astrail arranca en la bandeja cuando lo lanza Windows (si ya
   completaste la configuración inicial y cerrar la ventana la manda a la

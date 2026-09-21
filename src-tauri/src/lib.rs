@@ -193,6 +193,11 @@ fn get_library_inner(app: AppHandle) -> Result<Vec<Game>, String> {
         types: storage::load_type_overrides(&app),
     };
     library::apply_overlays(&mut games, &aliases, &overlays);
+    // Play stats are read through the same aliases; a changed map changes what
+    // the library shows for a game, so the webview re-reads them.
+    if playtime::set_aliases(&aliases) {
+        let _ = app.emit("playtime-updated", ());
+    }
 
     // Fill in covers we already downloaded. Without this the frontend re-queued
     // every non-Steam entry through `resolve_covers` on *every* refresh, even

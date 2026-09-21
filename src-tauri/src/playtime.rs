@@ -7,7 +7,7 @@ use crate::sessionperf::SessionPerf;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Condvar, Mutex, PoisonError};
+use std::sync::{Condvar, Mutex, PoisonError, RwLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter};
 
@@ -138,14 +138,91 @@ fn load(app: &AppHandle) -> HashMap<String, PlayStat> {
     jsonstore::load_or_default(app, STORE_FILE)
 }
 
+/// `kept id -> ids folded into it` from the last library scan
+/// (`library::merge_duplicates`). Sessions are stored under the id that was shown
+/// when they were played, so a game played as `epic:x` and later shadowed by a
+/// `steam:x` copy would lose its time from view; reads fold the aliases back in.
+/// The file itself is never rewritten for this: which copy wins can change on the
+/// next scan (a store uninstalled), and a read-side view follows it for free.
+static ALIASES: RwLock<Option<HashMap<String, Vec<String>>>> = RwLock::new(None);
+
+/// Record the alias map of a finished scan. Returns whether it changed, so the
+/// caller can tell the webview to re-read play stats.
+pub fn set_aliases(aliases: &HashMap<String, String>) -> bool {
+    let mut by_kept: HashMap<String, Vec<String>> = HashMap::new();
+    for (dropped, kept) in aliases {
+        by_kept.entry(kept.clone()).or_default().push(dropped.clone());
+    }
+    for dropped in by_kept.values_mut() {
+        dropped.sort();
+    }
+    let mut slot = ALIASES.write().unwrap_or_else(PoisonError::into_inner);
+    // No scan yet reads exactly like an empty map, so a library without
+    // duplicates never triggers a re-read.
+    if slot.as_ref().map_or(by_kept.is_empty(), |cur| cur == &by_kept) {
+        *slot = Some(by_kept);
+        return false;
+    }
+    *slot = Some(by_kept);
+    true
+}
+
+/// One entry's stats folded from its own record and its aliases' records:
+/// seconds summed, latest `last_played`, histories interleaved by start and
+/// capped to the newest `HISTORY_MAX` (the dropped ones stay counted in
+/// `seconds`, as in `push_session`).
+fn merge_stats(parts: &[&PlayStat]) -> PlayStat {
+    let mut out = PlayStat::default();
+    for part in parts {
+        out.seconds += part.seconds;
+        out.last_played = out.last_played.max(part.last_played);
+        out.history.extend(part.history.iter().cloned());
+    }
+    out.history.sort_by_key(|s| (s.start, s.end));
+    if out.history.len() > HISTORY_MAX {
+        let overflow = out.history.len() - HISTORY_MAX;
+        out.history.drain(..overflow);
+    }
+    out
+}
+
+/// `map` with every kept id's aliases folded in. Records under the dropped ids
+/// stay as they are (nothing shows those ids).
+fn with_aliases(
+    mut map: HashMap<String, PlayStat>,
+    aliases: &HashMap<String, Vec<String>>,
+) -> HashMap<String, PlayStat> {
+    for (kept, dropped) in aliases {
+        let parts: Vec<&PlayStat> = std::iter::once(kept)
+            .chain(dropped)
+            .filter_map(|id| map.get(id))
+            .collect();
+        if parts.len() > 1 || (parts.len() == 1 && !map.contains_key(kept)) {
+            let merged = merge_stats(&parts);
+            map.insert(kept.clone(), merged);
+        }
+    }
+    map
+}
+
+/// `playtime.json` as the library shows it (aliases folded in).
+fn load_view(app: &AppHandle) -> HashMap<String, PlayStat> {
+    let map = load(app);
+    let aliases = ALIASES.read().unwrap_or_else(PoisonError::into_inner);
+    match aliases.as_ref() {
+        Some(a) if !a.is_empty() => with_aliases(map, a),
+        _ => map,
+    }
+}
+
 /// Play stats for a single game id (zeroed if never played).
 pub fn get(app: &AppHandle, id: &str) -> PlayStat {
-    load(app).get(id).cloned().unwrap_or_default()
+    load_view(app).remove(id).unwrap_or_default()
 }
 
 /// Play stats for every game that has any (for sorting the whole library).
 pub fn all(app: &AppHandle) -> HashMap<String, PlayStat> {
-    load(app)
+    load_view(app)
 }
 
 /// Add one finished session to a game's stats.
@@ -651,7 +728,7 @@ pub fn start(app: AppHandle) {
                         tracked_when_started_outside(&owner.source, || {
                             is_confirmed_game(
                                 crate::storage::load_type_overrides(&app).get(&owner.id).map(String::as_str),
-                                load(&app).get(&owner.id),
+                                load_view(&app).get(&owner.id),
                             )
                         })
                         .then(|| owner.id.clone())
@@ -888,6 +965,66 @@ pub fn start(app: AppHandle) {
             }
         }
     });
+}
+
+#[cfg(test)]
+mod alias_tests {
+    use super::*;
+
+    fn stat(sessions: &[(u64, u64)]) -> PlayStat {
+        let mut s = PlayStat::default();
+        for &(a, b) in sessions {
+            push_session(&mut s, a, b, None);
+        }
+        s
+    }
+
+    #[test]
+    fn time_played_under_a_folded_duplicate_is_shown_on_the_kept_entry() {
+        // Regression (H4): Hades played as `epic:hades`, then a Steam copy wins
+        // the name. The library shows `steam:1`, and its time used to read 0.
+        let map = HashMap::from([
+            ("epic:hades".to_string(), stat(&[(100, 400)])),
+            ("steam:1".to_string(), stat(&[(1_000, 1_060)])),
+            ("steam:2".to_string(), stat(&[(5, 10)])),
+        ]);
+        let aliases = HashMap::from([("steam:1".to_string(), vec!["epic:hades".to_string()])]);
+        let view = with_aliases(map, &aliases);
+        let hades = &view["steam:1"];
+        assert_eq!(hades.seconds, 360);
+        assert_eq!(hades.last_played, Some(1_060));
+        assert_eq!(hades.history.iter().map(|s| s.start).collect::<Vec<_>>(), vec![100, 1_000]);
+        // Unrelated entries are untouched, and the dropped record is not deleted.
+        assert_eq!(view["steam:2"].seconds, 5);
+        assert_eq!(view["epic:hades"].seconds, 300);
+    }
+
+    #[test]
+    fn a_kept_entry_never_played_itself_still_shows_its_alias_time() {
+        let map = HashMap::from([("windows:hades".to_string(), stat(&[(0, 90)]))]);
+        let aliases = HashMap::from([("steam:1".to_string(), vec!["windows:hades".to_string()])]);
+        assert_eq!(with_aliases(map, &aliases)["steam:1"].seconds, 90);
+    }
+
+    #[test]
+    fn merged_history_keeps_the_newest_sessions_and_every_second() {
+        let a = stat(&(0..HISTORY_MAX as u64).map(|i| (i * 10, i * 10 + 1)).collect::<Vec<_>>());
+        let b = stat(&[(1_000_000, 1_000_100)]);
+        let merged = merge_stats(&[&a, &b]);
+        assert_eq!(merged.history.len(), HISTORY_MAX);
+        assert_eq!(merged.history.last().map(|s| s.start), Some(1_000_000));
+        assert_eq!(merged.history.first().map(|s| s.start), Some(10));
+        assert_eq!(merged.seconds, HISTORY_MAX as u64 + 100);
+    }
+
+    #[test]
+    fn the_alias_map_reports_changes_only() {
+        let a = HashMap::from([("epic:x".to_string(), "steam:x".to_string())]);
+        assert!(!set_aliases(&HashMap::new()));
+        assert!(set_aliases(&a));
+        assert!(!set_aliases(&a));
+        assert!(set_aliases(&HashMap::new()));
+    }
 }
 
 #[cfg(test)]

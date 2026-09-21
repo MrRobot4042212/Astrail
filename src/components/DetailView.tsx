@@ -185,10 +185,12 @@ export function DetailView({
     };
   }, [game.id, game.install_dir]);
 
-  // Refresh playtime live when a session this game ends.
+  // Refresh playtime live when a session of this game ends, or when every
+  // game's figures may have moved (no id: a restore, a crash recovery, or a scan
+  // that changed which duplicate ids fold into this entry).
   useEffect(() => {
-    const un = listen<string>('playtime-updated', (e) => {
-      if (e.payload === game.id) getPlaytime(game.id).then(setPlay).catch(() => {});
+    const un = listen<string | null>('playtime-updated', (e) => {
+      if (!e.payload || e.payload === game.id) getPlaytime(game.id).then(setPlay).catch(() => {});
     });
     return () => {
       un.then((f) => f());
