@@ -167,7 +167,7 @@ fn spawn(bin: &Path, pid: u32) -> std::io::Result<Child> {
     // stdin is piped and held open so dropping it can ask PresentMon to stop and
     // close its ETW session; `stop` still verifies and forces the session down.
     cmd.stdout(Stdio::piped())
-        .stderr(Stdio::null())
+        .stderr(Stdio::piped())
         .stdin(Stdio::piped());
     #[cfg(windows)]
     {
@@ -181,6 +181,9 @@ fn spawn(bin: &Path, pid: u32) -> std::io::Result<Child> {
     // session instead of leaving it orphaned.
     #[cfg(windows)]
     crate::jobobj::assign(&child);
+    if let Some(err) = child.stderr.take() {
+        crate::sidecar_log::forward("PresentMon", err);
+    }
     if let Some(out) = child.stdout.take() {
         std::thread::spawn(move || parse_stdout(out, pid));
     }

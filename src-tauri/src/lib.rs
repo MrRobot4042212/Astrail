@@ -43,6 +43,7 @@ mod presentmon;
 mod screenshots;
 mod sessionperf;
 mod sidecar_integrity;
+mod sidecar_log;
 mod steam;
 mod steam_playtime;
 mod storage;

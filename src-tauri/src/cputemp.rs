@@ -220,7 +220,7 @@ fn spawn(bin: &PathBuf, mode: &Mode) -> std::io::Result<Child> {
     // stdin is piped and kept open on purpose: closing it is the sidecar's shutdown
     // signal, and the only way it ever unloads its kernel driver (see `stop`).
     cmd.stdout(Stdio::piped())
-        .stderr(Stdio::null())
+        .stderr(Stdio::piped())
         .stdin(Stdio::piped());
     #[cfg(windows)]
     {
@@ -235,6 +235,9 @@ fn spawn(bin: &PathBuf, mode: &Mode) -> std::io::Result<Child> {
     // which does NOT unload the driver — that is what `stop` is for.
     #[cfg(windows)]
     crate::jobobj::assign(&child);
+    if let Some(err) = child.stderr.take() {
+        crate::sidecar_log::forward("cputemp", err);
+    }
     if let Some(out) = child.stdout.take() {
         std::thread::spawn(move || {
             let reader = BufReader::new(out);
