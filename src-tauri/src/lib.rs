@@ -48,6 +48,7 @@ mod steam_playtime;
 mod storage;
 #[cfg(windows)]
 mod sysstat;
+mod tray;
 mod system;
 mod ubisoft;
 mod updates;
@@ -703,9 +704,27 @@ fn set_autostart(enabled: bool) -> Result<(), String> {
     result.map_err(|e| format!("Failed to update autostart: {e}"))
 }
 
+/// Lock the settings, recovering from a poisoned mutex.
+///
+/// Every reader of the settings runs on the main thread (commands, the close
+/// handler, the hotkey handler). With `panic = "abort"` a plain `unwrap()` there
+/// turns one earlier panic under the lock into the whole app dying on the next
+/// window close or key press; the data under the lock is a plain struct that is
+/// never left half-written, so the poisoned value is safe to keep using.
+fn lock_settings(state: &std::sync::Mutex<AppSettings>) -> std::sync::MutexGuard<'_, AppSettings> {
+    state.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+/// The settings in memory, or the stored ones before the state is managed.
+fn current_settings(app: &AppHandle) -> AppSettings {
+    app.try_state::<std::sync::Mutex<AppSettings>>()
+        .map(|s| lock_settings(&s).clone())
+        .unwrap_or_else(|| storage::load_settings(app))
+}
+
 #[tauri::command]
 fn get_app_settings(state: tauri::State<'_, std::sync::Mutex<AppSettings>>) -> Result<AppSettings, String> {
-    Ok(state.lock().unwrap().clone())
+    Ok(lock_settings(&state).clone())
 }
 
 #[tauri::command(async)]
@@ -742,10 +761,7 @@ fn overlay_mpo_diagnostics() -> system::MpoDiagnostics {
 #[tauri::command]
 async fn export_diagnostics(app: AppHandle) -> Result<String, String> {
     blocking(move || {
-        let settings = app
-            .try_state::<std::sync::Mutex<AppSettings>>()
-            .map(|s| s.lock().unwrap_or_else(std::sync::PoisonError::into_inner).clone())
-            .unwrap_or_else(|| storage::load_settings(&app));
+        let settings = current_settings(&app);
         let header = diagnostics_header(&settings);
         let path = applog::write_diagnostics(&header)?;
         log::info!("diagnostics exported to {}", path.display());
@@ -1092,6 +1108,12 @@ fn settings_changed(app: &AppHandle, previous: &AppSettings, next: &AppSettings)
         // The update prompt checks again right away instead of at the next start.
         let _ = app.emit("update-channel-changed", ());
     }
+    if previous.language != next.language {
+        // Native menu: main thread only.
+        let handle = app.clone();
+        let language = next.language.clone();
+        let _ = app.run_on_main_thread(move || tray::set_language(&handle, &language));
+    }
     if !same(&previous.shortcuts, &next.shortcuts) {
         // A window-manager operation: keep it on the main thread.
         let handle = app.clone();
@@ -1393,7 +1415,7 @@ pub fn run() {
                     let minimize = window
                         .app_handle()
                         .try_state::<std::sync::Mutex<AppSettings>>()
-                        .map(|s| s.lock().unwrap().minimize_to_tray)
+                        .map(|s| lock_settings(&s).minimize_to_tray)
                         .unwrap_or(true);
                     
                     if minimize {
@@ -1436,9 +1458,7 @@ pub fn run() {
                         return;
                     }
                     
-                    let settings = app.try_state::<std::sync::Mutex<crate::models::AppSettings>>()
-                        .map(|s| s.lock().unwrap().clone())
-                        .unwrap_or_else(|| crate::storage::load_settings(app));
+                    let settings = current_settings(app);
                     
                     let spot_s = parse_shortcut(&settings.shortcuts.spotlight);
                     let toggle_s = parse_shortcut(&settings.shortcuts.overlay_toggle);
@@ -1531,42 +1551,8 @@ pub fn run() {
             register_shortcuts(&handle, &settings.shortcuts);
 
             // System tray: Astrail lives in the tray so the watchers keep running
-            // after the window is closed. Left-click or "Mostrar Astrail" reopens
-            // the window; "Salir" really quits.
-            {
-                use tauri::menu::{Menu, MenuItem};
-                use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-
-                let show = MenuItem::with_id(app, "show", "Mostrar Astrail", true, None::<&str>)?;
-                let quit = MenuItem::with_id(app, "quit", "Salir", true, None::<&str>)?;
-                let menu = Menu::with_items(app, &[&show, &quit])?;
-                // No `unwrap()`: a missing icon must not take the whole app down
-                // at startup — the tray just shows the default one.
-                let mut tray = TrayIconBuilder::with_id("main");
-                if let Some(icon) = app.default_window_icon() {
-                    tray = tray.icon(icon.clone());
-                }
-                let _tray = tray
-                    .tooltip("Astrail")
-                    .menu(&menu)
-                    .show_menu_on_left_click(false)
-                    .on_menu_event(|app, event| match event.id.as_ref() {
-                        "show" => show_main(app),
-                        "quit" => app.exit(0),
-                        _ => {}
-                    })
-                    .on_tray_icon_event(|tray, event| {
-                        if let TrayIconEvent::Click {
-                            button: MouseButton::Left,
-                            button_state: MouseButtonState::Up,
-                            ..
-                        } = event
-                        {
-                            show_main(tray.app_handle());
-                        }
-                    })
-                    .build(app)?;
-            }
+            // after the window is closed (tray.rs).
+            tray::build(&handle, &settings.language)?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -1629,7 +1615,7 @@ pub fn run() {
             updates::check_update
         ])
         .build(context)
-        .expect("error al iniciar la aplicación Tauri")
+        .expect("failed to build the Tauri application")
         .run(|app_handle, event| {
             if let tauri::RunEvent::Exit = event {
                 log::info!("Astrail exiting");
@@ -1644,6 +1630,20 @@ mod tests {
 
     fn settings() -> AppSettings {
         serde_json::from_str("{}").expect("every settings field has a default")
+    }
+
+    #[test]
+    fn a_poisoned_settings_lock_is_still_readable() {
+        let state = std::sync::Arc::new(std::sync::Mutex::new(settings()));
+        let poisoner = std::sync::Arc::clone(&state);
+        let _ = std::thread::spawn(move || {
+            let mut guard = poisoner.lock().expect("fresh mutex");
+            guard.minimize_to_tray = false;
+            panic!("poison the settings lock on purpose");
+        })
+        .join();
+        assert!(state.is_poisoned());
+        assert!(!lock_settings(&state).minimize_to_tray, "the last write survives the poison");
     }
 
     fn app_entry(id: &str, executable: Option<&str>) -> Game {

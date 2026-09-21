@@ -109,6 +109,8 @@ windows = { version = "0.61", features = [
     # Out-of-context foreground WinEvent hook (SetWinEventHook): how a game started
     # outside Astrail is noticed without polling processes or injecting anything.
     "Win32_UI_Accessibility",
+    # Windows display language for the native tray menu (GetUserDefaultUILanguage).
+    "Win32_Globalization",
     # MPO-friendly HUD: DirectComposition + DXGI flip swapchain + Direct2D/DirectWrite,
     # so DWM can promote the overlay to a hardware plane and the game keeps independent
     # flip (no composition / input lag). Falls back to the GDI layered window.

@@ -171,6 +171,10 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
   «¿es una URL?» cortaba el texto por bytes. Ahora se trata como una ruta normal.
 - Dos sesiones que terminaban a la vez podían pisarse al escribir el tiempo
   jugado (lectura-modificación-escritura sin bloqueo); ahora se serializan.
+- El menú del icono de la bandeja estaba siempre en español. Ahora sigue el idioma
+  elegido en Ajustes (o el de Windows con «Sistema») y cambia al momento.
+- Un fallo interno mientras se guardaban los ajustes podía hacer que Astrail se
+  cerrara de golpe más tarde, al cerrar la ventana o al pulsar un atajo global.
 
 ## [0.3.0] — 2026-09-18
 
