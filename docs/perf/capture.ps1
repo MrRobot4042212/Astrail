@@ -107,7 +107,12 @@ $cores = (Get-CimInstance Win32_ComputerSystem).NumberOfLogicalProcessors
 $ctxRaw = Get-Counter "\$objThread(astrail/*)\$ctrCtx" -SampleInterval 5 -MaxSamples 3 -ErrorAction SilentlyContinue
 $ctxTotal = 0
 if ($ctxRaw) {
-    $ctx = @($ctxRaw | ForEach-Object { $_.CounterSamples } | Where-Object { $_.Status -eq 0 })
+    # The wildcard does NOT narrow the query: `Thread(astrail/*)` returns every
+    # thread on the machine (6 000+ instances, Idle included), so filter on the
+    # instance path. Before this filter the figure was system-wide (captures up to
+    # 2026-09-21 are invalid for this metric).
+    $ctx = @($ctxRaw | ForEach-Object { $_.CounterSamples } |
+        Where-Object { $_.Status -eq 0 -and $_.Path -match '\(astrail/\d+\)' })
     $rounds = @($ctxRaw).Count
     if ($ctx -and $rounds -gt 0) { $ctxTotal = [math]::Round((($ctx | Measure-Object CookedValue -Sum).Sum) / $rounds, 1) }
 }

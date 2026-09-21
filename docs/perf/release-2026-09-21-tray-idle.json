@@ -1,0 +1,38 @@
+﻿{
+    "label":  "release-2026-09-21-tray-idle",
+    "captured_utc":  "2026-09-21T19:23:29.3055186Z",
+    "commit":  "4b0f285",
+    "note":  "Release build of 4b0f285, tray-hidden. context_switches_s re-measured with the fixed per-thread filter (5 s sample, 26 astrail threads); the script value before the fix was system-wide.",
+    "minutes":  10,
+    "machine":  {
+                    "os":  "Microsoft Windows 11 Pro",
+                    "cpu":  "AMD Ryzen 7 7800X3D 8-Core Processor           ",
+                    "cores":  16,
+                    "ram_gb":  31.2
+                },
+    "idle":  {
+                 "cpu_percent_mean":  0,
+                 "cpu_percent_max":  0,
+                 "context_switches_s":  0,
+                 "threads":  26,
+                 "astrail_private_mb":  8.8,
+                 "astrail_workingset_mb":  39,
+                 "webview_processes":  6,
+                 "webview_workingset_mb":  94.3,
+                 "files_written":  [
+
+                                   ],
+                 "files_written_count":  0,
+                 "nvml_loaded":  false,
+                 "sidecar_running":  false
+             },
+    "caches":  {
+                   "covers_mb":  0.6,
+                   "app_icons_mb":  3.1
+               },
+    "artifacts":  {
+                      "astrail_exe_mb":  7,
+                      "cputemp_exe_mb":  12.4,
+                      "installer_mb":  18.2
+                  }
+}
