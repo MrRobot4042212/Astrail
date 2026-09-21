@@ -13,6 +13,7 @@ export const cachedLibrary = () => invoke<Game[]>('cached_library');
 
 /** Reveal the main window (created hidden) once the UI has painted. */
 export const showMainWindow = () => invoke<void>('show_main_window');
+export const mainWindowVisible = () => invoke<boolean>('main_window_visible');
 
 /** Launch any library entry, by id.
  *  The backend re-resolves the entry from the library cache / manual store, so

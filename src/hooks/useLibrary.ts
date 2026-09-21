@@ -15,6 +15,7 @@ import {
   appIcons,
   allPlaytime,
   libraryChanged,
+  mainWindowVisible,
 } from '@/lib/tauri';
 import {
   applyLedger,
@@ -459,7 +460,21 @@ export function useLibrary(autoScan: boolean) {
     };
 
     startTimer();
+    // A start from autostart stays in the tray and announces it before this
+    // listener exists, so the initial state is asked once; any event that
+    // arrives first is newer and wins.
+    let heard = false;
+    mainWindowVisible()
+      .then((v) => {
+        if (!heard && !v) {
+          visible = false;
+          missedWhileHidden = true;
+          stopTimer();
+        }
+      })
+      .catch(() => {});
     const un = listen<boolean>('window-visibility', (event) => {
+      heard = true;
       visible = event.payload;
       if (visible) {
         startTimer();

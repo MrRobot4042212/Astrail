@@ -26,10 +26,20 @@ const RUN_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
 #[cfg(windows)]
 const APPROVED_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run";
 
+/// Argument the Run key passes so a logon start stays in the tray instead of
+/// opening the window every time the user signs in.
+pub const MINIMIZED_ARG: &str = "--minimized";
+
+/// Whether a process command line (`args[0]` = the executable) carries
+/// `MINIMIZED_ARG`.
+pub(crate) fn started_minimized<I: IntoIterator<Item = String>>(args: I) -> bool {
+    args.into_iter().skip(1).any(|a| a == MINIMIZED_ARG)
+}
+
 /// The command line stored in the Run key: the executable quoted, so a path
-/// containing a space is not split by the shell at logon.
+/// containing a space is not split by the shell at logon, then `MINIMIZED_ARG`.
 pub(crate) fn run_value(exe: &std::path::Path) -> String {
-    format!("\"{}\"", exe.display())
+    format!("\"{}\" {MINIMIZED_ARG}", exe.display())
 }
 
 /// Whether a `StartupApproved` blob marks the entry as enabled. A missing or
@@ -156,9 +166,9 @@ mod imp {
     }
 
     /// Startup self-heal: carry over the entry from before the rename, then, if
-    /// autostart is on but the stored command line is not the quoted path of
-    /// this executable (an unquoted value from the old plugin, or a moved
-    /// install), rewrite it. One key read when it matches.
+    /// autostart is on but the stored command line is not the expected one (an
+    /// unquoted value from the old plugin, a moved install, or a value written
+    /// before `MINIMIZED_ARG` existed), rewrite it. One key read when it matches.
     pub fn repair() -> io::Result<()> {
         migrate_legacy()?;
         let Ok(run) = open(RUN_KEY, false) else { return Ok(()) };
@@ -210,8 +220,19 @@ mod tests {
         // a trailing space — a path with a space in it would be cut there.
         assert_eq!(
             run_value(Path::new(r"C:\Users\Jane Doe\AppData\Local\Astrail\Astrail.exe")),
-            r#""C:\Users\Jane Doe\AppData\Local\Astrail\Astrail.exe""#
+            r#""C:\Users\Jane Doe\AppData\Local\Astrail\Astrail.exe" --minimized"#
         );
+    }
+
+    #[test]
+    fn a_logon_start_is_recognised_by_its_argument() {
+        // Regression: every logon opened the library window, because nothing told
+        // a Run-key start apart from a double click.
+        let args = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        assert!(started_minimized(args(&["astrail.exe", "--minimized"])));
+        assert!(!started_minimized(args(&["astrail.exe"])));
+        assert!(!started_minimized(args(&["--minimized"])));
+        assert!(!started_minimized(args(&["astrail.exe", "--minimized=1"])));
     }
 
     #[test]

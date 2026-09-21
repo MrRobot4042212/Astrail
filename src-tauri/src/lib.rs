@@ -666,10 +666,71 @@ fn emit_visibility(app: &AppHandle, visible: bool) {
 /// The window is created with `"visible": false` so the user never sees an empty
 /// white rectangle while the webview boots (it is also `maximized` + `center`,
 /// which made that flash very visible).
+///
+/// A start from the autostart `Run` key (`--minimized`) skips this first reveal
+/// and stays in the tray, once the user is past onboarding and closing to the
+/// tray is on (otherwise the tray is not where Astrail lives, and staying hidden
+/// would look like a failed start).
 // NOT `async`: shows a window, which belongs on the main thread.
 #[tauri::command]
 fn show_main_window(app: AppHandle) {
+    if START_HIDDEN.swap(false, std::sync::atomic::Ordering::Relaxed) {
+        let (tray, setup) = app
+            .try_state::<std::sync::Mutex<AppSettings>>()
+            .map(|s| {
+                let s = lock_settings(&s);
+                (s.minimize_to_tray, s.setup_completed)
+            })
+            .unwrap_or((false, false));
+        if stays_in_tray(true, tray, setup) {
+            log::info!("started from autostart: staying in the tray");
+            emit_visibility(&app, false);
+            #[cfg(windows)]
+            schedule_webview_trim(app);
+            return;
+        }
+    }
     show_main(&app);
+}
+
+/// Set once in `run()` when the process was started with
+/// `autostart::MINIMIZED_ARG`; consumed by the first `show_main_window`.
+static START_HIDDEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Whether a start keeps the main window hidden: only a logon start, only after
+/// onboarding, and only when closing the window hides to the tray.
+fn stays_in_tray(started_minimized: bool, minimize_to_tray: bool, setup_completed: bool) -> bool {
+    started_minimized && minimize_to_tray && setup_completed
+}
+
+/// Main-window visibility, for a listener that registered after the first
+/// `window-visibility` event was already sent.
+// NOT `async`: a window getter, which belongs on the main thread.
+#[tauri::command]
+fn main_window_visible(app: AppHandle) -> bool {
+    app.get_webview_window("main")
+        .and_then(|w| w.is_visible().ok())
+        .unwrap_or(true)
+}
+
+/// Trim WebView2's memory once the main window has been hidden for a while,
+/// and only if it is still hidden by then.
+#[cfg(windows)]
+fn schedule_webview_trim(app: AppHandle) {
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_secs(WEBVIEW_TRIM_DELAY_SECS));
+        let hidden = app
+            .get_webview_window("main")
+            .and_then(|w| w.is_visible().ok())
+            .map(|visible| !visible)
+            .unwrap_or(false);
+        if hidden {
+            let handle = app.clone();
+            let _ = app.run_on_main_thread(move || {
+                set_webview_memory_low(&handle, true);
+            });
+        }
+    });
 }
 
 /// Bring the main window to the front (used by the tray and Spotlight).
@@ -1421,13 +1482,21 @@ pub fn run() {
 
     #[cfg(windows)]
     elevation::await_previous_instance();
+    START_HIDDEN.store(
+        autostart::started_minimized(std::env::args()),
+        std::sync::atomic::Ordering::Relaxed,
+    );
 
     tauri::Builder::default()
         // First, so a second launch exits before it registers a tray icon or global
         // hotkeys, or starts a PresentMon whose `--stop_existing_session` would end
         // this instance's ETW session. The second launch just surfaces this window.
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            show_main(app);
+        // A second logon start (`--minimized`) while one is already running
+        // stays out of the way.
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            if !autostart::started_minimized(args) {
+                show_main(app);
+            }
         }))
         .plugin(tauri_plugin_dialog::init())
         // In-app auto-update (checks GitHub Releases) + relaunch after install.
@@ -1450,25 +1519,8 @@ pub fn run() {
                         let _ = window.hide();
                         let app = window.app_handle().clone();
                         emit_visibility(&app, false);
-                        // Trim WebView2's memory once it has been hidden for a
-                        // while, and only if it is still hidden by then.
                         #[cfg(windows)]
-                        std::thread::spawn(move || {
-                            std::thread::sleep(std::time::Duration::from_secs(
-                                WEBVIEW_TRIM_DELAY_SECS,
-                            ));
-                            let hidden = app
-                                .get_webview_window("main")
-                                .and_then(|w| w.is_visible().ok())
-                                .map(|visible| !visible)
-                                .unwrap_or(false);
-                            if hidden {
-                                let handle = app.clone();
-                                let _ = app.run_on_main_thread(move || {
-                                    set_webview_memory_low(&handle, true);
-                                });
-                            }
-                        });
+                        schedule_webview_trim(app);
                     } else {
                         // Let it close, which exits the app.
                     }
@@ -1633,6 +1685,7 @@ pub fn run() {
             launch_game,
             set_overlay_interactive,
             show_main_window,
+            main_window_visible,
             export_diagnostics,
             export_user_data,
             pick_user_data_backup,
@@ -1748,6 +1801,17 @@ mod tests {
         assert!(apply_settings_patch(&current, serde_json::json!({ "overlay": { "show_fsp": true } })).is_err());
         assert!(apply_settings_patch(&current, serde_json::json!({ "minimize_to_tray": "yes" })).is_err());
         assert!(apply_settings_patch(&current, serde_json::json!(true)).is_err());
+    }
+
+    #[test]
+    fn only_a_logon_start_past_onboarding_with_close_to_tray_stays_hidden() {
+        assert!(stays_in_tray(true, true, true));
+        // A double click always opens the window.
+        assert!(!stays_in_tray(false, true, true));
+        // Onboarding must be seen, even at logon.
+        assert!(!stays_in_tray(true, true, false));
+        // Closing quits the app, so the tray is not its home: show it.
+        assert!(!stays_in_tray(true, false, true));
     }
 
     #[test]

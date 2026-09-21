@@ -143,6 +143,11 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
   con mando, y el aviso daba a entender un soporte que no existe.
 
 ### Corregido
+- «Iniciar con Windows» abría la ventana de la biblioteca en cada inicio de
+  sesión. Ahora Astrail arranca en la bandeja cuando lo lanza Windows (si ya
+  completaste la configuración inicial y cerrar la ventana la manda a la
+  bandeja); abrirlo a mano sigue mostrando la ventana. La entrada de inicio
+  existente se actualiza sola al arrancar.
 - Arrancar Astrail sin conexión (o con IGDB saturado) dejaba sin carátula, durante
   toda la sesión, a todos los juegos que aún no la tenían: «no se pudo preguntar»
   llegaba a la ventana igual que «IGDB no tiene carátula» y se daba por
