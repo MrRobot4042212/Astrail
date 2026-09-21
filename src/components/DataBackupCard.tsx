@@ -86,6 +86,7 @@ export function DataBackupCard() {
   return (
     <Card title={t('settings.aBackup')}>
       <p className="mb-3 text-xs leading-relaxed text-muted">{t('settings.aBackupBody')}</p>
+      <p className="mb-3 text-xs leading-relaxed text-muted">{t('settings.aBackupAuto')}</p>
 
       {state.kind !== 'picked' && (
         <div className="flex flex-col gap-2 sm:flex-row">

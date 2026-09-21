@@ -69,9 +69,17 @@ const STORES: &[&str] = &[
 ];
 
 const COVERS_DIR: &str = "user_covers";
-const SAFETY_DIR: &str = "backups";
+pub(crate) const SAFETY_DIR: &str = "backups";
 /// Pre-restore copies kept. Each one may carry every user cover.
 const SAFETY_KEEP: usize = 2;
+/// Automatic copies (`auto-<ts>.json` in `SAFETY_DIR`): at most one per
+/// `AUTO_EVERY_SECS`, newest `AUTO_KEEP` kept. Play time only exists on this
+/// machine, and a disk that dies takes it along; the export button only helps
+/// people who remember to press it.
+const AUTO_KEEP: usize = 4;
+const AUTO_EVERY_SECS: u64 = 7 * 24 * 60 * 60;
+const AUTO_PREFIX: &str = "auto-";
+const SAFETY_PREFIX: &str = "pre-import-";
 
 /// Largest backup file that is read at all. An export that would be larger is
 /// refused too, so Astrail never writes a backup it cannot read back.
@@ -338,27 +346,77 @@ pub fn export(dir: &Path, target: &Path, now: u64) -> Result<ExportReport, Strin
 pub fn write_safety_copy(dir: &Path, now: u64) -> Result<PathBuf, String> {
     let folder = dir.join(SAFETY_DIR);
     fs::create_dir_all(&folder).map_err(|e| format!("Could not create {SAFETY_DIR}: {e}"))?;
-    let path = folder.join(format!("pre-import-{now}.json"));
+    let path = folder.join(format!("{SAFETY_PREFIX}{now}.json"));
     let (bundle, _) = collect(dir, now);
     write_bundle(&path, &bundle)?;
-    prune_safety_copies(&folder);
+    prune_copies(&folder, SAFETY_PREFIX, SAFETY_KEEP);
     Ok(path)
 }
 
-fn safety_copy_stamp(name: &str) -> Option<u64> {
-    name.strip_prefix("pre-import-")?.strip_suffix(".json")?.parse().ok()
+/// Whether an automatic copy is due, given the newest one's stamp. A stamp in
+/// the future (the clock went back) counts as due, or no copy would be made
+/// until the clock caught up.
+fn auto_due(newest: Option<u64>, now: u64) -> bool {
+    newest.is_none_or(|t| t > now || now - t >= AUTO_EVERY_SECS)
 }
 
-fn prune_safety_copies(folder: &Path) {
-    let Ok(entries) = fs::read_dir(folder) else {
+/// Write `backups/auto-<now>.json` if the newest automatic copy is older than
+/// `AUTO_EVERY_SECS`, keeping the newest `AUTO_KEEP`. `Ok(None)` = not due, or
+/// nothing to save yet (no store exists: a fresh install).
+pub fn auto_copy_if_due(dir: &Path, now: u64) -> Result<Option<PathBuf>, String> {
+    let folder = dir.join(SAFETY_DIR);
+    if !auto_due(copies(&folder, AUTO_PREFIX).first().map(|c| c.0), now) {
+        return Ok(None);
+    }
+    if !STORES.iter().any(|file| dir.join(file).is_file()) {
+        return Ok(None);
+    }
+    fs::create_dir_all(&folder).map_err(|e| format!("Could not create {SAFETY_DIR}: {e}"))?;
+    let path = folder.join(format!("{AUTO_PREFIX}{now}.json"));
+    let (bundle, _) = collect(dir, now);
+    write_bundle(&path, &bundle)?;
+    prune_copies(&folder, AUTO_PREFIX, AUTO_KEEP);
+    Ok(Some(path))
+}
+
+/// `auto_copy_if_due` on the app's data dir, logging the outcome. Called at
+/// start-up and after each recorded session; when not due it costs one
+/// directory listing.
+pub fn auto_backup(app: &tauri::AppHandle) {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    if now == 0 {
         return;
+    }
+    let result = crate::jsonstore::data_dir(app).and_then(|dir| auto_copy_if_due(&dir, now));
+    match result {
+        Ok(Some(path)) => log::info!("automatic backup written to {}", path.display()),
+        Ok(None) => {}
+        Err(e) => log::warn!("automatic backup failed: {e}"),
+    }
+}
+
+fn copy_stamp(name: &str, prefix: &str) -> Option<u64> {
+    name.strip_prefix(prefix)?.strip_suffix(".json")?.parse().ok()
+}
+
+/// Copies named `<prefix><ts>.json` in `folder`, newest first.
+fn copies(folder: &Path, prefix: &str) -> Vec<(u64, PathBuf)> {
+    let Ok(entries) = fs::read_dir(folder) else {
+        return Vec::new();
     };
     let mut copies: Vec<(u64, PathBuf)> = entries
         .flatten()
-        .filter_map(|e| Some((safety_copy_stamp(&e.file_name().to_string_lossy())?, e.path())))
+        .filter_map(|e| Some((copy_stamp(&e.file_name().to_string_lossy(), prefix)?, e.path())))
         .collect();
     copies.sort_by(|a, b| b.0.cmp(&a.0));
-    for (_, path) in copies.into_iter().skip(SAFETY_KEEP) {
+    copies
+}
+
+fn prune_copies(folder: &Path, prefix: &str, keep: usize) {
+    for (_, path) in copies(folder, prefix).into_iter().skip(keep) {
         if let Err(e) = fs::remove_file(&path) {
             log::warn!("backup: could not remove old safety copy {}: {e}", path.display());
         }
@@ -1034,5 +1092,40 @@ mod tests {
             .collect();
         left.sort();
         assert_eq!(left, vec!["pre-import-30.json", "pre-import-40.json"]);
+    }
+
+    #[test]
+    fn automatic_copies_are_weekly_bounded_and_readable() {
+        let dir = seeded("auto");
+        let week = AUTO_EVERY_SECS;
+        let first = auto_copy_if_due(&dir, 1_000).unwrap().expect("first copy");
+        assert!(read(&first).is_ok());
+        // Not due again within the week, due right after it.
+        assert!(auto_copy_if_due(&dir, 1_000 + week - 1).unwrap().is_none());
+        for i in 1..=5 {
+            assert!(auto_copy_if_due(&dir, 1_000 + i * week).unwrap().is_some());
+        }
+        let left = copies(&dir.join(SAFETY_DIR), AUTO_PREFIX);
+        assert_eq!(left.len(), AUTO_KEEP);
+        assert_eq!(left[0].0, 1_000 + 5 * week);
+        // Safety copies of a restore are a separate series, never pruned by these.
+        write_safety_copy(&dir, 5).unwrap();
+        auto_copy_if_due(&dir, 1_000 + 6 * week).unwrap();
+        assert_eq!(copies(&dir.join(SAFETY_DIR), SAFETY_PREFIX).len(), 1);
+    }
+
+    #[test]
+    fn a_fresh_install_writes_no_automatic_copy() {
+        let dir = temp("auto-empty");
+        assert!(auto_copy_if_due(&dir, 1_000).unwrap().is_none());
+        assert!(!dir.join(SAFETY_DIR).exists());
+    }
+
+    #[test]
+    fn a_clock_that_went_back_does_not_stop_automatic_copies() {
+        assert!(auto_due(None, 10));
+        assert!(!auto_due(Some(10), 10 + AUTO_EVERY_SECS - 1));
+        assert!(auto_due(Some(10), 10 + AUTO_EVERY_SECS));
+        assert!(auto_due(Some(500), 10));
     }
 }

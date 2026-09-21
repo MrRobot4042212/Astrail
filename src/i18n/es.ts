@@ -362,6 +362,7 @@ export const es = {
     aDiagnosticsFailed: 'No se pudo exportar: {{reason}}',
     aBackup: 'Copia de tus datos',
     aBackupBody: 'Guarda en un único archivo lo que un nuevo escaneo no puede reconstruir: apps añadidas a mano, tiempo jugado, favoritos, categorías, juegos ocultos, carátulas que elegiste y ajustes. La biblioteca y las carátulas automáticas no se incluyen porque se vuelven a generar solas.',
+    aBackupAuto: 'Además, Astrail guarda sola una copia cada semana en la carpeta «backups» de sus datos y conserva las 4 más recientes.',
     aBackupExport: 'Exportar mis datos',
     aBackupImport: 'Importar una copia…',
     aBackupExported: 'Guardado en {{path}}',

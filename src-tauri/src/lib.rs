@@ -917,7 +917,14 @@ async fn pick_user_data_backup(app: AppHandle) -> Result<Option<backup::ImportSu
     blocking(move || {
         let pending = app.state::<PendingImport>();
         pending.replace(None);
-        let Some(picked) = backup_dialog(&app).blocking_pick_file() else {
+        // Start where the automatic and pre-import copies live, when it exists.
+        let mut dialog = backup_dialog(&app);
+        if let Ok(folder) = jsonstore::data_dir(&app).map(|d| d.join(backup::SAFETY_DIR)) {
+            if folder.is_dir() {
+                dialog = dialog.set_directory(folder);
+            }
+        }
+        let Some(picked) = dialog.blocking_pick_file() else {
             return Ok(None);
         };
         let path = picked.into_path().map_err(|e| format!("Unusable backup path: {e}"))?;
@@ -1613,6 +1620,7 @@ pub fn run() {
                     crate::art::prune_covers(&maintenance);
                     crate::appicons::maintain(&maintenance);
                     crate::art::migrate_remote_user_covers(&maintenance);
+                    backup::auto_backup(&maintenance);
                     if let Err(e) = autostart::repair() {
                         log::warn!("could not repair the Run value: {e}");
                     }

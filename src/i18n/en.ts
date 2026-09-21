@@ -363,6 +363,7 @@ export const en = {
     aDiagnosticsFailed: 'Could not export: {{reason}}',
     aBackup: 'Backup of your data',
     aBackupBody: 'Saves into a single file what a new scan cannot rebuild: apps you added by hand, play time, favorites, categories, hidden games, covers you chose and settings. The library and the automatic covers are left out because they regenerate on their own.',
+    aBackupAuto: 'Astrail also saves a copy on its own every week in the "backups" folder of its data and keeps the newest 4.',
     aBackupExport: 'Export my data',
     aBackupImport: 'Import a backup…',
     aBackupExported: 'Saved to {{path}}',

@@ -869,6 +869,7 @@ pub fn start(app: AppHandle) {
                             log::error!("could not record the session of {id}: {e}");
                         }
                         let _ = app.emit("playtime-updated", &id);
+                        crate::backup::auto_backup(&app);
                     } else {
                         log::info!("session ended: {id} ({secs} s, under {MIN_SESSION_SECS} s: not recorded)");
                     }

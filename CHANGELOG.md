@@ -11,6 +11,12 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
 ## [No publicado] — Trabajo en curso
 
 ### Añadido
+- **Copias automáticas de tus datos.** Una vez por semana Astrail guarda una copia
+  de lo que un escaneo no puede reconstruir (tiempo jugado, apps añadidas,
+  favoritos, categorías, carátulas elegidas, ajustes) en la carpeta `backups` de
+  sus datos y conserva las 4 más recientes. «Importar» abre directamente esa
+  carpeta, así que recuperar tras un fallo de disco o un borrado accidental es
+  elegir un archivo.
 - **FPS sin ejecutar como administrador.** Si tu usuario pertenece al grupo de
   Windows «Usuarios del registro de rendimiento» (Performance Log Users), el HUD
   mide FPS, 1 % low y GPU busy sin reiniciar Astrail como administrador. Ajustes →
