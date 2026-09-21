@@ -105,9 +105,16 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn the_bundled_sidecars_match_the_hashes_build_rs_embedded() {
+        // This is also the guard against `build.rs` emitting nothing: a crate
+        // built with no hashes refuses to start either sidecar at runtime, and
+        // this test is the only thing that says so. Report the reason, not just
+        // the file name — "has no build-time SHA-256" and "does not match" need
+        // very different fixes.
         let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("binaries");
         for (file, hash) in [("PresentMon.exe", PRESENTMON_SHA256), ("cputemp.exe", CPUTEMP_SHA256)] {
-            assert!(open_verified(&dir.join(file), hash).is_ok(), "{file}");
+            if let Err(err) = open_verified(&dir.join(file), hash) {
+                panic!("{file}: {err}");
+            }
         }
     }
 

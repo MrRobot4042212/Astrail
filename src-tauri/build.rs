@@ -5,6 +5,21 @@
 /// Build-time secrets that `src/igdb.rs` reads with `option_env!`.
 const ENV_KEYS: &[&str] = &["IGDB_CLIENT_ID", "IGDB_CLIENT_SECRET"];
 
+/// Directory of this crate's `Cargo.toml`, read from the **environment cargo
+/// sets when it runs the build script**, not from `env!`.
+///
+/// `env!("CARGO_MANIFEST_DIR")` bakes the path the script was *compiled* in. A
+/// build-script binary compiled inside a temporary worktree and then reused
+/// (cargo keeps it in a shared `target/`) kept pointing at a directory that no
+/// longer existed, so `.env` and `binaries/*.exe` were read from nowhere: the
+/// crate silently compiled with no IGDB credentials and no sidecar hashes, and
+/// an installer built in that state refuses to start its own sidecars.
+fn manifest_dir() -> std::path::PathBuf {
+    std::path::PathBuf::from(
+        std::env::var("CARGO_MANIFEST_DIR").expect("cargo always sets CARGO_MANIFEST_DIR"),
+    )
+}
+
 /// Load `IGDB_CLIENT_ID` / `IGDB_CLIENT_SECRET` from the repo-root `.env` for
 /// local builds.
 ///
@@ -17,14 +32,12 @@ const ENV_KEYS: &[&str] = &["IGDB_CLIENT_ID", "IGDB_CLIENT_SECRET"];
 /// Values are forwarded with `cargo:rustc-env`, which is exactly what
 /// `option_env!` reads; they never appear in build output.
 fn load_dotenv() {
-    use std::path::Path;
-
     for key in ENV_KEYS {
         // Re-run when the shell value changes, not only when the file does.
         println!("cargo:rerun-if-env-changed={key}");
     }
 
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../.env");
+    let path = manifest_dir().join("../.env");
     // Only declared when the file exists: cargo treats a missing
     // `rerun-if-changed` path as "always dirty" on some versions, which would
     // recompile the crate on every build for everyone without a `.env`.
@@ -65,13 +78,17 @@ fn embed_sidecar_hashes() {
         ("PresentMon.exe", "ASTRAIL_PRESENTMON_SHA256"),
         ("cputemp.exe", "ASTRAIL_CPUTEMP_SHA256"),
     ] {
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("binaries")
-            .join(file);
+        let path = manifest_dir().join("binaries").join(file);
         // A missing binary already fails the build in tauri-build (it is a
-        // declared resource); without a hash the app refuses to start it.
-        let Ok(bytes) = std::fs::read(&path) else {
-            continue;
+        // declared resource); without a hash the app refuses to start it. Say so
+        // loudly: a silent skip here produced a build whose sidecars could never
+        // start, and nothing else reported it.
+        let bytes = match std::fs::read(&path) {
+            Ok(bytes) => bytes,
+            Err(err) => {
+                println!("cargo:warning={} could not be read ({err}); the built app will refuse to start it", path.display());
+                continue;
+            }
         };
         println!("cargo:rerun-if-changed={}", path.display());
         let hex: String = Sha256::digest(&bytes).iter().map(|b| format!("{b:02x}")).collect();
