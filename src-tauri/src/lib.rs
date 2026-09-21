@@ -1114,11 +1114,15 @@ fn abort_update() {
 }
 
 /// Relaunch Astrail as administrator (UAC prompt), then exit this instance.
+///
+/// `async` through `blocking()`: `ShellExecuteW("runas")` only returns once the
+/// UAC prompt is answered, and on the main thread that froze the window, the tray
+/// and the hotkeys for as long as the prompt stayed open.
 #[tauri::command]
-fn restart_as_admin(app: AppHandle) -> Result<(), String> {
+async fn restart_as_admin(app: AppHandle) -> Result<(), String> {
     #[cfg(windows)]
     {
-        elevation::relaunch_elevated()?;
+        blocking(elevation::relaunch_elevated).await?;
         // Let the command response flush, then quit so only the elevated copy runs.
         let handle = app.clone();
         std::thread::spawn(move || {
@@ -1130,7 +1134,7 @@ fn restart_as_admin(app: AppHandle) -> Result<(), String> {
     #[cfg(not(windows))]
     {
         let _ = app;
-        Err("Solo disponible en Windows.".into())
+        Err("Only available on Windows.".into())
     }
 }
 

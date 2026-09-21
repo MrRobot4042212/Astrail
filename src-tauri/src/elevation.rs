@@ -80,6 +80,9 @@ pub fn relaunch_elevated() -> Result<(), String> {
     use windows::Win32::UI::Shell::ShellExecuteW;
     use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
 
+    // ShellExecute may hand the verb to a shell extension, which wants an
+    // apartment; this runs on a pool thread, not the main one.
+    let _com = crate::launcher::desktop_shell::ComScope::enter();
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
     let exe_w = HSTRING::from(exe.as_os_str());
     // The single-instance guard would make the elevated copy hand off to this one
@@ -100,7 +103,7 @@ pub fn relaunch_elevated() -> Result<(), String> {
     if result.0 as isize > 32 {
         Ok(())
     } else {
-        Err("No se pudo reiniciar como administrador (UAC cancelado).".into())
+        Err("Could not restart as administrator (UAC prompt declined or failed).".into())
     }
 }
 

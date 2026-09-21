@@ -302,10 +302,10 @@ pub(crate) mod desktop_shell {
     use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
 
     /// Balances a successful `CoInitializeEx` on this thread.
-    pub(super) struct ComScope(bool);
+    pub(crate) struct ComScope(bool);
 
     impl ComScope {
-        pub(super) fn enter() -> Self {
+        pub(crate) fn enter() -> Self {
             // SAFETY: plain apartment initialisation of the current thread. S_OK and
             // S_FALSE must be balanced; RPC_E_CHANGED_MODE (already MTA) must not,
             // and out-of-process calls to Explorer work from either apartment.
