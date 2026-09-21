@@ -900,6 +900,112 @@ mod tests {
         format!("game.exe,1234,{chain},DXGI,0,0,0,1.0,0.1,{ft}")
     }
 
+    /// Real PresentMon 2.4.1 output, captured on 2026-09-21 without admin (Performance
+    /// Log Users) with the exact arguments `spawn` passes, from DWM on a two-monitor
+    /// desktop: two swapchains presenting at different rates, `msGPUActive` filled.
+    const REAL_CAPTURE: &str = include_str!("../tests/fixtures/presentmon-dwm-2swapchains.csv");
+
+    /// One data row of the capture, read without `FrameParser` (the oracle).
+    struct RealRow {
+        chain: u64,
+        t_ms: u64,
+        ft: f32,
+        gpu: f32,
+    }
+
+    fn real_rows() -> Vec<RealRow> {
+        let mut lines = REAL_CAPTURE.lines();
+        let header: Vec<&str> = lines.next().expect("header").split(',').collect();
+        let col = |name: &str| header.iter().position(|c| *c == name).expect(name);
+        let (sc, t, ft, gpu) = (col("SwapChainAddress"), col("TimeInSeconds"), col("msBetweenPresents"), col("msGPUActive"));
+        lines
+            .filter(|l| !l.trim().is_empty())
+            .map(|l| {
+                let f: Vec<&str> = l.split(',').collect();
+                RealRow {
+                    chain: parse_address(f[sc]),
+                    t_ms: (f[t].parse::<f64>().expect("time") * 1000.0) as u64,
+                    ft: f[ft].parse().expect("frametime"),
+                    gpu: f[gpu].parse().expect("gpu"),
+                }
+            })
+            .collect()
+    }
+
+    /// Frames of one chain inside the parser's 1 s window: the newest ones, dropping
+    /// from the front while the sum exceeds `WINDOW_MS` (at least one kept).
+    fn last_window(frames: &[f32]) -> &[f32] {
+        let mut start = 0;
+        let mut sum: f32 = frames.iter().sum();
+        while sum > WINDOW_MS && frames.len() - start > 1 {
+            sum -= frames[start];
+            start += 1;
+        }
+        &frames[start..]
+    }
+
+    #[test]
+    fn a_real_capture_replays_to_the_busiest_swapchain() {
+        let rows = real_rows();
+        assert!(rows.len() > 500, "the capture holds {} rows", rows.len());
+
+        // Replayed on the capture's own clock, as the reader would have seen it live.
+        let mut p = FrameParser::new();
+        let mut lines = REAL_CAPTURE.lines().filter(|l| !l.trim().is_empty());
+        assert_eq!(p.feed(lines.next().expect("header"), 0), None);
+        let mut last = None;
+        for (line, r) in lines.zip(&rows) {
+            if let Some(reading) = p.feed(line, r.t_ms) {
+                last = Some(reading);
+            }
+        }
+        let (fps, ft) = last.expect("the capture produces a reading");
+
+        // Oracle: the chain with more presents in its final second is the one shown,
+        // at exactly the rate of its own frames, not a blend of both chains.
+        let per_chain = |id: u64| rows.iter().filter(|r| r.chain == id).map(|r| r.ft).collect::<Vec<_>>();
+        let mut ids: Vec<u64> = rows.iter().map(|r| r.chain).collect();
+        ids.sort_unstable();
+        ids.dedup();
+        assert_eq!(ids.len(), 2, "the capture was taken on two monitors");
+        let busiest = *ids.iter().max_by_key(|&&id| last_window(&per_chain(id)).len()).expect("chains");
+        let own = per_chain(busiest);
+        let window = last_window(&own);
+        let want_ft = window.iter().sum::<f32>() / window.len() as f32;
+        assert!((ft - want_ft).abs() < 1e-3, "frametime {ft} vs {want_ft}");
+        assert!((fps - 1000.0 / want_ft).abs() < 1e-2, "fps {fps}");
+        let all: Vec<f32> = rows.iter().map(|r| r.ft).collect();
+        let blended = last_window(&all);
+        let blended_fps = 1000.0 * blended.len() as f32 / blended.iter().sum::<f32>();
+        assert!((fps - blended_fps).abs() > 1.0, "{fps} would also be the blended rate {blended_fps}");
+
+        // GPU busy over the same window, from the column the capture carries.
+        let gpu: Vec<f32> = rows.iter().filter(|r| r.chain == busiest).map(|r| r.gpu).collect();
+        let gpu_window = &gpu[gpu.len() - window.len()..];
+        let want_busy = (gpu_window.iter().sum::<f32>() / window.iter().sum::<f32>() * 100.0).min(100.0);
+        let busy = p.gpu_busy_pct().expect("msGPUActive is present and non-zero");
+        assert!((busy - want_busy).abs() < 0.05, "gpu busy {busy} vs {want_busy}");
+
+        // The history holds the reported chain's frames, in order, and nothing else.
+        let history: Vec<f32> = p.history.frames.iter().copied().collect();
+        let own_no_gaps: Vec<f32> = own.iter().copied().filter(|f| *f <= GAP_MS).collect();
+        assert!(!history.is_empty() && history.len() <= own_no_gaps.len());
+        assert_eq!(history, own_no_gaps[own_no_gaps.len() - history.len()..]);
+        let mut expected = history.clone();
+        let (low1, low01) = p.lows();
+        assert_eq!((low1, low01), percentile_lows(&mut expected));
+        // Under 1000 frames there is no 0.1 % low, never a guess.
+        assert!(history.len() < MIN_FRAMES_LOW_01 && low01.is_none());
+        if history.len() >= MIN_FRAMES_LOW_1 {
+            let low1 = low1.expect("enough frames for a 1 % low");
+            assert!(low1 > 0.0 && low1 <= fps, "1% low {low1} above the average {fps}");
+        }
+
+        // Graph slices never report a frame longer than the worst one fed.
+        let worst = own_no_gaps.iter().copied().fold(0.0f32, f32::max);
+        assert!(p.graph().points().iter().all(|v| *v >= 0.0 && *v <= worst + 1e-3));
+    }
+
     #[test]
     fn single_swapchain_reports_its_rate() {
         let mut p = FrameParser::new();
