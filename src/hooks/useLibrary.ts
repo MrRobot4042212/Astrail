@@ -267,6 +267,11 @@ export function useLibrary(autoScan: boolean) {
       id: `mock:${i}`,
       name: `Mock Game ${String(i).padStart(4, '0')}`,
       source: sources[i % sources.length],
+      app_id: null,
+      executable: null,
+      install_dir: null,
+      cover_url: null,
+      launch_uri: null,
       favorite: i % 17 === 0,
       categories: i % 5 === 0 ? ['Mock'] : [],
     }));

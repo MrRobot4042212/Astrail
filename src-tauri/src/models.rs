@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 /// module (`steam.rs`, `epic.rs`, `gog.rs`, …) and merged in `get_library`.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
 pub enum GameSource {
     Steam,
     Epic,
@@ -32,6 +33,7 @@ pub enum GameSource {
 /// A user-created category, optionally with a chosen icon key (resolved to an
 /// SVG on the frontend from a bundled icon set). Persisted in `storage.rs`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
 pub struct Category {
     pub name: String,
     #[serde(default)]
@@ -40,6 +42,7 @@ pub struct Category {
 
 /// A single launchable entry in the unified library.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
 pub struct Game {
     /// Stable unique id, e.g. "steam:440", "epic:Fortnite", "manual:1718900000000".
     pub id: String,
@@ -82,6 +85,7 @@ pub struct Game {
 
 /// Global settings configured by the user or the app itself.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
 pub struct AppSettings {
     /// Whether the user has completed the first-run onboarding setup.
     #[serde(default)]
@@ -124,6 +128,7 @@ fn default_track_external_games() -> bool {
 /// Release channel followed by the updater (see `updates.rs`).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
 pub enum UpdateChannel {
     #[default]
     Stable,
@@ -135,6 +140,7 @@ fn default_language() -> String {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
 pub struct ShortcutsSettings {
     #[serde(default = "default_shortcut_spotlight")]
     pub spotlight: String,
@@ -200,12 +206,15 @@ fn default_minimize_to_tray() -> bool {
 /// Configuration for the in-game performance/telemetry overlay. Persisted as part
 /// of `AppSettings`; applied live by `metrics.rs` and read by the overlay window.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
 pub struct OverlaySettings {
     /// Master switch. When off, the sampler idles and the overlay window stays hidden.
     #[serde(default)]
     pub enabled: bool,
     /// Corner of the screen: "top-left" | "top-right" | "bottom-left" | "bottom-right".
     #[serde(default = "default_overlay_position")]
+    // Narrowed for the frontend only; Rust still accepts any string here.
+    #[cfg_attr(test, ts(type = "\"top-left\" | \"top-right\" | \"bottom-left\" | \"bottom-right\""))]
     pub position: String,
     /// Sampling/emit interval in milliseconds.
     #[serde(default = "default_overlay_interval")]
@@ -264,6 +273,8 @@ pub struct OverlaySettings {
     /// "always" (draw regardless — current behavior) | "performance" (auto-hide the HUD
     /// once a stable *composed* state is detected, so it never silently costs FPS).
     #[serde(default = "default_mpo_mode")]
+    // Narrowed for the frontend only; Rust still accepts any string here.
+    #[cfg_attr(test, ts(type = "\"always\" | \"performance\""))]
     pub mpo_mode: String,
 }
 

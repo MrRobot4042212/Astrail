@@ -19,6 +19,11 @@ const game = (id: string, extra: Partial<Game> = {}): Game => ({
   id,
   name: `Game ${id}`,
   source: 'steam',
+  app_id: null,
+  executable: null,
+  install_dir: null,
+  cover_url: null,
+  launch_uri: null,
   favorite: false,
   categories: [],
   ...extra,
@@ -36,14 +41,13 @@ describe('folderOf', () => {
   });
 
   it('falls back to the folder holding the executable, either separator', () => {
-    expect(folderOf({ executable: 'C:\\Apps\\Tool\\tool.exe' })).toBe('C:\\Apps\\Tool');
-    expect(folderOf({ executable: 'C:/Apps/Tool/tool.exe' })).toBe('C:/Apps/Tool');
+    expect(folderOf({ executable: 'C:\\Apps\\Tool\\tool.exe', install_dir: null })).toBe('C:\\Apps\\Tool');
+    expect(folderOf({ executable: 'C:/Apps/Tool/tool.exe', install_dir: null })).toBe('C:/Apps/Tool');
   });
 
   it('has nothing to reveal for a bare file name or no path at all', () => {
-    expect(folderOf({ executable: 'tool.exe' })).toBeNull();
+    expect(folderOf({ executable: 'tool.exe', install_dir: null })).toBeNull();
     expect(folderOf({ executable: null, install_dir: null })).toBeNull();
-    expect(folderOf({})).toBeNull();
   });
 });
 

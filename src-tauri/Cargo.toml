@@ -137,3 +137,9 @@ strip = true
 # metrics sampler, PE icon parsing and JSON work are all in dependency code.
 [profile.dev.package."*"]
 opt-level = 2
+
+[dev-dependencies]
+# Generates the TypeScript mirror of the IPC types (`src/lib/bindings/`) from
+# `cargo test`. Test-only on purpose: every derive is `cfg_attr(test, ...)`, so
+# nothing of it reaches the shipped binary.
+ts-rs = "12"

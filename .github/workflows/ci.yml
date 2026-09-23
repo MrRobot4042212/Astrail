@@ -94,6 +94,18 @@ jobs:
         working-directory: src-tauri
         run: cargo test
 
+      # `cargo test` regenerates the TypeScript mirror of the IPC types. Anything
+      # it changed means a Rust model moved without the frontend following.
+      - name: IPC bindings are up to date
+        shell: pwsh
+        run: |
+          $changed = git status --porcelain -- src/lib/bindings
+          if ($changed) {
+            Write-Output $changed
+            git diff -- src/lib/bindings
+            throw "src/lib/bindings is stale: run 'npm run bindings' and commit the result."
+          }
+
   # The installer itself. Everything above stops at `cargo test`, so the NSIS
   # script, the install hooks, the bundled resources and the updater artifacts
   # used to be produced for the very first time by the tag build — exactly the

@@ -2,28 +2,28 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Additional terms under GPL-3.0 section 7 apply: see ADDITIONAL-TERMS.md
 
-export type GameSource =
-  | 'steam'
-  | 'epic'
-  | 'gog'
-  | 'ea'
-  | 'ubisoft'
-  | 'xbox'
-  | 'battlenet'
-  | 'riot'
-  | 'rockstar'
-  | 'amazon'
-  | 'battlestate'
-  | 'windows'
-  | 'app'
-  | 'manual';
+// Types that cross the IPC boundary are generated from the Rust models by ts-rs
+// (`cargo test` writes `./bindings/`); never edit them by hand. What follows in
+// this file is either not generated yet or only exists on this side.
+import type { AppSettings } from './bindings/AppSettings';
+import type { Game as GameModel } from './bindings/Game';
+import type { OverlaySettings } from './bindings/OverlaySettings';
+import type { UpdateChannel } from './bindings/UpdateChannel';
 
-/** A user-created category with an optional bundled-icon key. */
-export interface Category {
-  name: string;
-  icon?: string | null;
-}
+export type { AppSettings } from './bindings/AppSettings';
+export type { Category } from './bindings/Category';
+export type { GameSource } from './bindings/GameSource';
+export type { OverlaySettings } from './bindings/OverlaySettings';
+export type { ShortcutsSettings } from './bindings/ShortcutsSettings';
+export type { UpdateChannel } from './bindings/UpdateChannel';
 
+export type Game = GameModel & {
+  /** Client-side only: extracted exe icon path (apps without cover/brand logo).
+   *  Not part of the backend model; filled in lazily by `useLibrary`. */
+  icon?: string;
+};
+
+export type OverlayPosition = OverlaySettings['position'];
 
 /** What the HUD measured during a session (`sessionperf.rs`). Every figure is
  *  optional: FPS needs PresentMon, temperatures need their sensor, and all of it
@@ -94,24 +94,6 @@ export interface BackupImportReport {
   safety_copy: string;
 }
 
-export interface Game {
-  id: string;
-  name: string;
-  source: GameSource;
-  app_id?: number | null;
-  executable?: string | null;
-  install_dir?: string | null;
-  cover_url?: string | null;
-  launch_uri?: string | null;
-  /** User overlay: marked as favorite. */
-  favorite?: boolean;
-  /** User overlay: manual categories assigned to this entry. */
-  categories?: string[];
-  /** Client-side only: extracted exe icon path (apps without cover/brand logo).
-   *  Not part of the backend model; filled in lazily by `useLibrary`. */
-  icon?: string;
-}
-
 /** One answer of `resolve_covers` (mirrors `art::Cover`). `unavailable` means
  *  nobody could be asked (offline, rate limited, no credentials): it says nothing
  *  about the game and must not be remembered as a miss. */
@@ -119,47 +101,6 @@ export type CoverAnswer =
   | { status: 'found'; path: string }
   | { status: 'not_found' }
   | { status: 'unavailable' };
-
-export type OverlayPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
-
-/** In-game metrics overlay configuration (part of AppSettings). */
-export interface OverlaySettings {
-  enabled: boolean;
-  position: OverlayPosition;
-  interval_ms: number;
-  show_fps: boolean;
-  show_frametime: boolean;
-  /** 1 % and 0.1 % low FPS rows. PresentMon only; each appears once it has enough frames. */
-  show_lows: boolean;
-  /** Frametime graph under the rows. PresentMon only; off by default. */
-  show_frametime_graph: boolean;
-  /** Share of the game's frame time its GPU work took. PresentMon only; off by default. */
-  show_gpu_busy: boolean;
-  show_gpu: boolean;
-  show_gpu_temp: boolean;
-  show_vram: boolean;
-  show_cpu: boolean;
-  show_cpu_temp: boolean;
-  show_ram: boolean;
-  /** Which GPU to sample: "auto" | "nvml:<i>" | "pci:<AMD PnP id fragment>". */
-  gpu: string;
-  /** CSS hex color for metric labels ("FPS", "GPU"…). */
-  label_color: string;
-  /** CSS hex color for metric values (numbers). */
-  value_color: string;
-  /** CSS hex color for accented values (FPS, GPU%, CPU%) and the game title. */
-  accent_color: string;
-  /** HUD background opacity 0–100. */
-  bg_opacity: number;
-  /** Font size key: "xs" | "sm" | "base". */
-  font_size: string;
-  /**
-   * What to do when the HUD can't get a hardware overlay plane and DWM composites it
-   * (the game loses independent-flip → FPS/latency cost): "always" (draw regardless) |
-   * "performance" (auto-hide the HUD once a stable composed state is detected).
-   */
-  mpo_mode: "always" | "performance";
-}
 
 /** Live overlay health: 0 unknown, 1 free (hardware plane), 2 costing (DWM composing). */
 export type OverlayHealth = 0 | 1 | 2;
@@ -176,40 +117,10 @@ export interface MpoDiagnostics {
   hags: boolean | null;
 }
 
-export interface ShortcutsSettings {
-  spotlight: string;
-  overlay_toggle: string;
-  overlay_settings: string;
-}
-
 /** A partial `AppSettings` for `patchAppSettings`: nested objects merge key by key. */
 export type AppSettingsPatch = {
   [K in keyof AppSettings]?: AppSettings[K] extends object ? Partial<AppSettings[K]> : AppSettings[K];
 };
-
-export interface AppSettings {
-  setup_completed: boolean;
-  minimize_to_tray: boolean;
-  overlay: OverlaySettings;
-  shortcuts: ShortcutsSettings;
-  /** UI language: "system" (follow OS, fallback English), "es" or "en". */
-  language: string;
-  /**
-   * Publish the game being played to Discord Rich Presence. Opt-in: this
-   * broadcasts what you are playing to your whole friends list.
-   */
-  discord_enabled: boolean;
-  /** Releases the updater offers. `beta` is opt-in. */
-  update_channel: UpdateChannel;
-  /**
-   * Time a library game (and show its HUD) when it was started outside Astrail.
-   * On by default. Registry-detected entries only count once played from Astrail
-   * (or marked as a game); applications never do.
-   */
-  track_external_games: boolean;
-}
-
-export type UpdateChannel = 'stable' | 'beta';
 
 /**
  * What `check_update` returns: the updater plugin's own metadata (its `Update`
