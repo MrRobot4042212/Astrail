@@ -197,7 +197,7 @@ fn get_library_inner(app: AppHandle) -> Result<Vec<Game>, String> {
     // Play stats are read through the same aliases; a changed map changes what
     // the library shows for a game, so the webview re-reads them.
     if playtime::set_aliases(&aliases) {
-        let _ = app.emit("playtime-updated", ());
+        playtime::notify_updated(&app, None);
     }
 
     // Fill in covers we already downloaded. Without this the frontend re-queued
@@ -967,7 +967,7 @@ async fn apply_user_data_backup(app: AppHandle) -> Result<backup::ImportReport, 
         }
         // Even after a failure: some stores may already hold the restored data.
         let _ = app.emit("user-data-imported", ());
-        let _ = app.emit("playtime-updated", ());
+        playtime::notify_updated(&app, None);
         match outcome {
             Ok(covers) => {
                 log::info!("user data imported from a backup ({covers} cover(s)); previous data in {safety}");

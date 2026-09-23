@@ -127,6 +127,19 @@ struct IndexEntry {
     source: crate::models::GameSource,
 }
 
+/// Event the webview re-reads play stats on (`useLibrary`, `DetailView`).
+const UPDATED_EVENT: &str = "playtime-updated";
+
+/// Tell the webview that play stats changed. The payload is the id whose stats
+/// changed, or `null` when any game's may have (a restore, a new alias map, crash
+/// recovery). Every sender goes through here so the payload keeps one shape; it
+/// used to be `null`, `""` or an id depending on who sent it.
+pub fn notify_updated(app: &AppHandle, id: Option<&str>) {
+    if let Err(e) = app.emit(UPDATED_EVENT, id) {
+        log::warn!("could not emit {UPDATED_EVENT}: {e}");
+    }
+}
+
 fn now() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -287,7 +300,7 @@ pub fn reconcile(app: &AppHandle) {
             let _ = record_session(app, &s.id, s.start, s.last_seen, None);
         }
     }
-    let _ = app.emit("playtime-updated", "");
+    notify_updated(app, None);
 }
 
 /// Registra que un juego fue lanzado a través de Astrail, para que sus métricas
@@ -868,7 +881,7 @@ pub fn start(app: AppHandle) {
                         if let Err(e) = record_session(&app, &id, start, last, perf) {
                             log::error!("could not record the session of {id}: {e}");
                         }
-                        let _ = app.emit("playtime-updated", &id);
+                        notify_updated(&app, Some(&id));
                         crate::backup::auto_backup(&app);
                     } else {
                         log::info!("session ended: {id} ({secs} s, under {MIN_SESSION_SECS} s: not recorded)");
@@ -966,6 +979,21 @@ pub fn start(app: AppHandle) {
             }
         }
     });
+}
+
+#[cfg(test)]
+mod event_tests {
+    #[test]
+    fn play_stat_changes_are_only_announced_through_notify_updated() {
+        // A raw emit next to the helper is how the payload drifted into three shapes.
+        // Built with concat! so this test does not match its own source.
+        let raw = [concat!("emit(", "\"playtime-updated\""), concat!("emit(", "UPDATED_EVENT")];
+        for (file, src) in [("lib.rs", include_str!("lib.rs")), ("playtime.rs", include_str!("playtime.rs"))] {
+            let count: usize = raw.iter().map(|r| src.matches(r).count()).sum();
+            let expected = if file == "playtime.rs" { 1 } else { 0 };
+            assert_eq!(count, expected, "{file} emits playtime-updated outside notify_updated");
+        }
+    }
 }
 
 #[cfg(test)]
