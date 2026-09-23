@@ -149,7 +149,6 @@ export function DetailView({
     return () => {
       alive = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [game.id, game.name, isApp]);
 
   // Hi-res cover for the hero. The grid stores `t_cover_big` (264×374) since

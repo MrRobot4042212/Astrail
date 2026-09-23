@@ -330,7 +330,6 @@ export function GuidedTour({
       view: 'all',
     },
     ];
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sc, t]);
 
   const [idx, setIdx] = useState(0);
