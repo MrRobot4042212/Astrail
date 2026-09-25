@@ -37,6 +37,12 @@ export function folderOf(game: Pick<Game, 'install_dir' | 'executable'>): string
  * because an entry uses them, alphabetically. Names compare case-insensitively
  * and the explicit entry wins, so its icon and position are kept.
  */
+/** Category names are one category whatever their case, as in the backend
+ *  (`storage.rs` compares them with `eq_ignore_ascii_case`). */
+export function sameCategory(a: string, b: string): boolean {
+  return a.toLowerCase() === b.toLowerCase();
+}
+
 export function sidebarCategories(meta: readonly Category[], games: readonly Game[]): Category[] {
   const result: Category[] = [];
   const seen = new Set<string>();
@@ -48,11 +54,14 @@ export function sidebarCategories(meta: readonly Category[], games: readonly Gam
   }
   const inUse = new Set<string>();
   for (const g of games) for (const c of g.categories ?? []) inUse.add(c);
-  const extra = [...inUse].filter((c) => !seen.has(c.toLowerCase())).sort((a, b) => a.localeCompare(b));
-  // Two entries spelling one category differently ("RPG" / "rpg") are listed
-  // twice on purpose: filters and counts match the exact name, so merging the
-  // rows here would make one spelling unreachable.
-  for (const name of extra) result.push({ name, icon: null });
+  // One row per category whatever its spelling: counts and filters match names
+  // regardless of case, so every spelling is reachable from that row.
+  for (const name of [...inUse].sort((a, b) => a.localeCompare(b))) {
+    const key = name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push({ name, icon: null });
+  }
   return result;
 }
 
@@ -61,14 +70,23 @@ export function sidebarCategories(meta: readonly Category[], games: readonly Gam
 export function libraryCounts(games: readonly Game[], categoryNames: readonly string[]): Record<string, number> {
   const base: Record<string, number> = { all: 0, favorites: 0 };
   for (const source of SOURCE_ORDER) base[source] = 0;
-  for (const name of categoryNames) base[`cat:${name}`] = 0;
+  // Listed spelling by lower-cased name, so "rpg" counts under the "RPG" row.
+  const listed = new Map<string, string>();
+  for (const name of categoryNames) {
+    base[`cat:${name}`] = 0;
+    listed.set(name.toLowerCase(), `cat:${name}`);
+  }
   for (const g of games) {
     base.all++;
     if (g.favorite) base.favorites++;
     base[g.source] = (base[g.source] ?? 0) + 1;
+    const counted = new Set<string>();
     for (const c of g.categories ?? []) {
-      const key = `cat:${c}`;
-      if (key in base) base[key]++;
+      const key = listed.get(c.toLowerCase());
+      if (key && !counted.has(key)) {
+        counted.add(key);
+        base[key]++;
+      }
     }
   }
   return base;
@@ -78,7 +96,10 @@ function inFilter(g: Game, filter: ViewFilter): boolean {
   // Home has no grid of its own; a query typed there searches everything.
   if (filter === 'all' || filter === 'home') return true;
   if (filter === 'favorites') return !!g.favorite;
-  if (filter.startsWith('cat:')) return g.categories?.includes(filter.slice(4)) ?? false;
+  if (filter.startsWith('cat:')) {
+    const name = filter.slice(4);
+    return g.categories?.some((c) => sameCategory(c, name)) ?? false;
+  }
   return g.source === filter;
 }
 
@@ -146,5 +167,7 @@ export function planCategoryAdd(
 /** Does the filter still point at something the sidebar lists? A category filter
  *  dies with its category (renamed, deleted, or its last entry left). */
 export function filterIsAlive(filter: ViewFilter, categoryNames: readonly string[]): boolean {
-  return !filter.startsWith('cat:') || categoryNames.includes(filter.slice(4));
+  if (!filter.startsWith('cat:')) return true;
+  const name = filter.slice(4);
+  return categoryNames.some((c) => sameCategory(c, name));
 }

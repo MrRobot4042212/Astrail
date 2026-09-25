@@ -7,6 +7,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { CloseIcon, PlusIcon } from './icons';
+import { sameCategory } from '@/lib/libraryView';
 
 /** Pick one or more categories to **add** to several games at once. Only adds
  *  (never removes), so mixed selections aren't clobbered. */
@@ -27,9 +28,10 @@ export function BulkCategoryDialog({
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
 
-  const options = Array.from(new Set([...allCategories, ...chosen])).sort((a, b) =>
-    a.localeCompare(b),
-  );
+  // One chip per category whatever its case: the listed spelling wins.
+  const options = [...allCategories, ...chosen]
+    .filter((name, i, all) => all.findIndex((other) => sameCategory(other, name)) === i)
+    .sort((a, b) => a.localeCompare(b));
   const isActive = (name: string) => chosen.some((c) => c.toLowerCase() === name.toLowerCase());
 
   function toggle(name: string) {

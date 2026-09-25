@@ -80,6 +80,37 @@ describe('sidebarCategories', () => {
   });
 });
 
+describe('category names ignore case, as the backend does', () => {
+  // Regression: with "RPG" created and a game tagged "rpg", the sidebar showed
+  // one "RPG" row whose count and filter matched the exact name only, so the
+  // game was in no listed category at all.
+  const meta = [{ name: 'RPG', icon: null }];
+  const games = [game('1', { name: 'One', categories: ['rpg'] }), game('2', { name: 'Two', categories: ['RPG'] })];
+
+  it('counts every spelling under the listed row', () => {
+    expect(libraryCounts(games, ['RPG'])['cat:RPG']).toBe(2);
+  });
+
+  it('filters every spelling under the listed row', () => {
+    expect(visibleGames(games, 'cat:RPG', '', 'name', {}).map((g) => g.id)).toEqual(['1', '2']);
+  });
+
+  it('lists two in-use spellings of a category once', () => {
+    const tagged = [game('1', { categories: ['rpg'] }), game('2', { categories: ['RPG'] })];
+    const rows = sidebarCategories([], tagged);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].name.toLowerCase()).toBe('rpg');
+  });
+
+  it('keeps a filter alive whatever the case of its name', () => {
+    expect(filterIsAlive('cat:rpg', ['RPG'])).toBe(true);
+  });
+
+  it('still lists the created spelling, icon included', () => {
+    expect(sidebarCategories(meta, games)).toEqual(meta);
+  });
+});
+
 describe('libraryCounts', () => {
   const games = [
     game('1', { favorite: true, categories: ['Coop'] }),
@@ -117,11 +148,11 @@ describe('visibleGames', () => {
     expect(names(visibleGames(games, 'home', 'celes', 'name', {}))).toEqual(['Celeste']);
   });
 
-  it('filters by favorites, by source and by exact category', () => {
+  it('filters by favorites, by source and by category whatever its case', () => {
     expect(names(visibleGames(games, 'favorites', '', 'name', {}))).toEqual(['Borderlands']);
     expect(names(visibleGames(games, 'epic', '', 'name', {}))).toEqual(['Astroneer']);
     expect(names(visibleGames(games, 'cat:Coop', '', 'name', {}))).toEqual(['Astroneer', 'Celeste']);
-    expect(visibleGames(games, 'cat:coop', '', 'name', {})).toEqual([]);
+    expect(names(visibleGames(games, 'cat:coop', '', 'name', {}))).toEqual(['Astroneer', 'Celeste']);
   });
 
   it('orders by time played, then by name for entries never played', () => {

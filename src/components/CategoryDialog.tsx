@@ -8,6 +8,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { setCategories } from '@/lib/tauri';
 import type { Game } from '@/lib/types';
+import { sameCategory } from '@/lib/libraryView';
 import { CloseIcon, PlusIcon } from './icons';
 import { failureText } from '@/i18n/failureText';
 
@@ -32,9 +33,10 @@ export function CategoryDialog({
   const [error, setError] = useState<string | null>(null);
 
   // Union of in-use categories and ones already on this game, shown as chips.
-  const options = Array.from(new Set([...allCategories, ...selected])).sort((a, b) =>
-    a.localeCompare(b),
-  );
+  // One chip per category whatever its case: the listed spelling wins.
+  const options = [...allCategories, ...selected]
+    .filter((name, i, all) => all.findIndex((other) => sameCategory(other, name)) === i)
+    .sort((a, b) => a.localeCompare(b));
 
   function toggle(name: string) {
     setSelected((prev) =>

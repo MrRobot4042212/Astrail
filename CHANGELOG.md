@@ -154,6 +154,9 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
   con mando, y el aviso daba a entender un soporte que no existe.
 
 ### Corregido
+- **Una categoría es la misma aunque cambien mayúsculas.** Un juego con la
+  categoría «rpg» no aparecía al filtrar por «RPG» ni contaba en ella, y dos
+  grafías salían como dos categorías. Ahora se filtran, cuentan y listan juntas.
 - **Escape cierra solo la ventana de arriba.** Con una confirmación abierta
   sobre Ajustes se cerraban las dos, y cancelar la grabación de un atajo con
   Escape cerraba también Ajustes. Confirmar con Enter ya no ejecuta la acción
