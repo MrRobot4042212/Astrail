@@ -3,7 +3,7 @@
 // Additional terms under GPL-3.0 section 7 apply: see ADDITIONAL-TERMS.md
 
 import { invoke } from '@tauri-apps/api/core';
-import type { Game, CoverAnswer, Category, PlayStat, SteamPlaytime, AppSettings, AppSettingsPatch, SystemInfo, MetricsAccess, MpoDiagnostics, AboutInfo, LegalDocument, UpdateOffer, BackupExportReport, BackupSummary, BackupImportReport } from './types';
+import type { Game, CoverAnswer, Category, PlayStat, SteamPlaytime, AppSettings, AppSettingsPatch, AutostartState, SystemInfo, MetricsAccess, MpoDiagnostics, AboutInfo, LegalDocument, UpdateOffer, BackupExportReport, BackupSummary, BackupImportReport } from './types';
 
 /** Unified library across every source (Steam, Epic, GOG, EA, Ubisoft, Xbox, manual). */
 export const getLibrary = () => invoke<Game[]>('get_library');
@@ -133,8 +133,9 @@ export const getDiscordClientId = () => invoke<string>('get_discord_client_id');
 export const setDiscordClientId = (id: string) =>
   invoke<void>('set_discord_client_id', { id });
 
-/** Whether Astrail launches on Windows login. */
-export const getAutostart = () => invoke<boolean>('get_autostart');
+/** Whether Astrail launches on Windows login, and whether this copy may turn it
+ *  on (only an installed copy can). */
+export const getAutostart = () => invoke<AutostartState>('get_autostart');
 
 /** Enable/disable launching Astrail on Windows login. */
 export const setAutostart = (enabled: boolean) =>

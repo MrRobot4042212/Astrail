@@ -38,6 +38,8 @@ export interface SettingsModel {
   discordSaved: boolean;
   discordEnabled: boolean | null;
   autostart: boolean | null;
+  /** False when this copy is not installed: autostart cannot point at it. */
+  autostartAvailable: boolean;
   tray: boolean | null;
   overlay: OverlaySettings | null;
   shortcuts: ShortcutsSettings | null;
@@ -73,6 +75,7 @@ export function useSettingsModel({
   const [discordSaved, setDiscordSaved] = useState(false);
   const [discordEnabled, setDiscordEnabled] = useState<boolean | null>(null);
   const [autostart, setAutostartState] = useState<boolean | null>(null);
+  const [autostartAvailable, setAutostartAvailable] = useState(false);
   const [tray, setTray] = useState<boolean | null>(null);
   const [overlay, setOverlay] = useState<OverlaySettings | null>(null);
   const [shortcuts, setShortcuts] = useState<ShortcutsSettings | null>(null);
@@ -95,7 +98,10 @@ export function useSettingsModel({
       .then(setDiscordId)
       .catch(() => {});
     getAutostart()
-      .then(setAutostartState)
+      .then((s) => {
+        setAutostartState(s.enabled);
+        setAutostartAvailable(s.available);
+      })
       .catch(() => setAutostartState(null));
     getAppSettings()
       .then((s) => {
@@ -130,7 +136,7 @@ export function useSettingsModel({
   }, []);
 
   async function toggleAutostart() {
-    if (autostart === null) return;
+    if (autostart === null || !autostartAvailable) return;
     const next = !autostart;
     setAutostartState(next); // optimistic
     try {
@@ -215,6 +221,7 @@ export function useSettingsModel({
     discordSaved,
     discordEnabled,
     autostart,
+    autostartAvailable,
     tray,
     overlay,
     shortcuts,

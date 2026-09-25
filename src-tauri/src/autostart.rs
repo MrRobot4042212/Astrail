@@ -26,6 +26,31 @@ const RUN_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
 #[cfg(windows)]
 const APPROVED_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run";
 
+/// The NSIS installer puts its uninstaller next to the executable. Its presence
+/// is what tells an installed copy apart from a build run out of `target\` or a
+/// copied folder.
+const UNINSTALLER: &str = "uninstall.exe";
+
+/// What the settings screen needs: whether autostart is on, and whether this
+/// copy may turn it on at all (see `is_installed_copy`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
+pub struct AutostartState {
+    pub enabled: bool,
+    pub available: bool,
+}
+
+/// Whether the Run key may point at `exe`: only an installed copy.
+///
+/// A build started from `target\release\`, `tauri dev` or a copied folder used to
+/// register itself (`enable` and the start-up `repair` both wrote
+/// `current_exe()`), so one test run of a local build moved the user's autostart
+/// from the installed program to a build artifact that the next `cargo clean`
+/// deletes, and every logon started the development build instead.
+pub(crate) fn is_installed_copy(exe: &std::path::Path) -> bool {
+    exe.parent().is_some_and(|dir| dir.join(UNINSTALLER).is_file())
+}
+
 /// Argument the Run key passes so a logon start stays in the tray instead of
 /// opening the window every time the user signs in.
 pub const MINIMIZED_ARG: &str = "--minimized";
@@ -65,8 +90,8 @@ pub(crate) fn run_target(value: &str) -> Option<std::path::PathBuf> {
 #[cfg(windows)]
 mod imp {
     use super::{
-        approved_enabled, run_target, run_value, APPROVED_KEY, LEGACY_VALUE_NAME, RUN_KEY,
-        VALUE_NAME,
+        approved_enabled, is_installed_copy, run_target, run_value, APPROVED_KEY,
+        LEGACY_VALUE_NAME, RUN_KEY, VALUE_NAME,
     };
     use std::io;
     use winreg::enums::{HKEY_CURRENT_USER, KEY_READ};
@@ -88,8 +113,16 @@ mod imp {
         }
     }
 
-    fn expected() -> io::Result<String> {
-        std::env::current_exe().map(|exe| run_value(&exe))
+    /// The Run value for this executable, or `None` when it is not an installed
+    /// copy and must never be registered.
+    fn expected() -> io::Result<Option<String>> {
+        let exe = std::env::current_exe()?;
+        Ok(is_installed_copy(&exe).then(|| run_value(&exe)))
+    }
+
+    /// Whether this copy may turn autostart on.
+    pub fn available() -> bool {
+        matches!(expected(), Ok(Some(_)))
     }
 
     /// Enabled = a Run value exists and Task Manager has not disabled it.
@@ -116,7 +149,12 @@ mod imp {
     /// repairs an unquoted or stale value from an older build; clearing the
     /// `StartupApproved` entry re-enables the item if Task Manager disabled it.
     pub fn enable() -> io::Result<()> {
-        let value = expected()?;
+        let Some(value) = expected()? else {
+            return Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "autostart is only available for an installed copy of Astrail",
+            ));
+        };
         open(RUN_KEY, true)?.set_value(VALUE_NAME, &value)?;
         if let Ok(approved) = open(APPROVED_KEY, true) {
             ignore_missing(approved.delete_value(VALUE_NAME))?;
@@ -148,10 +186,12 @@ mod imp {
         if run_target(&legacy).is_some_and(|exe| exe.exists()) {
             return Ok(());
         }
+        // Not installed: leave the old entry for the installed copy to move.
+        let Some(value) = expected()? else { return Ok(()) };
         let run = open(RUN_KEY, true)?;
         let approved = open(APPROVED_KEY, true).ok();
         if run.get_value::<String, _>(VALUE_NAME).is_err() {
-            run.set_value(VALUE_NAME, &expected()?)?;
+            run.set_value(VALUE_NAME, &value)?;
             if let Some(approved) = &approved {
                 if let Ok(state) = approved.get_raw_value(LEGACY_VALUE_NAME) {
                     approved.set_raw_value(VALUE_NAME, &state)?;
@@ -169,21 +209,29 @@ mod imp {
     /// autostart is on but the stored command line is not the expected one (an
     /// unquoted value from the old plugin, a moved install, or a value written
     /// before `MINIMIZED_ARG` existed), rewrite it. One key read when it matches.
+    ///
+    /// A copy that is not installed never touches the value: it would point the
+    /// user's logon at itself (see `is_installed_copy`).
     pub fn repair() -> io::Result<()> {
+        let Some(value) = expected()? else {
+            log::info!("autostart left alone: this copy is not installed");
+            return Ok(());
+        };
         migrate_legacy()?;
         let Ok(run) = open(RUN_KEY, false) else { return Ok(()) };
         let Ok(current) = run.get_value::<String, _>(VALUE_NAME) else {
             return Ok(());
         };
-        if current != expected()? {
-            open(RUN_KEY, true)?.set_value(VALUE_NAME, &expected()?)?;
+        if current != value {
+            open(RUN_KEY, true)?.set_value(VALUE_NAME, &value)?;
+            log::info!("autostart pointed back at this installed copy");
         }
         Ok(())
     }
 }
 
 #[cfg(windows)]
-pub use imp::{disable, enable, is_enabled, repair};
+pub use imp::{available, disable, enable, is_enabled, repair};
 
 #[cfg(not(windows))]
 mod imp {
@@ -203,10 +251,13 @@ mod imp {
     pub fn repair() -> io::Result<()> {
         Ok(())
     }
+    pub fn available() -> bool {
+        false
+    }
 }
 
 #[cfg(not(windows))]
-pub use imp::{disable, enable, is_enabled, repair};
+pub use imp::{available, disable, enable, is_enabled, repair};
 
 #[cfg(test)]
 mod tests {
@@ -250,6 +301,26 @@ mod tests {
         );
         assert_eq!(run_target("  "), None);
         assert_eq!(run_target(r#""""#), None);
+    }
+
+    #[test]
+    fn only_an_installed_copy_may_be_registered() {
+        // Regression: a build run from `target\release\` rewrote the Run value to
+        // itself, taking autostart away from the installed program.
+        let root = std::env::temp_dir().join(format!("astrail-autostart-{}", std::process::id()));
+        let installed = root.join("installed");
+        let portable = root.join("target").join("release");
+        std::fs::create_dir_all(&installed).expect("temp dir");
+        std::fs::create_dir_all(&portable).expect("temp dir");
+        std::fs::write(installed.join(UNINSTALLER), b"").expect("uninstaller stub");
+        // A folder with the uninstaller's name is not one.
+        std::fs::create_dir_all(portable.join(UNINSTALLER)).expect("decoy dir");
+
+        assert!(is_installed_copy(&installed.join("astrail.exe")));
+        assert!(!is_installed_copy(&portable.join("astrail.exe")));
+        assert!(!is_installed_copy(Path::new("astrail.exe")));
+
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]

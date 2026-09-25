@@ -18,6 +18,7 @@ export function AppTab({ model, onStartTour }: { model: SettingsModel; onStartTo
     busy,
     hidden,
     autostart,
+    autostartAvailable,
     tray,
     shortcuts,
     updateShortcuts,
@@ -119,9 +120,16 @@ export function AppTab({ model, onStartTour }: { model: SettingsModel; onStartTo
         {autostart !== null && (
           <Card
             title={t('settings.aAutostart')}
-            control={<Toggle on={autostart} onClick={toggleAutostart} label={t('settings.aAutostart')} />}
+            control={
+              autostartAvailable ? (
+                <Toggle on={autostart} onClick={toggleAutostart} label={t('settings.aAutostart')} />
+              ) : undefined
+            }
           >
             <p className="text-xs leading-relaxed text-muted">{t('settings.aAutostartBody')}</p>
+            {!autostartAvailable && (
+              <p className="mt-2 text-xs leading-relaxed text-muted">{t('settings.aAutostartUnavailable')}</p>
+            )}
           </Card>
         )}
 

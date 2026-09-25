@@ -751,10 +751,14 @@ fn show_main(app: &AppHandle) {
     }
 }
 
-/// Whether Astrail is set to launch on Windows login (the autostart `Run` key).
+/// Whether Astrail is set to launch on Windows login (the autostart `Run` key),
+/// and whether this copy may turn it on (only an installed one may).
 #[tauri::command(async)]
-fn get_autostart() -> Result<bool, String> {
-    autostart::is_enabled().map_err(|e| format!("Failed to read autostart: {e}"))
+fn get_autostart() -> Result<autostart::AutostartState, String> {
+    Ok(autostart::AutostartState {
+        enabled: autostart::is_enabled().map_err(|e| format!("Failed to read autostart: {e}"))?,
+        available: autostart::available(),
+    })
 }
 
 /// Autostart is the `Run` key only, elevated or not: Astrail never starts itself

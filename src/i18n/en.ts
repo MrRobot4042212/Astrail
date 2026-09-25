@@ -408,6 +408,7 @@ export const en = {
     aOverlaySettings: 'Overlay settings',
     aOverlaySettingsDesc: 'Opens the quick panel to configure which metrics show on screen.',
     aAutostart: 'Start with Windows',
+    aAutostartUnavailable: 'Only available in an installed copy of Astrail: this one is running from another folder.',
     aAutostartBody: 'Astrail starts at login and stays in the system tray. That way playtime and Discord are tracked even if you do not open the window. Closing the window minimizes to tray; quit fully from its menu.',
     aTray: 'Minimize to tray on close',
     aTrayBody: 'If enabled, closing Astrail keeps the app running in the background to track your playtime.',

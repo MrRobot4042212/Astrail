@@ -11,6 +11,7 @@ import type { OverlaySettings } from './bindings/OverlaySettings';
 import type { UpdateChannel } from './bindings/UpdateChannel';
 
 export type { AppSettings } from './bindings/AppSettings';
+export type { AutostartState } from './bindings/AutostartState';
 export type { Category } from './bindings/Category';
 export type { GameSource } from './bindings/GameSource';
 export type { OverlaySettings } from './bindings/OverlaySettings';

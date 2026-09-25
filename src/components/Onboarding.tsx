@@ -26,13 +26,17 @@ export function Onboarding({
   const [error, setError] = useState<string | null>(null);
   
   const [auto, setAuto] = useState<boolean>(true);
+  // Only an installed copy can start with Windows; a build run from elsewhere
+  // hides the switch instead of failing the whole setup on it.
+  const [autoAvailable, setAutoAvailable] = useState(false);
   const [tray, setTray] = useState<boolean>(true);
   const [metrics, setMetrics] = useState<boolean>(false);
 
   useEffect(() => {
     Promise.all([getAutostart(), getAppSettings()])
       .then(([autostartRes, settingsRes]) => {
-        setAuto(autostartRes);
+        setAuto(autostartRes.enabled);
+        setAutoAvailable(autostartRes.available);
         setTray(settingsRes.minimize_to_tray);
         setMetrics(settingsRes.overlay.enabled);
       })
@@ -51,7 +55,7 @@ export function Onboarding({
     setBusy(true);
     setError(null);
     try {
-      await setAutostart(auto);
+      if (autoAvailable) await setAutostart(auto);
       await patchAppSettings({
         setup_completed: true,
         minimize_to_tray: tray,
@@ -88,6 +92,7 @@ export function Onboarding({
 
         {/* Preferences (only shown on the last slide) */}
         <div className={`space-y-4 mb-10 transition-opacity duration-300 ${isLast ? 'opacity-100' : 'opacity-0 pointer-events-none absolute w-full'}`}>
+          {autoAvailable && (
           <label className="flex items-center justify-between cursor-pointer rounded-xl border border-line bg-surface p-5 transition hover:border-accent/40">
             <div>
               <p className="text-sm font-semibold text-ink mb-1">{t('onboarding.autostart')}</p>
@@ -115,6 +120,7 @@ export function Onboarding({
               onChange={(e) => setAuto(e.target.checked)} 
             />
           </label>
+          )}
 
           <label className="flex items-center justify-between cursor-pointer rounded-xl border border-line bg-surface p-5 transition hover:border-accent/40">
             <div>

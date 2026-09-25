@@ -149,6 +149,12 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
   con mando, y el aviso daba a entender un soporte que no existe.
 
 ### Corregido
+- **«Iniciar con Windows» ya no puede apuntar a una copia sin instalar.** Abrir
+  Astrail desde otra carpeta (una copia suelta o una compilación propia)
+  reescribía el arranque automático para que apuntara a esa copia, y el programa
+  instalado dejaba de arrancar al iniciar sesión. Ahora solo la copia instalada
+  puede activar o reparar el arranque automático; en cualquier otra la opción
+  aparece desactivada con una explicación.
 - «Reiniciar como administrador» congelaba la ventana, el icono de la bandeja y
   los atajos mientras el aviso de UAC seguía abierto.
 - Un juego jugado desde una tienda que luego quedaba tapado por otra copia del
