@@ -93,7 +93,7 @@ export function OverlaySettingsScreen({ onClose }: { onClose: () => void }) {
                   onClick={() => updateOverlay({ position: p.value })}
                   className={`flex-1 px-2 py-2 text-xs transition ${
                     overlay.position === p.value
-                      ? 'bg-accent text-white'
+                      ? 'bg-accent text-primary-foreground'
                       : 'bg-elevated text-muted hover:text-ink'
                   }`}
                 >
@@ -147,7 +147,7 @@ export function OverlaySettingsScreen({ onClose }: { onClose: () => void }) {
                     onClick={() => updateOverlay({ font_size: o.value })}
                     className={`flex-1 px-2 py-2 text-xs transition ${
                       overlay.font_size === o.value
-                        ? 'bg-accent font-medium text-white'
+                        ? 'bg-accent font-medium text-primary-foreground'
                         : 'bg-elevated text-muted hover:text-ink'
                     }`}
                   >
@@ -171,7 +171,7 @@ export function OverlaySettingsScreen({ onClose }: { onClose: () => void }) {
                     onClick={() => updateOverlay({ bg_opacity: o.value as number })}
                     className={`flex-1 px-2 py-2 text-xs transition ${
                       overlay.bg_opacity === o.value
-                        ? 'bg-accent font-medium text-white'
+                        ? 'bg-accent font-medium text-primary-foreground'
                         : 'bg-elevated text-muted hover:text-ink'
                     }`}
                   >

@@ -204,7 +204,7 @@ export function Onboarding({
         <button
           onClick={handleNext}
           disabled={busy}
-          className="w-full rounded-xl bg-accent py-4 text-base font-semibold text-white transition hover:bg-accent-soft shadow-[0_0_20px_rgba(223,79,79,0.2)] disabled:opacity-50"
+          className="w-full rounded-xl bg-accent py-4 text-base font-semibold text-primary-foreground transition hover:bg-accent-soft shadow-[0_0_20px_rgba(223,79,79,0.2)] disabled:opacity-50"
         >
           {busy ? t('onboarding.preparing') : isLast ? t('onboarding.scanLibrary') : t('onboarding.next')}
         </button>

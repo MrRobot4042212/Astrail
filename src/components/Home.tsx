@@ -342,7 +342,7 @@ function PosterRow({
                     e.stopPropagation();
                     onLaunch(g);
                   }}
-                  className="pointer-events-auto m-2 flex w-full items-center justify-center gap-2 bg-accent py-1.5 text-xs font-semibold text-white transition hover:bg-accent-soft"
+                  className="pointer-events-auto m-2 flex w-full items-center justify-center gap-2 bg-accent py-1.5 text-xs font-semibold text-primary-foreground transition hover:bg-accent-soft"
                 >
                   <PlayIcon className="h-3.5 w-3.5" />
                   {t('card.play')}

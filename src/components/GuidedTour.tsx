@@ -123,7 +123,7 @@ function MultiselectIllu() {
         <div key={i} className="relative h-12 w-8 border border-line bg-elevated">
           <span
             className={`absolute left-0.5 top-0.5 grid h-3.5 w-3.5 place-items-center border ${
-              on ? 'border-accent bg-accent text-white' : 'border-white/40'
+              on ? 'border-accent bg-accent text-primary-foreground' : 'border-white/40'
             }`}
           >
             {on && (
@@ -516,7 +516,7 @@ export function GuidedTour({
         }}
       >
         <div className="mb-3 flex items-center gap-2">
-          <span className="grid h-7 w-7 place-items-center bg-accent text-white">
+          <span className="grid h-7 w-7 place-items-center bg-accent text-primary-foreground">
             <StepIcon id={step.id} />
           </span>
           <h3 className="font-display text-base font-semibold text-ink">{step.title}</h3>
@@ -559,7 +559,7 @@ export function GuidedTour({
             )}
             <button
               onClick={next}
-              className="bg-accent px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-accent-soft"
+              className="bg-accent px-4 py-1.5 text-sm font-semibold text-primary-foreground transition hover:bg-accent-soft"
             >
               {last ? t('tour.start') : t('onboarding.next')}
             </button>

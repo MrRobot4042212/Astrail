@@ -57,7 +57,7 @@ export function AppTab({ model, onStartTour }: { model: SettingsModel; onStartTo
                 onClick={() => onSetLanguage(l.value)}
                 className={`flex-1 px-3 py-2 text-sm transition ${
                   language === l.value
-                    ? 'bg-accent font-medium text-white'
+                    ? 'bg-accent font-medium text-primary-foreground'
                     : 'bg-elevated text-muted hover:text-ink'
                 }`}
               >

@@ -263,7 +263,7 @@ export function DetailView({
             <div className="mt-5 flex flex-wrap items-center gap-2">
               <button
                 onClick={() => onLaunch(game)}
-                className="flex items-center gap-2 bg-accent px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-accent-soft"
+                className="flex items-center gap-2 bg-accent px-6 py-2.5 text-sm font-semibold text-primary-foreground transition hover:bg-accent-soft"
               >
                 <PlayIcon className="h-4 w-4" />
                 {t('common.play')}

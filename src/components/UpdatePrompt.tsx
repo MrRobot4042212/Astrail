@@ -138,7 +138,7 @@ export function UpdatePrompt() {
           </p>
           <button
             onClick={install}
-            className="w-full bg-accent py-2 text-sm font-semibold text-white transition hover:bg-accent-soft"
+            className="w-full bg-accent py-2 text-sm font-semibold text-primary-foreground transition hover:bg-accent-soft"
           >
             {t('update.updateRestart')}
           </button>

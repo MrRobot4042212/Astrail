@@ -137,7 +137,7 @@ export function SegmentedControl<T extends string | number>({
           onClick={() => onChange(o.value)}
           className={`flex-1 px-2 py-1.5 text-xs transition ${
             value === o.value
-              ? 'bg-accent font-medium text-white'
+              ? 'bg-accent font-medium text-primary-foreground'
               : 'bg-elevated text-muted hover:text-ink'
           }`}
         >

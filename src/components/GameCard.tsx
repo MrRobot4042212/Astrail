@@ -194,7 +194,7 @@ export const GameCard = memo(function GameCard({
       {selectionMode && (
         <div
           className={`pointer-events-none absolute left-2 top-2 z-20 grid h-6 w-6 place-items-center border-2 transition ${
-            selected ? 'border-accent bg-accent text-white' : 'border-white/70 bg-void/50'
+            selected ? 'border-accent bg-accent text-primary-foreground' : 'border-white/70 bg-void/50'
           }`}
         >
           {selected && (
@@ -261,7 +261,7 @@ export const GameCard = memo(function GameCard({
               e.stopPropagation();
               onLaunch(game);
             }}
-            className="flex w-full items-center justify-center gap-2 rounded-lg bg-accent py-2 text-sm font-semibold text-white transition-colors hover:bg-accent-soft"
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-accent py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-accent-soft"
           >
             <PlayIcon className="h-4 w-4" />
             {t('card.play')}

@@ -101,7 +101,7 @@ export function OverlayMpoPanel({
             key={o.value}
             onClick={() => onModeChange(o.value)}
             className={`flex-1 px-2 py-2 text-xs transition ${
-              mpoMode === o.value ? 'bg-accent text-white' : 'bg-elevated text-muted hover:text-ink'
+              mpoMode === o.value ? 'bg-accent text-primary-foreground' : 'bg-elevated text-muted hover:text-ink'
             }`}
           >
             {o.label}

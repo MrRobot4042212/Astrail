@@ -75,7 +75,7 @@ export function ConfirmDialog({
             className={`px-4 py-2 text-sm font-semibold ${
               danger
                 ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90'
-                : 'bg-accent text-white hover:bg-accent-soft'
+                : 'bg-accent text-primary-foreground hover:bg-accent-soft'
             }`}
           >
             {confirmLabel ?? t('common.confirm')}

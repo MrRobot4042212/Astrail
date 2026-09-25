@@ -76,7 +76,7 @@ export function MetricsTab({ model }: { model: SettingsModel }) {
                       onClick={() => updateOverlay({ position: p.value })}
                       className={`flex-1 px-2 py-2 text-xs transition ${
                         overlay.position === p.value
-                          ? 'bg-accent text-white'
+                          ? 'bg-accent text-primary-foreground'
                           : 'bg-elevated text-muted hover:text-ink'
                       }`}
                     >
