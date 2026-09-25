@@ -300,7 +300,7 @@ fn strip_version_tail(s: &str) -> String {
 
 /// Extract an `.exe` path from a `DisplayIcon` value (`C:\game\g.exe,0`).
 #[cfg(windows)]
-fn exe_from_icon(display_icon: &str) -> Option<String> {
+pub(crate) fn exe_from_icon(display_icon: &str) -> Option<String> {
     let path = display_icon.split(',').next().unwrap_or("").trim().trim_matches('"');
     if path.to_lowercase().ends_with(".exe") && std::path::Path::new(path).is_file() {
         Some(path.to_string())

@@ -11,6 +11,11 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
 ## [No publicado] — Trabajo en curso
 
 ### Añadido
+- **Juegos de Battle.net además de WoW.** Hearthstone, Heroes of the Storm,
+  Overwatch y el resto de juegos de Blizzard aparecen ahora como juegos de
+  Battle.net (antes entraban como apps genéricas de Windows) y se cronometran al
+  abrirlos desde el cliente de Battle.net sin tener que marcarlos antes como
+  juego. Su tiempo jugado, favoritos y categorías se conservan.
 - **Copias automáticas de tus datos.** Una vez por semana Astrail guarda una copia
   de lo que un escaneo no puede reconstruir (tiempo jugado, apps añadidas,
   favoritos, categorías, carátulas elegidas, ajustes) en la carpeta `backups` de
