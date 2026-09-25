@@ -732,6 +732,9 @@ fn write_slot<T: Serialize>(dir: &Path, file: &str, slot: &Slot<T>) -> Result<()
 /// Call `write_safety_copy` first. A failure half way leaves some stores restored
 /// and some not; the safety copy is what gets the user back.
 pub fn apply(dir: &Path, restore: &Restore) -> Result<usize, String> {
+    // Stores are written with `write_atomic` below, not `jsonstore::save`, so the
+    // newer-schema lock has to be checked here too.
+    jsonstore::writable("the backup")?;
     // A store whose corrupt content could not be moved aside must not be replaced
     // either: that content is the only copy of whatever the user had.
     if let Some(file) = STORES.iter().find(|f| jsonstore::is_poisoned(f)) {

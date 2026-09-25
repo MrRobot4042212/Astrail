@@ -197,9 +197,10 @@ pub fn run() {
                 .build(),
         )
         .setup(|app| {
-
-            
             let handle = app.handle().clone();
+            // Before any store is read or written: an older copy must not rewrite
+            // data a newer build laid out differently (see `jsonstore` docs).
+            jsonstore::check_schema(&handle);
             let settings = storage::load_settings(&handle);
             // Apply the saved overlay config to the sampler before it starts.
             apply_overlay_settings(&handle, &settings);

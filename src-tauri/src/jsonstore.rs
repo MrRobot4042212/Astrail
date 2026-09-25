@@ -21,6 +21,16 @@
 //! `<file>.corrupt-<unix-ts>` instead of being overwritten, and if that
 //! quarantine fails the file is marked poisoned and further saves to it are
 //! refused rather than destroying the user's data.
+//!
+//! **Schema version.** `schema.json` records the layout version of the whole data
+//! dir (`SCHEMA_VERSION`). It is a separate file on purpose: wrapping every store
+//! in `{"v":N,"data":…}` would make any older build — including an installed copy
+//! running next to a newer one on the same data dir — read each store as corrupt
+//! and quarantine it. `check_schema` runs once at start-up: a missing file means
+//! the layout every build before it wrote (version 1), an older version runs the
+//! migrations in order, and a *newer* version makes this build refuse every store
+//! write for the rest of the session, so it cannot overwrite data it does not
+//! understand.
 
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -28,6 +38,7 @@ use std::collections::HashSet;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Mutex, OnceLock};
 use tauri::{AppHandle, Manager};
 
@@ -70,6 +81,108 @@ pub(crate) fn is_poisoned(file: &str) -> bool {
         .contains(file)
 }
 
+/// Layout version of the data dir that this build reads and writes. Bump it
+/// together with a step in `migrate` whenever a store changes shape in a way an
+/// older build would misread.
+pub const SCHEMA_VERSION: u32 = 1;
+const SCHEMA_FILE: &str = "schema.json";
+
+/// The newer schema version found at start-up, or 0. Non-zero = read-only data.
+static NEWER_SCHEMA: AtomicU32 = AtomicU32::new(0);
+
+/// What `check_schema` found.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Schema {
+    /// The recorded version is this build's.
+    Current,
+    /// An older layout (or none recorded) was brought up to this build's.
+    Upgraded { from: u32 },
+    /// A newer build wrote this data: every store write is refused.
+    Newer { found: u32 },
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct SchemaFile {
+    version: u32,
+}
+
+/// Decide what to do with the recorded version (`None` = no `schema.json`,
+/// i.e. the layout every build before this file existed wrote: version 1).
+fn schema_for(recorded: Option<u32>) -> Schema {
+    let found = recorded.unwrap_or(1);
+    match found.cmp(&SCHEMA_VERSION) {
+        std::cmp::Ordering::Equal if recorded.is_some() => Schema::Current,
+        std::cmp::Ordering::Greater => Schema::Newer { found },
+        _ => Schema::Upgraded { from: found },
+    }
+}
+
+/// Bring the data dir from `from` to `SCHEMA_VERSION`, one step per version.
+/// Version 1 is the first recorded layout, so there is nothing to run yet.
+fn migrate(_dir: &Path, from: u32) -> Result<(), String> {
+    for version in from..SCHEMA_VERSION {
+        #[allow(clippy::match_single_binding)]
+        match version {
+            // A step `n => migrate_n_to_n_plus_1(dir)?,` goes here.
+            _ => {}
+        }
+    }
+    Ok(())
+}
+
+/// Read `schema.json`, migrate or lock the data dir, and record the version.
+/// Call once at start-up, before any store is written.
+pub fn check_schema(app: &AppHandle) -> Schema {
+    let Ok(dir) = data_dir(app) else { return Schema::Current };
+    let state = check_schema_in(&dir);
+    if let Schema::Newer { found } = state {
+        NEWER_SCHEMA.store(found, Ordering::Relaxed);
+    }
+    state
+}
+
+fn check_schema_in(dir: &Path) -> Schema {
+    let path = dir.join(SCHEMA_FILE);
+    let recorded = fs::read_to_string(&path)
+        .ok()
+        .and_then(|text| serde_json::from_str::<SchemaFile>(&text).ok())
+        .map(|f| f.version);
+    let state = schema_for(recorded);
+    match state {
+        Schema::Current => {}
+        Schema::Newer { found } => {
+            log::warn!(
+                "the data dir has schema {found}, newer than this build's {SCHEMA_VERSION}:                  this copy will not write any store (update Astrail to change settings again)"
+            );
+        }
+        Schema::Upgraded { from } => {
+            if let Err(e) = migrate(dir, from) {
+                log::error!("data migration from schema {from} failed: {e}; stores left as they were");
+                return state;
+            }
+            let file = SchemaFile { version: SCHEMA_VERSION };
+            match serde_json::to_vec_pretty(&file) {
+                Ok(bytes) => match write_atomic(&path, &bytes) {
+                    Ok(()) => log::info!("data dir schema {from} -> {SCHEMA_VERSION}"),
+                    Err(e) => log::warn!("could not record the data schema: {e}"),
+                },
+                Err(e) => log::warn!("could not record the data schema: {e}"),
+            }
+        }
+    }
+    state
+}
+
+/// Refuse a store write when a newer build owns the data dir.
+pub(crate) fn writable(file: &str) -> Result<(), String> {
+    match NEWER_SCHEMA.load(Ordering::Relaxed) {
+        0 => Ok(()),
+        found => Err(format!(
+            "{file} was not saved: the data was written by a newer Astrail (schema {found}, this build reads {SCHEMA_VERSION})"
+        )),
+    }
+}
+
 /// The app data dir, created once per process instead of on every access.
 pub fn data_dir(app: &AppHandle) -> Result<PathBuf, String> {
     static DIR: OnceLock<Result<PathBuf, String>> = OnceLock::new();
@@ -77,7 +190,7 @@ pub fn data_dir(app: &AppHandle) -> Result<PathBuf, String> {
         let dir = app
             .path()
             .app_data_dir()
-            .map_err(|e| format!("No se pudo obtener la carpeta de datos: {e}"))?;
+            .map_err(|e| format!("Could not resolve the app data dir: {e}"))?;
         fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
         Ok(dir)
     })
@@ -146,10 +259,9 @@ pub fn load_or_default<T: DeserializeOwned + Default>(app: &AppHandle, file: &st
 
 /// Serialize and write atomically: temp file → flush → rename over the target.
 pub fn save<T: Serialize>(app: &AppHandle, file: &str, value: &T) -> Result<(), String> {
+    writable(file)?;
     if is_poisoned(file) {
-        return Err(format!(
-            "{file} contiene datos corruptos que no se pudieron respaldar; no se sobrescribe"
-        ));
+        return Err(format!("{file} holds corrupt data that could not be set aside; not overwriting it"));
     }
     let path = path(app, file)?;
     let data = serde_json::to_string_pretty(value).map_err(|e| e.to_string())?;
@@ -166,10 +278,9 @@ pub fn save_if_changed<T: Serialize>(
     file: &str,
     value: &T,
 ) -> Result<bool, String> {
+    writable(file)?;
     if is_poisoned(file) {
-        return Err(format!(
-            "{file} contiene datos corruptos que no se pudieron respaldar; no se sobrescribe"
-        ));
+        return Err(format!("{file} holds corrupt data that could not be set aside; not overwriting it"));
     }
     let path = path(app, file)?;
     let data = serde_json::to_string_pretty(value).map_err(|e| e.to_string())?;
@@ -184,6 +295,7 @@ pub fn save_if_changed<T: Serialize>(
 
 /// Delete a store file (no-op if absent).
 pub fn remove(app: &AppHandle, file: &str) -> Result<(), String> {
+    writable(file)?;
     let path = path(app, file)?;
     match fs::remove_file(&path) {
         Ok(()) => Ok(()),
@@ -211,6 +323,36 @@ pub fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_schema_version_is_read_migrated_and_recorded() {
+        assert_eq!(schema_for(None), Schema::Upgraded { from: 1 });
+        assert_eq!(schema_for(Some(SCHEMA_VERSION)), Schema::Current);
+        assert_eq!(schema_for(Some(SCHEMA_VERSION + 1)), Schema::Newer { found: SCHEMA_VERSION + 1 });
+
+        let dir = std::env::temp_dir().join(format!("astrail-schema-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        // Data from before the file existed: recorded, nothing else touched.
+        fs::write(dir.join("favorites.json"), "[\"steam:1\"]").unwrap();
+        assert_eq!(check_schema_in(&dir), Schema::Upgraded { from: 1 });
+        assert_eq!(check_schema_in(&dir), Schema::Current);
+        assert_eq!(fs::read_to_string(dir.join("favorites.json")).unwrap(), "[\"steam:1\"]");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn data_from_a_newer_build_is_never_rewritten() {
+        // An older copy (a second install, a downgrade) must not save stores whose
+        // layout it does not know; that is how data a newer build wrote gets lost.
+        let dir = std::env::temp_dir().join(format!("astrail-schema-newer-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let newer = format!("{{\"version\":{}}}", SCHEMA_VERSION + 1);
+        fs::write(dir.join(SCHEMA_FILE), &newer).unwrap();
+        assert_eq!(check_schema_in(&dir), Schema::Newer { found: SCHEMA_VERSION + 1 });
+        // The newer file is left as it was.
+        assert_eq!(fs::read_to_string(dir.join(SCHEMA_FILE)).unwrap(), newer);
+        let _ = fs::remove_dir_all(&dir);
+    }
 
     fn temp(name: &str) -> PathBuf {
         let dir = std::env::temp_dir().join("astrail-jsonstore-tests");
