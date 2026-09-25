@@ -195,13 +195,20 @@ const GRAPH_MIN_BAR: f32 = 0.06;
 /// Monitor coordinates are not zero-based: a display left of or above the primary
 /// has a negative origin, one to the right starts at the primary's width. The old
 /// math worked in `[0, mon_w)` and so always drew on the primary monitor.
-pub(crate) fn hud_origin(position: &str, mon: MonitorGeometry, w: i32, h: i32, margin: i32) -> (i32, i32) {
+pub(crate) fn hud_origin(
+    position: crate::models::OverlayPosition,
+    mon: MonitorGeometry,
+    w: i32,
+    h: i32,
+    margin: i32,
+) -> (i32, i32) {
+    use crate::models::OverlayPosition;
     let (right, bottom) = (mon.left + mon.width, mon.top + mon.height);
     let (x, y) = match position {
-        "top-right" => (right - w - margin, mon.top + margin),
-        "bottom-left" => (mon.left + margin, bottom - h - margin),
-        "bottom-right" => (right - w - margin, bottom - h - margin),
-        _ => (mon.left + margin, mon.top + margin),
+        OverlayPosition::TopLeft => (mon.left + margin, mon.top + margin),
+        OverlayPosition::TopRight => (right - w - margin, mon.top + margin),
+        OverlayPosition::BottomLeft => (mon.left + margin, bottom - h - margin),
+        OverlayPosition::BottomRight => (right - w - margin, bottom - h - margin),
     };
     // Never start outside the monitor when the HUD is wider/taller than it.
     (x.max(mon.left), y.max(mon.top))
@@ -301,6 +308,7 @@ pub fn foreground_pid() -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::OverlayPosition;
 
     fn primary() -> MonitorGeometry {
         MonitorGeometry { left: 0, top: 0, width: 1920, height: 1080, scale: 1.0 }
@@ -310,25 +318,24 @@ mod tests {
     fn hud_is_placed_on_the_game_monitor_not_the_primary() {
         // Regression (W3): a game on a secondary monitor got its HUD on the primary.
         let right_of_primary = MonitorGeometry { left: 1920, top: 0, width: 2560, height: 1440, scale: 1.0 };
-        assert_eq!(hud_origin("top-left", right_of_primary, 160, 100, 12), (1932, 12));
-        assert_eq!(hud_origin("bottom-right", right_of_primary, 160, 100, 12), (4480 - 172, 1440 - 112));
+        assert_eq!(hud_origin(OverlayPosition::TopLeft, right_of_primary, 160, 100, 12), (1932, 12));
+        assert_eq!(hud_origin(OverlayPosition::BottomRight, right_of_primary, 160, 100, 12), (4480 - 172, 1440 - 112));
 
         let left_of_primary = MonitorGeometry { left: -1280, top: -200, width: 1280, height: 1024, scale: 1.0 };
-        assert_eq!(hud_origin("top-right", left_of_primary, 160, 100, 12), (-172, -188));
-        assert_eq!(hud_origin("bottom-left", left_of_primary, 160, 100, 12), (-1268, 824 - 112));
+        assert_eq!(hud_origin(OverlayPosition::TopRight, left_of_primary, 160, 100, 12), (-172, -188));
+        assert_eq!(hud_origin(OverlayPosition::BottomLeft, left_of_primary, 160, 100, 12), (-1268, 824 - 112));
     }
 
     #[test]
     fn hud_on_the_primary_keeps_its_old_position() {
-        assert_eq!(hud_origin("top-left", primary(), 160, 100, 12), (12, 12));
-        assert_eq!(hud_origin("top-right", primary(), 160, 100, 12), (1748, 12));
-        assert_eq!(hud_origin("unknown", primary(), 160, 100, 12), (12, 12));
+        assert_eq!(hud_origin(OverlayPosition::TopLeft, primary(), 160, 100, 12), (12, 12));
+        assert_eq!(hud_origin(OverlayPosition::TopRight, primary(), 160, 100, 12), (1748, 12));
     }
 
     #[test]
     fn an_oversized_hud_stays_inside_its_monitor() {
         let m = MonitorGeometry { left: 1920, top: 0, width: 100, height: 50, scale: 1.0 };
-        assert_eq!(hud_origin("bottom-right", m, 400, 300, 12), (1920, 0));
+        assert_eq!(hud_origin(OverlayPosition::BottomRight, m, 400, 300, 12), (1920, 0));
     }
 
     fn sample(cpu: Option<f32>) -> MetricsSample {

@@ -936,7 +936,7 @@ pub fn start(app: AppHandle) {
                         overlay::reassert_topmost();
                     }
 
-                    let performance = cfg.mpo_mode == "performance";
+                    let performance = cfg.mpo_mode == crate::models::MpoMode::Performance;
                     if perf_hidden {
                         // Stable *costing* + performance mode → keep the HUD hidden so it
                         // never silently drops the game's FPS. Re-measured on the next

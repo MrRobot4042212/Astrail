@@ -7,13 +7,15 @@
 // this file is either not generated yet or only exists on this side.
 import type { AppSettings } from './bindings/AppSettings';
 import type { Game as GameModel } from './bindings/Game';
-import type { OverlaySettings } from './bindings/OverlaySettings';
 import type { UpdateChannel } from './bindings/UpdateChannel';
 
 export type { AppSettings } from './bindings/AppSettings';
 export type { AutostartState } from './bindings/AutostartState';
 export type { Category } from './bindings/Category';
 export type { GameSource } from './bindings/GameSource';
+export type { HudFontSize } from './bindings/HudFontSize';
+export type { MpoMode } from './bindings/MpoMode';
+export type { OverlayPosition } from './bindings/OverlayPosition';
 export type { OverlaySettings } from './bindings/OverlaySettings';
 export type { ShortcutsSettings } from './bindings/ShortcutsSettings';
 export type { UpdateChannel } from './bindings/UpdateChannel';
@@ -23,8 +25,6 @@ export type Game = GameModel & {
    *  Not part of the backend model; filled in lazily by `useLibrary`. */
   icon?: string;
 };
-
-export type OverlayPosition = OverlaySettings['position'];
 
 /** What the HUD measured during a session (`sessionperf.rs`). Every figure is
  *  optional: FPS needs PresentMon, temperatures need their sensor, and all of it

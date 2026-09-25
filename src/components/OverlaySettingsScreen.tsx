@@ -8,7 +8,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation, Trans } from 'react-i18next';
 import { listen } from '@tauri-apps/api/event';
 import { getAppSettings, patchAppSettings } from '@/lib/tauri';
-import type { OverlaySettings, OverlayPosition } from '@/lib/types';
+import type { HudFontSize, OverlaySettings, OverlayPosition } from '@/lib/types';
 import { DEFAULT_SHORTCUTS, formatShortcut } from '@/lib/shortcuts';
 import { OVERLAY_METRICS } from '@/lib/overlayMetrics';
 import { CloseIcon } from './icons';
@@ -137,11 +137,11 @@ export function OverlaySettingsScreen({ onClose }: { onClose: () => void }) {
             <div className="rounded border border-line bg-elevated/20 p-4">
               <h3 className="mb-3 text-sm font-medium text-ink">{t('overlayScreen.textSize')}</h3>
               <div className="flex overflow-hidden border border-line">
-                {[
+                {([
                   { label: t('overlayScreen.sizeSmall'), value: 'xs' },
                   { label: t('overlayScreen.sizeNormal'), value: 'sm' },
                   { label: t('overlayScreen.sizeLarge'), value: 'base' },
-                ].map((o) => (
+                ] satisfies { label: string; value: HudFontSize }[]).map((o) => (
                   <button
                     key={o.value}
                     onClick={() => updateOverlay({ font_size: o.value })}

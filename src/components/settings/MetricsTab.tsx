@@ -5,7 +5,7 @@
 'use client';
 
 import { useTranslation, Trans } from 'react-i18next';
-import type { OverlayPosition, OverlaySettings } from '@/lib/types';
+import type { HudFontSize, OverlayPosition, OverlaySettings } from '@/lib/types';
 import type { SettingsModel } from '@/hooks/useSettingsModel';
 import { DEFAULT_SHORTCUTS, formatShortcut } from '@/lib/shortcuts';
 import { OVERLAY_METRICS, PREVIEW_SAMPLE } from '@/lib/overlayMetrics';
@@ -178,14 +178,14 @@ export function MetricsTab({ model }: { model: SettingsModel }) {
                   {/* Font size */}
                   <div>
                     <p className="mb-2.5 text-[11px] font-medium uppercase tracking-wide text-muted">{t('settings.mTextSize')}</p>
-                    <SegmentedControl
+                    <SegmentedControl<HudFontSize>
                       options={[
                         { label: t('settings.mSizeSmall'), value: 'xs' },
                         { label: t('settings.mSizeNormal'), value: 'sm' },
                         { label: t('settings.mSizeLarge'), value: 'base' },
                       ]}
                       value={overlay.font_size}
-                      onChange={(v) => updateOverlay({ font_size: v as string })}
+                      onChange={(v) => updateOverlay({ font_size: v })}
                     />
                   </div>
                 </div>

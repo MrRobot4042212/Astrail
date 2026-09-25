@@ -211,11 +211,9 @@ pub struct OverlaySettings {
     /// Master switch. When off, the sampler idles and the overlay window stays hidden.
     #[serde(default)]
     pub enabled: bool,
-    /// Corner of the screen: "top-left" | "top-right" | "bottom-left" | "bottom-right".
-    #[serde(default = "default_overlay_position")]
-    // Narrowed for the frontend only; Rust still accepts any string here.
-    #[cfg_attr(test, ts(type = "\"top-left\" | \"top-right\" | \"bottom-left\" | \"bottom-right\""))]
-    pub position: String,
+    /// Corner of the game's monitor the HUD sits in.
+    #[serde(default, deserialize_with = "lenient")]
+    pub position: OverlayPosition,
     /// Sampling/emit interval in milliseconds.
     #[serde(default = "default_overlay_interval")]
     pub interval_ms: u64,
@@ -265,24 +263,76 @@ pub struct OverlaySettings {
     /// Background opacity of the HUD panel, 0–100.
     #[serde(default = "default_bg_opacity")]
     pub bg_opacity: u8,
-    /// Font-size key: "xs" | "sm" | "base".
-    #[serde(default = "default_font_size_key")]
-    pub font_size: String,
+    /// HUD text size.
+    #[serde(default, deserialize_with = "lenient")]
+    pub font_size: HudFontSize,
     /// What to do when the HUD can't get a hardware overlay plane and DWM has to
-    /// composite it (which drops the game out of independent-flip → FPS/latency cost):
-    /// "always" (draw regardless — current behavior) | "performance" (auto-hide the HUD
-    /// once a stable *composed* state is detected, so it never silently costs FPS).
-    #[serde(default = "default_mpo_mode")]
-    // Narrowed for the frontend only; Rust still accepts any string here.
-    #[cfg_attr(test, ts(type = "\"always\" | \"performance\""))]
-    pub mpo_mode: String,
+    /// composite it (which drops the game out of independent-flip → FPS/latency cost).
+    #[serde(default, deserialize_with = "lenient")]
+    pub mpo_mode: MpoMode,
+}
+
+/// Corner of the game's monitor the HUD is drawn in.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
+pub enum OverlayPosition {
+    #[default]
+    TopLeft,
+    TopRight,
+    BottomLeft,
+    BottomRight,
+}
+
+/// HUD text size.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
+pub enum HudFontSize {
+    Xs,
+    #[default]
+    Sm,
+    Base,
+}
+
+/// What the HUD does when Windows cannot give it a hardware overlay plane.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
+pub enum MpoMode {
+    /// Draw regardless.
+    #[default]
+    Always,
+    /// Hide the HUD once a stable *composed* state is detected, so it never
+    /// silently costs the game FPS.
+    Performance,
+}
+
+/// Read a settings value, falling back to its default when the stored one is not
+/// understood (a hand-edited file, or a value a newer build wrote).
+///
+/// These fields used to be free strings, so any text was accepted and silently
+/// meant "the default" at the use site. One unreadable value must not fail the
+/// whole settings file (the loader would then keep every default), so the file
+/// side stays tolerant; a patch from the webview is checked strictly instead
+/// (see `apply_settings_patch` in `lib.rs`).
+fn lenient<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: serde::de::DeserializeOwned + Default,
+{
+    let value = serde_json::Value::deserialize(deserializer)?;
+    Ok(serde_json::from_value(value.clone()).unwrap_or_else(|_| {
+        log::warn!("unknown settings value {value}; using the default");
+        T::default()
+    }))
 }
 
 impl Default for OverlaySettings {
     fn default() -> Self {
         Self {
             enabled: false,
-            position: default_overlay_position(),
+            position: OverlayPosition::default(),
             interval_ms: default_overlay_interval(),
             show_fps: true,
             show_frametime: true,
@@ -300,8 +350,8 @@ impl Default for OverlaySettings {
             value_color: default_value_color(),
             accent_color: default_accent_color(),
             bg_opacity: default_bg_opacity(),
-            font_size: default_font_size_key(),
-            mpo_mode: default_mpo_mode(),
+            font_size: HudFontSize::default(),
+            mpo_mode: MpoMode::default(),
         }
     }
 }
@@ -314,14 +364,6 @@ impl OverlaySettings {
             self.gpu = default_overlay_gpu();
         }
     }
-}
-
-fn default_overlay_position() -> String {
-    "top-left".to_string()
-}
-
-fn default_mpo_mode() -> String {
-    "always".to_string()
 }
 
 fn default_overlay_gpu() -> String {
@@ -346,10 +388,6 @@ fn default_accent_color() -> String {
 
 fn default_bg_opacity() -> u8 {
     85
-}
-
-fn default_font_size_key() -> String {
-    "sm".to_string()
 }
 
 fn yes() -> bool {
@@ -409,6 +447,28 @@ mod tests {
             o.migrate_legacy_gpu();
             assert_eq!(o.gpu, kept);
         }
+    }
+
+    #[test]
+    fn an_unknown_hud_value_in_the_file_falls_back_without_losing_the_rest() {
+        // One value a newer build wrote (or a hand edit) must not make the whole
+        // settings file unreadable: the loader would then keep every default.
+        let s: OverlaySettings = serde_json::from_str(
+            r#"{ "enabled": true, "position": "center", "font_size": 7, "mpo_mode": "banana", "bg_opacity": 40 }"#,
+        )
+        .expect("lenient fields");
+        assert!(s.enabled);
+        assert_eq!(s.bg_opacity, 40);
+        assert_eq!(s.position, OverlayPosition::TopLeft);
+        assert_eq!(s.font_size, HudFontSize::Sm);
+        assert_eq!(s.mpo_mode, MpoMode::Always);
+        // The values the old builds wrote still read as themselves.
+        let old: OverlaySettings =
+            serde_json::from_str(r#"{ "position": "bottom-right", "font_size": "xs", "mpo_mode": "performance" }"#)
+                .expect("known values");
+        assert_eq!(old.position, OverlayPosition::BottomRight);
+        assert_eq!(old.font_size, HudFontSize::Xs);
+        assert_eq!(old.mpo_mode, MpoMode::Performance);
     }
 
     #[test]

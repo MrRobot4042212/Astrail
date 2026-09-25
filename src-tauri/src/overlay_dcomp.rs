@@ -299,11 +299,12 @@ unsafe fn init() -> Result<Dcomp> {
 }
 
 /// Logical font sizes (label, value) per key; title fixed at 10.
-fn font_sizes(key: &str) -> (f32, f32) {
-    match key {
-        "xs" => (9.0, 12.0),
-        "base" => (12.0, 16.0),
-        _ => (10.0, 14.0),
+fn font_sizes(size: crate::models::HudFontSize) -> (f32, f32) {
+    use crate::models::HudFontSize;
+    match size {
+        HudFontSize::Xs => (9.0, 12.0),
+        HudFontSize::Sm => (10.0, 14.0),
+        HudFontSize::Base => (12.0, 16.0),
     }
 }
 
@@ -562,7 +563,7 @@ unsafe fn render_inner(
     }
 
     let s = scale.max(1.0) as f32;
-    let (label_px, value_px) = font_sizes(&cfg.font_size);
+    let (label_px, value_px) = font_sizes(cfg.font_size);
     let pad_x = (12.0 * s).round();
     let pad_y = (8.0 * s).round();
     let gap = (16.0 * s).round();
@@ -626,7 +627,7 @@ unsafe fn render_inner(
 
     // Position the window in the chosen corner.
     let margin = (12.0 * s).round() as i32;
-    let (x, yy) = crate::overlay::hud_origin(&cfg.position, monitor, w, h, margin);
+    let (x, yy) = crate::overlay::hud_origin(cfg.position, monitor, w, h, margin);
     if x != d.last_x || yy != d.last_y || w != d.sw_w || h != d.sw_h {
         let _ = SetWindowPos(d.hwnd, Some(HWND_TOPMOST), x, yy, w, h, SWP_NOACTIVATE);
         d.last_x = x;

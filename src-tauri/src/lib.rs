@@ -1194,9 +1194,31 @@ fn apply_settings_patch(current: &AppSettings, patch: serde_json::Value) -> Resu
         }
         Ok(())
     }
+    /// The first leaf where `a` and `b` differ, as a dotted path.
+    fn first_difference(a: &serde_json::Value, b: &serde_json::Value, path: &str) -> Option<String> {
+        match (a, b) {
+            (serde_json::Value::Object(a), serde_json::Value::Object(b)) => a.iter().find_map(|(key, va)| {
+                let at = if path.is_empty() { key.clone() } else { format!("{path}.{key}") };
+                match b.get(key) {
+                    Some(vb) => first_difference(va, vb, &at),
+                    None => Some(at),
+                }
+            }),
+            _ => (a != b).then(|| path.to_string()),
+        }
+    }
     let mut merged = serde_json::to_value(current).map_err(|e| e.to_string())?;
     merge(&mut merged, patch, "")?;
-    serde_json::from_value(merged).map_err(|e| format!("Invalid settings patch: {e}"))
+    let next: AppSettings =
+        serde_json::from_value(merged.clone()).map_err(|e| format!("Invalid settings patch: {e}"))?;
+    // Some fields are read leniently (an unknown value becomes the default, so a
+    // hand-edited file still loads). From the webview that would turn a typo into
+    // a silent change, so a value that does not come back unchanged is refused.
+    let back = serde_json::to_value(&next).map_err(|e| e.to_string())?;
+    if let Some(at) = first_difference(&merged, &back, "") {
+        return Err(format!("Invalid value for setting `{at}`"));
+    }
+    Ok(next)
 }
 
 /// Re-apply what changed between two settings snapshots and notify every window.
@@ -1846,6 +1868,31 @@ mod tests {
         assert_eq!(beta.update_channel, models::UpdateChannel::Beta);
         assert!(apply_settings_patch(&current, serde_json::json!({ "update_channel": "nightly" })).is_err());
         assert!(apply_settings_patch(&current, serde_json::json!({ "update_channel": "Beta" })).is_err());
+    }
+
+    #[test]
+    fn a_hud_option_the_backend_does_not_know_is_refused() {
+        // Regression: position, font size and MPO mode were free strings, so a
+        // patch could store `"mpo_mode": "banana"` and the HUD silently used the
+        // default. The file loads such a value leniently; the patch must not.
+        let current = settings();
+        let moved = apply_settings_patch(
+            &current,
+            serde_json::json!({ "overlay": { "position": "bottom-right", "font_size": "base", "mpo_mode": "performance" } }),
+        )
+        .unwrap();
+        assert_eq!(moved.overlay.position, models::OverlayPosition::BottomRight);
+        assert_eq!(moved.overlay.font_size, models::HudFontSize::Base);
+        assert_eq!(moved.overlay.mpo_mode, models::MpoMode::Performance);
+        for bad in [
+            serde_json::json!({ "overlay": { "mpo_mode": "banana" } }),
+            serde_json::json!({ "overlay": { "position": "center" } }),
+            serde_json::json!({ "overlay": { "font_size": "XS" } }),
+            serde_json::json!({ "overlay": { "position": 3 } }),
+        ] {
+            let err = apply_settings_patch(&current, bad.clone()).unwrap_err();
+            assert!(err.contains("overlay."), "{bad} -> {err}");
+        }
     }
 
     #[test]

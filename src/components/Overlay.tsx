@@ -6,7 +6,7 @@
 
 import { useEffect } from 'react';
 import { setOverlayInteractive } from '@/lib/tauri';
-import type { MetricsSample, OverlaySettings } from '@/lib/types';
+import type { HudFontSize, MetricsSample, OverlaySettings } from '@/lib/types';
 import { gpuBound, graphBar, graphBaseline } from '@/lib/overlayMetrics';
 import { OverlaySettingsScreen } from './OverlaySettingsScreen';
 
@@ -23,7 +23,7 @@ const FONT_SIZE_MAP = {
   xs:   { label: 'text-[9px]',  value: 'text-xs'   },
   sm:   { label: 'text-[10px]', value: 'text-sm'   },
   base: { label: 'text-xs',     value: 'text-base' },
-} as const;
+} as const satisfies Record<HudFontSize, { label: string; value: string }>;
 
 /** Dynamic temperature color (CSS hex, not Tailwind — keeps it compatible with inline styles). */
 function tempCssColor(c: number): string {
@@ -72,9 +72,7 @@ export function OverlayPanel({
   sample: MetricsSample;
 }) {
   const gb = (mb: number) => (mb / 1024).toFixed(1);
-  const sizeKey = (cfg.font_size ?? 'sm') as keyof typeof FONT_SIZE_MAP;
-  const { label: labelCls, value: valueCls } =
-    FONT_SIZE_MAP[sizeKey] ?? FONT_SIZE_MAP.sm;
+  const { label: labelCls, value: valueCls } = FONT_SIZE_MAP[cfg.font_size];
 
   const labelColor  = cfg.label_color  ?? '#8a8a8a';
   const valueColor  = cfg.value_color  ?? '#ffffff';

@@ -141,5 +141,6 @@ opt-level = 2
 [dev-dependencies]
 # Generates the TypeScript mirror of the IPC types (`src/lib/bindings/`) from
 # `cargo test`. Test-only on purpose: every derive is `cfg_attr(test, ...)`, so
-# nothing of it reaches the shipped binary.
-ts-rs = "12"
+# nothing of it reaches the shipped binary. `no-serde-warnings`: it cannot read
+# `deserialize_with`, which only changes how a value is read, never its shape.
+ts-rs = { version = "12", features = ["no-serde-warnings"] }
