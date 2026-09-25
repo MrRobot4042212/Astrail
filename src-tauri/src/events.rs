@@ -104,15 +104,25 @@ mod tests {
     #[test]
     fn nothing_but_this_module_emits() {
         // A raw emit is how a second payload shape for the same event appears.
-        let src = manifest_dir().join("src");
         let needle = concat!(".emit", "(");
-        for entry in std::fs::read_dir(&src).expect("src dir") {
-            let path = entry.expect("dir entry").path();
-            if path.extension().is_none_or(|e| e != "rs") || path.ends_with("events.rs") {
-                continue;
+        let mut dirs = vec![manifest_dir().join("src")];
+        let mut checked = 0;
+        while let Some(dir) = dirs.pop() {
+            for entry in std::fs::read_dir(&dir).expect("source dir") {
+                let path = entry.expect("dir entry").path();
+                if path.is_dir() {
+                    dirs.push(path);
+                    continue;
+                }
+                if path.extension().is_none_or(|e| e != "rs") || path.ends_with("events.rs") {
+                    continue;
+                }
+                let text = std::fs::read_to_string(&path).expect("source file");
+                assert!(!text.contains(needle), "{} emits outside events.rs", path.display());
+                checked += 1;
             }
-            let text = std::fs::read_to_string(&path).expect("source file");
-            assert!(!text.contains(needle), "{} emits outside events.rs", path.display());
         }
+        // The walk must have seen the command modules, not just the top level.
+        assert!(checked > 40, "only {checked} source files checked");
     }
 }
