@@ -37,7 +37,8 @@ export function SettingsDialog({
   onStartTour?: () => void;
 }) {
   const model = useSettingsModel({ onChanged, onClose });
-  const [tab, setTab] = useState<Tab>('system');
+  // The first tab of the rail, so what opens is what the rail lists first.
+  const [tab, setTab] = useState<Tab>(TABS[0].id);
   const { t } = useTranslation();
   // Drives the slide-in: false on first paint, flipped true after mount.
   const [shown, setShown] = useState(false);
