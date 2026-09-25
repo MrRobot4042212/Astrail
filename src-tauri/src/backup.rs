@@ -414,7 +414,7 @@ fn copies(folder: &Path, prefix: &str) -> Vec<(u64, PathBuf)> {
         .flatten()
         .filter_map(|e| Some((copy_stamp(&e.file_name().to_string_lossy(), prefix)?, e.path())))
         .collect();
-    copies.sort_by(|a, b| b.0.cmp(&a.0));
+    copies.sort_by_key(|c| std::cmp::Reverse(c.0));
     copies
 }
 
