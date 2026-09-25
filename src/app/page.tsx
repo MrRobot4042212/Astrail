@@ -34,6 +34,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { Home } from '@/components/Home';
 import { TopBar } from '@/components/TopBar';
 import { UpdatePrompt } from '@/components/UpdatePrompt';
+import { useEscape } from '@/hooks/useEscape';
 
 // Loaded on demand: none of these render until the user opens something, so
 // keeping them in the first-load chunk only delayed the library appearing.
@@ -174,16 +175,10 @@ function MainApp() {
 
   // Esc closes the detail page, or exits multi-select.
   const exitSelection = selection.exit;
-  useEffect(() => {
-    if (!selected && !selection.active) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      if (selected) setSelectedId(null);
-      else exitSelection();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [selected, selection.active, exitSelection]);
+  useEscape(() => {
+    if (selected) setSelectedId(null);
+    else exitSelection();
+  }, Boolean(selected) || selection.active);
 
   // Stable identity: both are handed to memoized `GameCard`s. Every action the
   // menu closes over is stable too, so this only changes with the language.

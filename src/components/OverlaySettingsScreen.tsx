@@ -13,6 +13,7 @@ import { DEFAULT_SHORTCUTS, formatShortcut } from '@/lib/shortcuts';
 import { OVERLAY_METRICS } from '@/lib/overlayMetrics';
 import { CloseIcon } from './icons';
 import { OverlayMpoPanel } from './OverlayMpoPanel';
+import { useEscape } from '@/hooks/useEscape';
 
 const OVERLAY_POSITIONS: { value: OverlayPosition; tKey: string }[] = [
   { value: 'top-left', tKey: 'overlayScreen.posTopLeft' },
@@ -52,14 +53,7 @@ export function OverlaySettingsScreen({ onClose }: { onClose: () => void }) {
     patchAppSettings({ overlay: patch }).catch(console.error);
   }
 
-  // Handle Esc to close
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  useEscape(onClose);
 
   if (!overlay) return null;
 

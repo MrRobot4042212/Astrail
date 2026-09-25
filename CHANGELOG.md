@@ -154,6 +154,12 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
   con mando, y el aviso daba a entender un soporte que no existe.
 
 ### Corregido
+- **Escape cierra solo la ventana de arriba.** Con una confirmación abierta
+  sobre Ajustes se cerraban las dos, y cancelar la grabación de un atajo con
+  Escape cerraba también Ajustes. Confirmar con Enter ya no ejecuta la acción
+  dos veces.
+- **Ajustes se abre en la primera pestaña del menú** (Métricas), no en la
+  segunda.
 - **«Mi equipo» ya no muestra «Desconocido» en español** con la interfaz en
   inglés cuando Windows no informa del procesador o del sistema.
 - **Los errores se muestran en tu idioma.** Los mensajes de error que venían del

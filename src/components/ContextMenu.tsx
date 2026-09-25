@@ -5,6 +5,7 @@
 'use client';
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEscape } from '@/hooks/useEscape';
 
 export type MenuItem =
   | { type?: 'item'; label: string; icon?: React.ReactNode; onClick: () => void; danger?: boolean }
@@ -38,13 +39,12 @@ export function ContextMenu({
     });
   }, [x, y]);
 
+  useEscape(onClose);
+
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
-    window.addEventListener('keydown', onKey);
     window.addEventListener('resize', onClose);
     window.addEventListener('scroll', onClose, true);
     return () => {
-      window.removeEventListener('keydown', onKey);
       window.removeEventListener('resize', onClose);
       window.removeEventListener('scroll', onClose, true);
     };

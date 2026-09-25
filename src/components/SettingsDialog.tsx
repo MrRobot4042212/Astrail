@@ -15,6 +15,7 @@ import { AboutTab } from './AboutTab';
 import { AppTab } from './settings/AppTab';
 import { MetricsTab } from './settings/MetricsTab';
 import { SystemTab } from './settings/SystemTab';
+import { useEscape } from '@/hooks/useEscape';
 
 type Tab = 'system' | 'app' | 'metrics' | 'about';
 
@@ -47,14 +48,8 @@ export function SettingsDialog({
     setShown(true);
   }, []);
 
-  // Esc closes the drawer.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  // Esc closes the drawer, unless a layer opened over it takes the key.
+  useEscape(onClose);
 
   return (
     <div

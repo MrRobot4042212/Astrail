@@ -4,9 +4,9 @@
 
 'use client';
 
-import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { CloseIcon } from './icons';
+import { useEscape } from '@/hooks/useEscape';
 
 /** A themed confirmation modal for destructive actions (hide / remove / delete).
  *  Enter confirms, Esc cancels. */
@@ -26,17 +26,9 @@ export function ConfirmDialog({
   onClose: () => void;
 }) {
   const { t } = useTranslation();
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-      else if (e.key === 'Enter') {
-        onConfirm();
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onConfirm, onClose]);
+  // Enter is not handled here: the confirm button has focus, so the browser
+  // clicks it. A second handler used to run `onConfirm` twice.
+  useEscape(onClose);
 
   return (
     <div
