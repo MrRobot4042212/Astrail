@@ -10,6 +10,12 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
 
 ## [No publicado] — Trabajo en curso
 
+## [1.1.0] — 2026-09-25
+
+El número salta de 0.3.0 a 1.1.0 a propósito: hubo compilaciones 1.0.x en junio
+y el actualizador nunca instala una versión menor que la que ya tienes, así que
+sin este salto esas instalaciones no volverían a recibir actualizaciones.
+
 ### Añadido
 - **Juegos de Battle.net además de WoW.** Hearthstone, Heroes of the Storm,
   Overwatch y el resto de juegos de Blizzard aparecen ahora como juegos de
