@@ -183,6 +183,7 @@ fn spawn(bin: &Path, pid: u32) -> std::io::Result<Child> {
     cmd.stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .stdin(Stdio::piped());
+    log::debug!("PresentMon command: {cmd:?}");
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;

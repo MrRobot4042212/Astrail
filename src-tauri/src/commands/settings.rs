@@ -74,6 +74,7 @@ pub(crate) fn patch_app_settings(
     state: tauri::State<'_, std::sync::Mutex<AppSettings>>,
     patch: serde_json::Value,
 ) -> CmdResult<()> {
+    log::debug!("settings patch: {patch}");
     let (previous, next) = {
         let mut current = state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         let next = apply_settings_patch(&current, patch).map_err(AppError::with(ErrorCode::InvalidInput))?;

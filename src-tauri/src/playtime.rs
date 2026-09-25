@@ -726,14 +726,24 @@ pub fn start(app: AppHandle) {
                 if fg != 0 && fg != std::process::id() && !active.values().any(|v| v.2 == fg) {
                     refresh_index(&app, &mut index, &mut index_mtime);
                     let hit = process_path(fg).and_then(|path| {
-                        let owner = match_foreground(&index, &path)?;
-                        tracked_when_started_outside(&owner.source, || {
+                        let Some(owner) = match_foreground(&index, &path) else {
+                            log::debug!("foreground pid {fg} is not in the library: {path}");
+                            return None;
+                        };
+                        let tracked = tracked_when_started_outside(&owner.source, || {
                             is_confirmed_game(
                                 crate::storage::load_type_overrides(&app).get(&owner.id).map(String::as_str),
                                 load_view(&app).get(&owner.id),
                             )
-                        })
-                        .then(|| owner.id.clone())
+                        });
+                        if !tracked {
+                            log::debug!(
+                                "foreground pid {fg} is {} ({:?}), not timed when started outside Astrail",
+                                owner.id,
+                                owner.source
+                            );
+                        }
+                        tracked.then(|| owner.id.clone())
                     });
                     if let Some(id) = hit {
                         if !active.contains_key(&id) && register_external(&id) {

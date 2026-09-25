@@ -96,6 +96,7 @@ pub(crate) fn get_library_inner(app: AppHandle) -> Result<Vec<Game>, String> {
     // copy) and remember which ids were folded, so overlays the user stored
     // under a dropped id still apply. Manual entries are never dropped.
     let library::Merged { mut games, aliases } = library::merge_duplicates(games);
+    log::debug!("library: {} duplicate entries folded into another store's copy", aliases.len());
 
     // Drop entries the user has hidden (false positives from the generic scan).
     // Strictly by id: see `library.rs` for why hidden ids are not aliased.
@@ -256,11 +257,18 @@ pub(crate) const ICON_WORKERS: usize = 4;
 pub(crate) async fn resolve_covers(app: AppHandle, names: Vec<String>) -> CmdResult<Vec<art::Cover>> {
     batch::check_len(names.len())?;
     blocking(move || {
-        let answers = batch::map_ordered(&names, COVER_WORKERS, |name| art::resolve(&app, name));
-        Ok(answers
+        let answers: Vec<art::Cover> = batch::map_ordered(&names, COVER_WORKERS, |name| art::resolve(&app, name))
             .into_iter()
             .map(|answer| answer.unwrap_or(art::Cover::Unavailable))
-            .collect())
+            .collect();
+        let found = answers.iter().filter(|a| matches!(a, art::Cover::Found(_))).count();
+        let unavailable = answers.iter().filter(|a| matches!(a, art::Cover::Unavailable)).count();
+        log::debug!(
+            "covers: {} asked, {found} found, {} not found, {unavailable} unavailable",
+            answers.len(),
+            answers.len() - found - unavailable
+        );
+        Ok(answers)
     })
     .await
 }
