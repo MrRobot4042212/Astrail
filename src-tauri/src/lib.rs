@@ -13,6 +13,7 @@ mod batch;
 mod cputemp;
 #[cfg(windows)]
 mod elevation;
+mod events;
 mod discord;
 mod battlenet;
 mod ea;
@@ -58,7 +59,7 @@ mod xbox;
 
 use models::{Category, Game, GameSource, AppSettings};
 use std::time::{SystemTime, UNIX_EPOCH};
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Manager};
 
 /// Run a blocking command body on the runtime's **blocking** pool.
 ///
@@ -197,7 +198,7 @@ fn get_library_inner(app: AppHandle) -> Result<Vec<Game>, String> {
     // Play stats are read through the same aliases; a changed map changes what
     // the library shows for a game, so the webview re-reads them.
     if playtime::set_aliases(&aliases) {
-        playtime::notify_updated(&app, None);
+        events::playtime_updated(&app, None);
     }
 
     // Fill in covers we already downloaded. Without this the frontend re-queued
@@ -664,7 +665,7 @@ fn set_webview_memory_low(app: &AppHandle, low: bool) {
 /// here: the library hook uses it to stop its periodic rescan while nobody can
 /// see the result.
 fn emit_visibility(app: &AppHandle, visible: bool) {
-    let _ = app.emit("window-visibility", visible);
+    events::window_visibility(app, visible);
 }
 
 /// Reveal the main window once the frontend has painted.
@@ -970,8 +971,8 @@ async fn apply_user_data_backup(app: AppHandle) -> Result<backup::ImportReport, 
             discord::set_client_id(id);
         }
         // Even after a failure: some stores may already hold the restored data.
-        let _ = app.emit("user-data-imported", ());
-        playtime::notify_updated(&app, None);
+        events::user_data_imported(&app);
+        events::playtime_updated(&app, None);
         match outcome {
             Ok(covers) => {
                 log::info!("user data imported from a backup ({covers} cover(s)); previous data in {safety}");
@@ -1238,7 +1239,7 @@ fn settings_changed(app: &AppHandle, previous: &AppSettings, next: &AppSettings)
     if previous.update_channel != next.update_channel {
         log::info!("update channel: {:?} -> {:?}", previous.update_channel, next.update_channel);
         // The update prompt checks again right away instead of at the next start.
-        let _ = app.emit("update-channel-changed", ());
+        events::update_channel_changed(app);
     }
     if previous.language != next.language {
         // Native menu: main thread only.
@@ -1252,7 +1253,7 @@ fn settings_changed(app: &AppHandle, previous: &AppSettings, next: &AppSettings)
         let shortcuts = next.shortcuts.clone();
         let _ = app.run_on_main_thread(move || register_shortcuts(&handle, &shortcuts));
     }
-    let _ = app.emit("settings-updated", ());
+    events::settings_updated(app);
 }
 
 /// Parse a stored combination into a global shortcut, refusing unsafe ones.
@@ -1361,7 +1362,7 @@ fn toggle_overlay(app: &AppHandle) {
         };
         apply_overlay_settings(app, &s);
         // An open settings screen shows the toggle too.
-        let _ = app.emit("settings-updated", ());
+        events::settings_updated(app);
     }
 }
 
@@ -1595,7 +1596,7 @@ pub fn run() {
                         toggle_overlay_settings(app);
                     } else if Some(*shortcut) == spot_s {
                         show_main(app);
-                        let _ = app.emit("open-spotlight", ());
+                        events::open_spotlight(app);
                     }
                 })
                 .build(),

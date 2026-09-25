@@ -6,7 +6,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { listen } from '@tauri-apps/api/event';
+import { onEvent } from '@/lib/events';
 import { Update } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
 import { abortUpdate, checkUpdate, prepareForUpdate } from '@/lib/tauri';
@@ -66,7 +66,7 @@ export function UpdatePrompt() {
     };
     run();
     const timer = window.setInterval(run, RECHECK_MS);
-    const unlisten = listen('update-channel-changed', run);
+    const unlisten = onEvent('update-channel-changed', run);
     return () => {
       cancelled = true;
       window.clearInterval(timer);

@@ -5,7 +5,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { listen } from '@tauri-apps/api/event';
+import { onEvent } from '@/lib/events';
 import type { Game, Category, CoverAnswer, PlayStat } from '@/lib/types';
 import {
   getLibrary,
@@ -378,7 +378,7 @@ export function useLibrary(autoScan: boolean) {
 
   // Keep play stats fresh: reload when the global watcher closes a session.
   useEffect(() => {
-    const un = listen('playtime-updated', () => refreshPlaytimes());
+    const un = onEvent('playtime-updated', () => refreshPlaytimes());
     return () => {
       un.then((f) => f());
     };
@@ -388,7 +388,7 @@ export function useLibrary(autoScan: boolean) {
   // entries, favorites, categories and chosen covers all changed on disk at once.
   // The scan is what applies them; play time arrives through `playtime-updated`.
   useEffect(() => {
-    const un = listen('user-data-imported', () => {
+    const un = onEvent('user-data-imported', () => {
       refresh();
       refreshCategories();
     });
@@ -478,9 +478,9 @@ export function useLibrary(autoScan: boolean) {
         }
       })
       .catch(() => {});
-    const un = listen<boolean>('window-visibility', (event) => {
+    const un = onEvent('window-visibility', (shown) => {
       heard = true;
-      visible = event.payload;
+      visible = shown;
       if (visible) {
         startTimer();
         if (missedWhileHidden) {

@@ -6,7 +6,7 @@
 
 import { useEffect } from 'react';
 import { I18nextProvider } from 'react-i18next';
-import { listen } from '@tauri-apps/api/event';
+import { onEvent } from '@/lib/events';
 import { getAppSettings } from '@/lib/tauri';
 import i18n, { resolveLanguage } from './config';
 
@@ -41,7 +41,7 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
         });
 
     apply();
-    const un = listen('settings-updated', apply);
+    const un = onEvent('settings-updated', apply);
     un.catch(() => {});
 
     return () => {

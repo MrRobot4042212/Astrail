@@ -6,7 +6,7 @@
 
 import { useEffect, useState } from 'react';
 import { useTranslation, Trans } from 'react-i18next';
-import { listen } from '@tauri-apps/api/event';
+import { onEvent } from '@/lib/events';
 import { getAppSettings, patchAppSettings } from '@/lib/tauri';
 import type { HudFontSize, OverlaySettings, OverlayPosition } from '@/lib/types';
 import { DEFAULT_SHORTCUTS, formatShortcut } from '@/lib/shortcuts';
@@ -40,7 +40,7 @@ export function OverlaySettingsScreen({ onClose }: { onClose: () => void }) {
         })
         .catch(() => {});
     load();
-    const un = listen('settings-updated', load);
+    const un = onEvent('settings-updated', load);
     un.catch(() => {});
     return () => {
       un.then((f) => f()).catch(() => {});

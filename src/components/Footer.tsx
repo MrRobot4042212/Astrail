@@ -6,7 +6,7 @@
 
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { listen } from '@tauri-apps/api/event';
+import { onEvent } from '@/lib/events';
 import { getAppSettings } from '@/lib/tauri';
 import { DEFAULT_SHORTCUTS, formatShortcut } from '@/lib/shortcuts';
 
@@ -50,7 +50,7 @@ export function Footer() {
     };
 
     fetchSettings();
-    const un = listen('settings-updated', fetchSettings);
+    const un = onEvent('settings-updated', fetchSettings);
     return () => {
       un.then((f) => f()).catch(() => {});
     };

@@ -10,7 +10,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
-import { listen } from '@tauri-apps/api/event';
+import { onEvent } from '@/lib/events';
 import { useTranslation } from 'react-i18next';
 import { useLibrary } from '@/hooks/useLibrary';
 import { useLibraryActions, type ConfirmRequest } from '@/hooks/useLibraryActions';
@@ -166,7 +166,7 @@ function MainApp() {
 
   // Global Spotlight: the Rust global shortcut emits this when triggered.
   useEffect(() => {
-    const un = listen('open-spotlight', () => setSpotlight(true));
+    const un = onEvent('open-spotlight', () => setSpotlight(true));
     return () => {
       un.then((f) => f());
     };

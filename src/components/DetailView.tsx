@@ -6,7 +6,7 @@
 
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { listen } from '@tauri-apps/api/event';
+import { onEvent } from '@/lib/events';
 import type { Game, PlayStat, Session } from '@/lib/types';
 import {
   getPlaytime,
@@ -188,8 +188,8 @@ export function DetailView({
   // game's figures may have moved (no id: a restore, a crash recovery, or a scan
   // that changed which duplicate ids fold into this entry).
   useEffect(() => {
-    const un = listen<string | null>('playtime-updated', (e) => {
-      if (!e.payload || e.payload === game.id) getPlaytime(game.id).then(setPlay).catch(() => {});
+    const un = onEvent('playtime-updated', (id) => {
+      if (id === null || id === game.id) getPlaytime(game.id).then(setPlay).catch(() => {});
     });
     return () => {
       un.then((f) => f());

@@ -76,7 +76,37 @@ export default tseslint.config(
             'Use the semantic Tailwind tokens (bg-surface, text-muted, ring…), not a raw color.',
         },
       ],
+
+      // The IPC contract lives in two files: commands in `src/lib/tauri.ts`,
+      // events in `src/lib/events.ts` (whose names a Rust test checks). A call
+      // made anywhere else escapes both the types and that check.
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: '@tauri-apps/api/core',
+              importNames: ['invoke'],
+              message: 'Call commands through the typed wrappers in src/lib/tauri.ts.',
+            },
+            {
+              name: '@tauri-apps/api/event',
+              message: 'Listen through onEvent from src/lib/events.ts.',
+            },
+            {
+              name: '@tauri-apps/api',
+              importNames: ['core', 'event'],
+              message: 'Use src/lib/tauri.ts (commands) and src/lib/events.ts (events).',
+            },
+          ],
+        },
+      ],
     },
+  },
+  {
+    // The two files that own the IPC boundary.
+    files: ['src/lib/tauri.ts', 'src/lib/events.ts'],
+    rules: { 'no-restricted-imports': 'off' },
   },
   {
     // Node-side tooling and config files.

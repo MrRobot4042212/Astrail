@@ -6,7 +6,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { listen } from '@tauri-apps/api/event';
+import { onEvent } from '@/lib/events';
 import { overlayMpoDiagnostics } from '@/lib/tauri';
 import type { MpoDiagnostics, OverlayHealth } from '@/lib/types';
 
@@ -33,7 +33,7 @@ export function OverlayMpoPanel({
 
   // Live health updates from the sampler.
   useEffect(() => {
-    const un = listen<OverlayHealth>('overlay-health', (e) => setHealth(e.payload));
+    const un = onEvent('overlay-health', setHealth);
     un.catch(() => {});
     return () => {
       un.then((f) => f()).catch(() => {});

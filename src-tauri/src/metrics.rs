@@ -24,7 +24,6 @@ use std::sync::atomic::{AtomicBool, AtomicIsize, AtomicU32, AtomicU64, AtomicU8,
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 #[cfg(windows)]
-use tauri::Emitter;
 use tauri::AppHandle;
 
 #[cfg(windows)]
@@ -122,7 +121,7 @@ fn set_health(app: &AppHandle, published: &mut u8, health: u8) {
     if *published != health {
         *published = health;
         OVERLAY_HEALTH.store(health, Ordering::Relaxed);
-        let _ = app.emit("overlay-health", health);
+        crate::events::overlay_health(app, health);
     }
 }
 
@@ -771,7 +770,7 @@ pub fn start(app: AppHandle) {
                     if published_health != 0 {
                         published_health = 0;
                         OVERLAY_HEALTH.store(0, Ordering::Relaxed);
-                        let _ = app.emit("overlay-health", 0u8);
+                        crate::events::overlay_health(&app, 0);
                     }
                 }
                 continue;
