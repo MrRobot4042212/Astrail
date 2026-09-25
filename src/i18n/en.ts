@@ -131,7 +131,6 @@ export const en = {
   },
   toast: {
     launching: 'Launching {{name}}…',
-    launchFailed: 'Could not launch: {{error}}',
     reorderCategoriesFailed: 'Could not reorder categories',
     categoryDeleted: 'Category «{{name}}» deleted',
     categoryDeleteFailed: 'Could not delete the category',
@@ -258,6 +257,17 @@ export const en = {
     boundaryBody: 'Astrail has logged the error. You can retry, reload the window, or export the diagnostics to attach them to a report.',
     boundaryRetry: 'Retry',
     boundaryReload: 'Reload Astrail',
+    // One key per Rust `ErrorCode` (src-tauri/src/error.rs).
+    code: {
+      not_found: 'It is no longer in the library (it may have been uninstalled).',
+      invalid_input: 'Invalid value: {{detail}}',
+      autostart_unavailable: 'Start with Windows only works in an installed copy of Astrail.',
+      backup_invalid: 'That file is not a valid Astrail backup: {{detail}}',
+      backup_changed: 'The backup changed after you picked it. Pick it again.',
+      launch_failed: 'Could not launch: {{detail}}',
+      io: 'Windows could not complete the operation: {{detail}}',
+      internal: 'Something went wrong: {{detail}}',
+    },
   },
   about: {
     title: 'About Astrail',

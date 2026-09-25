@@ -9,6 +9,7 @@ import { useTranslation } from 'react-i18next';
 import { setCategories } from '@/lib/tauri';
 import type { Game } from '@/lib/types';
 import { CloseIcon, PlusIcon } from './icons';
+import { failureText } from '@/i18n/failureText';
 
 /** Assign manual categories to a single game. The user can toggle any existing
  *  category or type a new one; categories live only as long as a game uses them. */
@@ -60,7 +61,7 @@ export function CategoryDialog({
       onSaved(game.id, selected);
       onClose();
     } catch (e) {
-      setError(String(e));
+      setError(failureText(e));
     } finally {
       setBusy(false);
     }

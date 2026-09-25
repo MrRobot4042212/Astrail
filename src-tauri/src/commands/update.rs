@@ -30,7 +30,7 @@ pub(crate) fn shutdown_for_exit(app: &AppHandle) {
 /// behind. The sidecars stay suspended until `abort_update` (the install failed) or
 /// the process exits.
 #[tauri::command]
-pub(crate) async fn prepare_for_update(app: AppHandle) -> Result<(), String> {
+pub(crate) async fn prepare_for_update(app: AppHandle) -> CmdResult<()> {
     log::info!("update downloaded: stopping the sidecars before the installer runs");
     crate::metrics::set_sidecars_suspended(true);
     blocking(move || {
@@ -53,7 +53,7 @@ pub(crate) fn abort_update() {
 /// UAC prompt is answered, and on the main thread that froze the window, the tray
 /// and the hotkeys for as long as the prompt stayed open.
 #[tauri::command]
-pub(crate) async fn restart_as_admin(app: AppHandle) -> Result<(), String> {
+pub(crate) async fn restart_as_admin(app: AppHandle) -> CmdResult<()> {
     #[cfg(windows)]
     {
         blocking(elevation::relaunch_elevated).await?;

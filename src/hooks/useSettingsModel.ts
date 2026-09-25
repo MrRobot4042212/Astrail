@@ -24,6 +24,7 @@ import {
   restartAsAdmin,
 } from '@/lib/tauri';
 import type { MetricsAccess, OverlaySettings, ShortcutsSettings, SystemInfo } from '@/lib/types';
+import { failureText } from '@/i18n/failureText';
 
 /** How long the "saved" confirmation stays next to the Discord field. */
 const SAVED_FLASH_MS = 2000;
@@ -120,19 +121,19 @@ export function useSettingsModel({
   // Optimistic local update, then send only the changed fields; Rust merges them.
   const updateOverlay = useCallback((patch: Partial<OverlaySettings>) => {
     setOverlay((prev) => (prev ? { ...prev, ...patch } : prev));
-    patchAppSettings({ overlay: patch }).catch((e) => setError(String(e)));
+    patchAppSettings({ overlay: patch }).catch((e) => setError(failureText(e)));
   }, []);
 
   const updateShortcuts = useCallback((patch: Partial<ShortcutsSettings>) => {
     setShortcuts((prev) => (prev ? { ...prev, ...patch } : prev));
-    patchAppSettings({ shortcuts: patch }).catch((e) => setError(String(e)));
+    patchAppSettings({ shortcuts: patch }).catch((e) => setError(failureText(e)));
   }, []);
 
   const saveLanguage = useCallback((lang: string) => {
     setLanguageState(lang); // optimistic
     // patch_app_settings emits "settings-updated", which the I18nProvider listens
     // to and applies the new language across every window.
-    patchAppSettings({ language: lang }).catch((e) => setError(String(e)));
+    patchAppSettings({ language: lang }).catch((e) => setError(failureText(e)));
   }, []);
 
   async function toggleAutostart() {
@@ -143,7 +144,7 @@ export function useSettingsModel({
       await setAutostart(next);
     } catch (e) {
       setAutostartState(!next); // revert
-      setError(String(e));
+      setError(failureText(e));
     }
   }
 
@@ -155,7 +156,7 @@ export function useSettingsModel({
       await patchAppSettings({ minimize_to_tray: next });
     } catch (e) {
       setTray(!next); // revert
-      setError(String(e));
+      setError(failureText(e));
     }
   }
 
@@ -167,7 +168,7 @@ export function useSettingsModel({
       await patchAppSettings({ discord_enabled: next });
     } catch (e) {
       setDiscordEnabled(!next); // revert
-      setError(String(e));
+      setError(failureText(e));
     }
   }
 
@@ -183,7 +184,7 @@ export function useSettingsModel({
         setDiscordSaved(false);
       }, SAVED_FLASH_MS);
     } catch (e) {
-      setError(String(e));
+      setError(failureText(e));
     } finally {
       setBusy(false);
     }
@@ -198,7 +199,7 @@ export function useSettingsModel({
       onChanged();
       onClose();
     } catch (e) {
-      setError(String(e));
+      setError(failureText(e));
     } finally {
       setBusy(false);
     }
@@ -209,7 +210,7 @@ export function useSettingsModel({
     try {
       await restartAsAdmin(); // app relaunches elevated and this instance exits
     } catch (e) {
-      setError(String(e));
+      setError(failureText(e));
     }
   }
 

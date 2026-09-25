@@ -24,6 +24,7 @@ import {
 import { planCategoryAdd } from '@/lib/libraryView';
 import type { Category, Game } from '@/lib/types';
 import type { Filter } from '@/components/Sidebar';
+import { failureText } from '@/i18n/failureText';
 
 export interface ConfirmRequest {
   title: string;
@@ -71,7 +72,7 @@ export function useLibraryActions({
         await launchGame(game.id);
         flash(t('toast.launching', { name: game.name }));
       } catch (e) {
-        flash(t('toast.launchFailed', { error: String(e) }));
+        flash(failureText(e));
       }
     },
     [t, flash],

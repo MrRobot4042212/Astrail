@@ -24,6 +24,7 @@ import {
 import { backupDate, backupIsEmpty, backupParts } from '@/lib/backupSummary';
 import type { BackupExportReport, BackupSummary } from '@/lib/types';
 import { Button, Card } from './settings/primitives';
+import { failureText } from '@/i18n/failureText';
 
 type State =
   | { kind: 'idle' }
@@ -48,7 +49,7 @@ export function DataBackupCard() {
     [i18n.language],
   );
 
-  const fail = (e: unknown) => setState({ kind: 'failed', reason: String(e) });
+  const fail = (e: unknown) => setState({ kind: 'failed', reason: failureText(e) });
 
   const runExport = () => {
     setState({ kind: 'working' });

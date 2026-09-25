@@ -15,6 +15,7 @@ import { Component, useState, type ErrorInfo, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { installGlobalErrorReporting, reportError } from '@/lib/errorReport';
 import { exportDiagnostics } from '@/lib/tauri';
+import { failureText } from '@/i18n/failureText';
 
 type Scope = 'app' | 'view';
 
@@ -81,7 +82,7 @@ function ErrorFallback({
   const exportLog = () => {
     exportDiagnostics()
       .then(setExported)
-      .catch((e) => setExported(String(e)));
+      .catch((e) => setExported(failureText(e)));
   };
 
   const button =

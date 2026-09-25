@@ -14,6 +14,7 @@ mod batch;
 mod cputemp;
 #[cfg(windows)]
 mod elevation;
+mod error;
 mod events;
 mod discord;
 mod battlenet;
@@ -60,6 +61,7 @@ mod xbox;
 
 use models::{Category, Game, GameSource, AppSettings};
 use std::time::{SystemTime, UNIX_EPOCH};
+use error::{AppError, CmdResult, ErrorCode};
 use tauri::{AppHandle, Manager};
 
 use commands::{backup::*, library::*, settings::*, system::*, update::*, window::*};
@@ -79,14 +81,28 @@ use commands::{backup::*, library::*, settings::*, system::*, update::*, window:
 /// Use it for anything that touches the network, walks the filesystem, reads the
 /// registry, spawns a process or enumerates the system. Small in-memory work does
 /// not need it.
-async fn blocking<T, F>(f: F) -> Result<T, String>
+async fn blocking<T, F>(f: F) -> CmdResult<T>
 where
     F: FnOnce() -> Result<T, String> + Send + 'static,
     T: Send + 'static,
 {
-    tauri::async_runtime::spawn_blocking(f)
-        .await
-        .map_err(|e| format!("background task failed: {e}"))?
+    match tauri::async_runtime::spawn_blocking(f).await {
+        Ok(result) => result.map_err(AppError::from),
+        Err(e) => Err(AppError::new(ErrorCode::Internal, format!("background task failed: {e}"))),
+    }
+}
+
+/// `blocking` for a body that already returns `AppError`, when failures inside it
+/// need different codes.
+async fn blocking_cmd<T, F>(f: F) -> CmdResult<T>
+where
+    F: FnOnce() -> CmdResult<T> + Send + 'static,
+    T: Send + 'static,
+{
+    match tauri::async_runtime::spawn_blocking(f).await {
+        Ok(result) => result,
+        Err(e) => Err(AppError::new(ErrorCode::Internal, format!("background task failed: {e}"))),
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

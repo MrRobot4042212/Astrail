@@ -10,7 +10,7 @@ use crate::*;
 /// Whether Astrail is set to launch on Windows login (the autostart `Run` key),
 /// and whether this copy may turn it on (only an installed one may).
 #[tauri::command(async)]
-pub(crate) fn get_autostart() -> Result<autostart::AutostartState, String> {
+pub(crate) fn get_autostart() -> CmdResult<autostart::AutostartState> {
     Ok(autostart::AutostartState {
         enabled: autostart::is_enabled().map_err(|e| format!("Failed to read autostart: {e}"))?,
         available: autostart::available(),
@@ -22,13 +22,20 @@ pub(crate) fn get_autostart() -> Result<autostart::AutostartState, String> {
 /// are idempotent — enabling rewrites the quoted path, disabling ignores a
 /// missing value — so no state check is needed first.
 #[tauri::command(async)]
-pub(crate) fn set_autostart(enabled: bool) -> Result<(), String> {
+pub(crate) fn set_autostart(enabled: bool) -> CmdResult<()> {
     let result = if enabled {
         autostart::enable()
     } else {
         autostart::disable()
     };
-    result.map_err(|e| format!("Failed to update autostart: {e}"))
+    result.map_err(|e| {
+        let code = if e.kind() == std::io::ErrorKind::Unsupported {
+            ErrorCode::AutostartUnavailable
+        } else {
+            ErrorCode::Io
+        };
+        AppError::new(code, format!("Failed to update autostart: {e}"))
+    })
 }
 
 /// Lock the settings, recovering from a poisoned mutex.
@@ -50,7 +57,7 @@ pub(crate) fn current_settings(app: &AppHandle) -> AppSettings {
 }
 
 #[tauri::command]
-pub(crate) fn get_app_settings(state: tauri::State<'_, std::sync::Mutex<AppSettings>>) -> Result<AppSettings, String> {
+pub(crate) fn get_app_settings(state: tauri::State<'_, std::sync::Mutex<AppSettings>>) -> CmdResult<AppSettings> {
     Ok(lock_settings(&state).clone())
 }
 
@@ -66,10 +73,10 @@ pub(crate) fn patch_app_settings(
     app: AppHandle,
     state: tauri::State<'_, std::sync::Mutex<AppSettings>>,
     patch: serde_json::Value,
-) -> Result<(), String> {
+) -> CmdResult<()> {
     let (previous, next) = {
         let mut current = state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-        let next = apply_settings_patch(&current, patch)?;
+        let next = apply_settings_patch(&current, patch).map_err(AppError::with(ErrorCode::InvalidInput))?;
         storage::save_settings(&app, &next);
         (std::mem::replace(&mut *current, next.clone()), next)
     };
@@ -230,13 +237,13 @@ pub(crate) fn register_shortcuts(app: &AppHandle, shortcuts: &crate::models::Sho
 
 /// The saved Discord Rich Presence client id (empty = disabled).
 #[tauri::command(async)]
-pub(crate) fn get_discord_client_id(app: AppHandle) -> Result<String, String> {
+pub(crate) fn get_discord_client_id(app: AppHandle) -> CmdResult<String> {
     Ok(storage::load_discord_client_id(&app))
 }
 
 /// Save the Discord client id and apply it live to the presence watcher.
 #[tauri::command(async)]
-pub(crate) fn set_discord_client_id(app: AppHandle, id: String) -> Result<(), String> {
+pub(crate) fn set_discord_client_id(app: AppHandle, id: String) -> CmdResult<()> {
     storage::save_discord_client_id(&app, &id)?;
     discord::set_client_id(&id);
     Ok(())

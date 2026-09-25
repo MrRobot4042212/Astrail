@@ -9,6 +9,7 @@ import { useTranslation } from 'react-i18next';
 import { CloseIcon, BookIcon } from './icons';
 import { getAppSettings, patchAppSettings } from '@/lib/tauri';
 import { DEFAULT_SHORTCUTS, formatShortcut } from '@/lib/shortcuts';
+import { failureText } from '@/i18n/failureText';
 interface Tutorial {
   title: string;
   description: string;
@@ -40,7 +41,7 @@ export function NotificationsPanel({ onClose }: { onClose: () => void }) {
       await patchAppSettings({ setup_completed: false });
       window.location.reload();
     } catch (e) {
-      setError(String(e));
+      setError(failureText(e));
       setBusy(false);
     }
   }

@@ -12,6 +12,7 @@ import { useTranslation } from 'react-i18next';
 import { getAppSettings, patchAppSettings } from '@/lib/tauri';
 import type { UpdateChannel } from '@/lib/types';
 import { Card, Toggle } from './settings/primitives';
+import { failureText } from '@/i18n/failureText';
 
 export function UpdateChannelCard() {
   const { t } = useTranslation();
@@ -25,7 +26,7 @@ export function UpdateChannelCard() {
         if (!cancelled) setChannel(s.update_channel ?? 'stable');
       })
       .catch((e) => {
-        if (!cancelled) setError(String(e));
+        if (!cancelled) setError(failureText(e));
       });
     return () => {
       cancelled = true;
@@ -43,7 +44,7 @@ export function UpdateChannelCard() {
     setError(null);
     patchAppSettings({ update_channel: next }).catch((e) => {
       setChannel(channel); // revert
-      setError(String(e));
+      setError(failureText(e));
     });
   };
 

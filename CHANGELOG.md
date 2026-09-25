@@ -149,6 +149,11 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
   con mando, y el aviso daba a entender un soporte que no existe.
 
 ### Corregido
+- **Los errores se muestran en tu idioma.** Los mensajes de error que venían del
+  núcleo de Astrail (al lanzar un juego, importar una copia, cambiar un ajuste…)
+  llegaban en inglés y sin distinguir el motivo. Ahora cada error tiene un tipo
+  con su texto en español o inglés; cuando ayuda, se añade al final el detalle
+  técnico original.
 - **«Iniciar con Windows» ya no puede apuntar a una copia sin instalar.** Abrir
   Astrail desde otra carpeta (una copia suelta o una compilación propia)
   reescribía el arranque automático para que apuntara a esa copia, y el programa

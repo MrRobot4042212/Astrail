@@ -34,7 +34,7 @@ pub(crate) fn backup_dialog(app: &AppHandle) -> tauri_plugin_dialog::FileDialogB
 /// categories, hidden entries, chosen covers, settings) to a file they pick.
 /// `None` = they closed the dialog. See `backup.rs` for what is in the file.
 #[tauri::command]
-pub(crate) async fn export_user_data(app: AppHandle) -> Result<Option<backup::ExportReport>, String> {
+pub(crate) async fn export_user_data(app: AppHandle) -> CmdResult<Option<backup::ExportReport>> {
     blocking(move || {
         let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default();
         // `YYYY-MM-DD`: the timestamp is ASCII, so the slice cannot split a char.
@@ -62,7 +62,7 @@ pub(crate) async fn export_user_data(app: AppHandle) -> Result<Option<backup::Ex
 /// Let the user pick a backup and validate it. Nothing is written: the summary is
 /// what they confirm, and `apply_user_data_backup` does the restore.
 #[tauri::command]
-pub(crate) async fn pick_user_data_backup(app: AppHandle) -> Result<Option<backup::ImportSummary>, String> {
+pub(crate) async fn pick_user_data_backup(app: AppHandle) -> CmdResult<Option<backup::ImportSummary>> {
     blocking(move || {
         let pending = app.state::<PendingImport>();
         pending.replace(None);
@@ -82,6 +82,7 @@ pub(crate) async fn pick_user_data_backup(app: AppHandle) -> Result<Option<backu
         Ok(Some(restore.summary))
     })
     .await
+    .map_err(|e| AppError::new(ErrorCode::BackupInvalid, e.detail))
 }
 
 /// Forget the picked backup (the user cancelled, or closed the settings).
@@ -94,17 +95,22 @@ pub(crate) fn discard_user_data_backup(pending: tauri::State<'_, PendingImport>)
 /// data being replaced is saved under `backups/` first; without that copy nothing
 /// is touched.
 #[tauri::command]
-pub(crate) async fn apply_user_data_backup(app: AppHandle) -> Result<backup::ImportReport, String> {
-    blocking(move || {
+pub(crate) async fn apply_user_data_backup(app: AppHandle) -> CmdResult<backup::ImportReport> {
+    blocking_cmd(move || {
         let (path, hash) = app
             .state::<PendingImport>()
             .replace(None)
             .ok_or_else(|| "No backup is waiting to be imported".to_string())?;
-        let restore = backup::read_verified(&path, &hash)?;
+        let restore = backup::read_verified(&path, &hash).map_err(AppError::with(ErrorCode::BackupChanged))?;
         let dir = jsonstore::data_dir(&app)?;
         let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
         let safety = backup::write_safety_copy(&dir, now)
-            .map_err(|e| format!("Nothing was imported: the current data could not be saved first ({e})"))?;
+            .map_err(|e| {
+                AppError::new(
+                    ErrorCode::Io,
+                    format!("Nothing was imported: the current data could not be saved first ({e})"),
+                )
+            })?;
         let safety = safety.to_string_lossy().into_owned();
 
         let outcome = backup::apply(&dir, &restore).and_then(|covers| {
@@ -124,7 +130,10 @@ pub(crate) async fn apply_user_data_backup(app: AppHandle) -> Result<backup::Imp
             }
             Err(e) => {
                 log::error!("user data import stopped half way: {e}; previous data in {safety}");
-                Err(format!("{e}. The import is incomplete; your previous data is in {safety}"))
+                Err(AppError::new(
+                    ErrorCode::Io,
+                    format!("{e}. The import is incomplete; your previous data is in {safety}"),
+                ))
             }
         }
     })

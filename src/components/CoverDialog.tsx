@@ -10,6 +10,7 @@ import { setCover, setCoverImage } from '@/lib/tauri';
 import { coverSrc } from '@/lib/cover';
 import type { Game } from '@/lib/types';
 import { CloseIcon, ImageIcon } from './icons';
+import { failureText } from '@/i18n/failureText';
 
 /** Set or clear a manual cover for a single game. The cover can be a remote URL
  *  or a local image (dropped onto the zone, or picked from disk). Overrides win
@@ -43,7 +44,7 @@ export function CoverDialog({
       onSaved(game.id, stored);
       onClose();
     } catch (e) {
-      setError(String(e));
+      setError(failureText(e));
     } finally {
       setBusy(false);
     }
@@ -64,7 +65,7 @@ export function CoverDialog({
       onSaved(game.id, path);
       onClose();
     } catch (e) {
-      setError(String(e));
+      setError(failureText(e));
     } finally {
       setBusy(false);
     }

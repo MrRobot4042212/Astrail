@@ -10,6 +10,7 @@ import { open } from '@tauri-apps/plugin-dialog';
 import { addManualApp } from '@/lib/tauri';
 import type { Game } from '@/lib/types';
 import { CloseIcon, FolderIcon } from './icons';
+import { failureText } from '@/i18n/failureText';
 
 function nameFromPath(p: string): string {
   const file = p.split(/[\\/]/).pop() ?? p;
@@ -55,7 +56,7 @@ export function AddAppDialog({
       onAdded(game);
       onClose();
     } catch (e) {
-      setError(String(e));
+      setError(failureText(e));
     } finally {
       setBusy(false);
     }

@@ -8,6 +8,7 @@ import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getAutostart, setAutostart, getAppSettings, patchAppSettings } from '@/lib/tauri';
 import { AstrailIcon } from './icons';
+import { failureText } from '@/i18n/failureText';
 
 export function Onboarding({
   onComplete,
@@ -63,7 +64,7 @@ export function Onboarding({
       });
       onComplete();
     } catch (e) {
-      setError(String(e));
+      setError(failureText(e));
       setBusy(false);
     }
   }

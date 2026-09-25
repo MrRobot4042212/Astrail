@@ -9,6 +9,7 @@ import { useTranslation } from 'react-i18next';
 import { addCategory } from '@/lib/tauri';
 import { CATEGORY_ICONS, CATEGORY_ICON_KEYS } from '@/lib/categoryIcons';
 import { CloseIcon, TagIcon } from './icons';
+import { failureText } from '@/i18n/failureText';
 
 /** Create a new (initially empty) category with a chosen icon from the bundled
  *  set. It persists in the sidebar so games can be assigned to it afterwards. */
@@ -42,7 +43,7 @@ export function NewCategoryDialog({
       onCreated(value);
       onClose();
     } catch (e) {
-      setError(String(e));
+      setError(failureText(e));
     } finally {
       setBusy(false);
     }

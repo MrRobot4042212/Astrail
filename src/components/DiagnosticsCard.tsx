@@ -11,6 +11,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { exportDiagnostics } from '@/lib/tauri';
 import { Button, Card } from './settings/primitives';
+import { failureText } from '@/i18n/failureText';
 
 type State =
   | { kind: 'idle' }
@@ -26,7 +27,7 @@ export function DiagnosticsCard() {
     setState({ kind: 'working' });
     exportDiagnostics()
       .then((path) => setState({ kind: 'done', path }))
-      .catch((e) => setState({ kind: 'failed', reason: String(e) }));
+      .catch((e) => setState({ kind: 'failed', reason: failureText(e) }));
   };
 
   return (

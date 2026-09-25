@@ -10,6 +10,7 @@ import { renameCategory, setCategoryIcon } from '@/lib/tauri';
 import { CATEGORY_ICONS, CATEGORY_ICON_KEYS } from '@/lib/categoryIcons';
 import type { Category } from '@/lib/types';
 import { CloseIcon, TagIcon } from './icons';
+import { failureText } from '@/i18n/failureText';
 
 /** Edit a category: rename it and/or change its icon. Renaming to an existing
  *  name merges the two. */
@@ -51,7 +52,7 @@ export function EditCategoryDialog({
       onSaved();
       onClose();
     } catch (e) {
-      setError(String(e));
+      setError(failureText(e));
     } finally {
       setBusy(false);
     }

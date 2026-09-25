@@ -9,7 +9,7 @@
 use crate::*;
 
 #[tauri::command(async)]
-pub(crate) fn system_info() -> Result<system::SystemInfo, String> {
+pub(crate) fn system_info() -> CmdResult<system::SystemInfo> {
     Ok(system::collect())
 }
 
@@ -23,8 +23,8 @@ pub(crate) fn about_info() -> about::AboutInfo {
 // Async: the notices are half a megabyte, and serializing them should not sit
 // on the main thread.
 #[tauri::command(async)]
-pub(crate) fn legal_document(name: String) -> Result<&'static str, String> {
-    about::document(&name)
+pub(crate) fn legal_document(name: String) -> CmdResult<&'static str> {
+    about::document(&name).map_err(AppError::with(ErrorCode::InvalidInput))
 }
 
 /// Overlay MPO diagnostics: live composition health + the system-config levers
@@ -40,7 +40,7 @@ pub(crate) fn overlay_mpo_diagnostics() -> system::MpoDiagnostics {
 /// show it in the file manager. Nothing leaves the machine: the user reads it and
 /// decides whether to attach it. Returns the path.
 #[tauri::command]
-pub(crate) async fn export_diagnostics(app: AppHandle) -> Result<String, String> {
+pub(crate) async fn export_diagnostics(app: AppHandle) -> CmdResult<String> {
     blocking(move || {
         let settings = current_settings(&app);
         let header = diagnostics_header(&settings);

@@ -233,7 +233,7 @@ pub(crate) fn toggle_overlay_settings(app: &AppHandle) {
 // NOT `async`: creates/destroys a WebviewWindow and moves focus, which belongs
 // on the main thread. It does no I/O.
 #[tauri::command]
-pub(crate) fn set_overlay_interactive(app: AppHandle, interactive: bool) -> Result<(), String> {
+pub(crate) fn set_overlay_interactive(app: AppHandle, interactive: bool) -> CmdResult<()> {
     metrics::set_settings_open(interactive);
     if interactive {
         let Some(w) = ensure_overlay_window(&app) else {

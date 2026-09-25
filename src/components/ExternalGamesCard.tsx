@@ -12,6 +12,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getAppSettings, patchAppSettings } from '@/lib/tauri';
 import { Card, Toggle } from './settings/primitives';
+import { failureText } from '@/i18n/failureText';
 
 export function ExternalGamesCard() {
   const { t } = useTranslation();
@@ -25,7 +26,7 @@ export function ExternalGamesCard() {
         if (!cancelled) setOn(s.track_external_games ?? true);
       })
       .catch((e) => {
-        if (!cancelled) setError(String(e));
+        if (!cancelled) setError(failureText(e));
       });
     return () => {
       cancelled = true;
@@ -41,7 +42,7 @@ export function ExternalGamesCard() {
     setError(null);
     patchAppSettings({ track_external_games: next }).catch((e) => {
       setOn(on); // revert
-      setError(String(e));
+      setError(failureText(e));
     });
   };
 

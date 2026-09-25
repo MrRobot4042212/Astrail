@@ -15,6 +15,7 @@ import { useTranslation } from 'react-i18next';
 import { aboutInfo, legalDocument, openExternal } from '@/lib/tauri';
 import type { AboutInfo, LegalDocument } from '@/lib/types';
 import { ArrowLeftIcon, BookIcon, AstrailIcon } from './icons';
+import { failureText } from '@/i18n/failureText';
 
 const DOCUMENTS: { id: LegalDocument; tKey: string }[] = [
   { id: 'license', tKey: 'about.docLicense' },
@@ -32,7 +33,7 @@ export function AboutTab() {
   useEffect(() => {
     aboutInfo()
       .then(setInfo)
-      .catch((e) => setError(String(e)));
+      .catch((e) => setError(failureText(e)));
   }, []);
 
   useEffect(() => {
@@ -45,7 +46,7 @@ export function AboutTab() {
         if (alive) setText(body);
       })
       .catch((e) => {
-        if (alive) setError(String(e));
+        if (alive) setError(failureText(e));
       });
     return () => {
       alive = false;

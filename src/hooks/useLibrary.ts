@@ -37,6 +37,7 @@ import {
   type PassOutcome,
   type PassToken,
 } from '@/lib/libraryState';
+import { failureText } from '@/i18n/failureText';
 
 /** How often to look for newly installed/removed games. */
 const REFRESH_INTERVAL_MS = 15 * 60 * 1000;
@@ -339,7 +340,7 @@ export function useLibrary(autoScan: boolean) {
         applyScan(list);
       } catch (e) {
         if (!clock.current.ownsScreen(myScan)) return;
-        setError(String(e));
+        setError(failureText(e));
         setLoading(false);
         endSplash();
       }

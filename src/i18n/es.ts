@@ -130,7 +130,6 @@ export const es = {
   },
   toast: {
     launching: 'Iniciando {{name}}…',
-    launchFailed: 'No se pudo iniciar: {{error}}',
     reorderCategoriesFailed: 'No se pudo reordenar las categorías',
     categoryDeleted: 'Categoría «{{name}}» eliminada',
     categoryDeleteFailed: 'No se pudo eliminar la categoría',
@@ -257,6 +256,17 @@ export const es = {
     boundaryBody: 'Astrail ha registrado el error. Puedes reintentar, recargar la ventana o exportar el diagnóstico para adjuntarlo a un reporte.',
     boundaryRetry: 'Reintentar',
     boundaryReload: 'Recargar Astrail',
+    // Una clave por `ErrorCode` de Rust (src-tauri/src/error.rs).
+    code: {
+      not_found: 'Ya no está en la biblioteca (puede que se haya desinstalado).',
+      invalid_input: 'Valor no válido: {{detail}}',
+      autostart_unavailable: 'Iniciar con Windows solo funciona en una copia instalada de Astrail.',
+      backup_invalid: 'Ese archivo no es una copia de seguridad válida de Astrail: {{detail}}',
+      backup_changed: 'La copia de seguridad cambió después de elegirla. Vuelve a seleccionarla.',
+      launch_failed: 'No se pudo iniciar: {{detail}}',
+      io: 'Windows no pudo completar la operación: {{detail}}',
+      internal: 'Algo ha fallado: {{detail}}',
+    },
   },
   about: {
     title: 'Acerca de Astrail',

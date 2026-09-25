@@ -16,7 +16,7 @@ use crate::*;
 /// deduplicated by name, so a game owned on several stores shows up once with
 /// the best available metadata (Steam first, since it ships CDN cover art).
 #[tauri::command(async)]
-pub(crate) async fn get_library(app: AppHandle) -> Result<Vec<Game>, String> {
+pub(crate) async fn get_library(app: AppHandle) -> CmdResult<Vec<Game>> {
     blocking(move || get_library_inner(app)).await
 }
 
@@ -201,7 +201,7 @@ pub(crate) fn game_folder(game: &Game) -> Option<String> {
 /// The last computed library from disk (empty if never scanned). The frontend
 /// paints this instantly, then calls `get_library` to refresh in the background.
 #[tauri::command(async)]
-pub(crate) fn cached_library(app: AppHandle) -> Result<Vec<Game>, String> {
+pub(crate) fn cached_library(app: AppHandle) -> CmdResult<Vec<Game>> {
     Ok(read_library_cache(&app))
 }
 
@@ -212,7 +212,7 @@ pub(crate) fn cached_library(app: AppHandle) -> Result<Vec<Game>, String> {
 /// what gets stored and returned: the CSP only lets the webview load images
 /// from the IGDB CDN, so a pasted URL cannot be rendered directly.
 #[tauri::command(async)]
-pub(crate) async fn set_cover(app: AppHandle, id: String, url: Option<String>) -> Result<Option<String>, String> {
+pub(crate) async fn set_cover(app: AppHandle, id: String, url: Option<String>) -> CmdResult<Option<String>> {
     blocking(move || {
         let value = match url.as_deref().map(str::trim).filter(|u| !u.is_empty()) {
             Some(u) if art::is_remote(u) => Some(art::fetch_user_cover(&app, &id, u)?),
@@ -233,7 +233,7 @@ pub(crate) fn set_cover_image(
     id: String,
     data: Vec<u8>,
     ext: String,
-) -> Result<String, String> {
+) -> CmdResult<String> {
     let path = storage::save_cover_image(&app, &id, &data, &ext)?;
     storage::set_cover_override(&app, &id, Some(&path))?;
     Ok(path)
@@ -253,7 +253,7 @@ pub(crate) const ICON_WORKERS: usize = 4;
 /// frontend can tell "there is no cover" from "could not ask" and only remember the
 /// first.
 #[tauri::command(async)]
-pub(crate) async fn resolve_covers(app: AppHandle, names: Vec<String>) -> Result<Vec<art::Cover>, String> {
+pub(crate) async fn resolve_covers(app: AppHandle, names: Vec<String>) -> CmdResult<Vec<art::Cover>> {
     batch::check_len(names.len())?;
     blocking(move || {
         let answers = batch::map_ordered(&names, COVER_WORKERS, |name| art::resolve(&app, name));
@@ -271,7 +271,7 @@ pub(crate) async fn resolve_covers(app: AppHandle, names: Vec<String>) -> Result
 /// whole 8-scanner + PowerShell pass is skipped. Conservative — any source it
 /// cannot read counts as changed.
 #[tauri::command(async)]
-pub(crate) async fn library_changed(app: AppHandle) -> Result<bool, String> {
+pub(crate) async fn library_changed(app: AppHandle) -> CmdResult<bool> {
     blocking(move || {
         let current = fingerprint::compute();
         let stored: u64 = jsonstore::load_or_default(&app, FINGERPRINT_FILE);
@@ -283,52 +283,52 @@ pub(crate) async fn library_changed(app: AppHandle) -> Result<bool, String> {
 /// Resolve the high-resolution cover for the detail page hero. Reuses the cached
 /// IGDB image id, so at most it downloads one image — never a new search.
 #[tauri::command(async)]
-pub(crate) async fn resolve_cover_hires(app: AppHandle, name: String) -> Result<Option<String>, String> {
+pub(crate) async fn resolve_cover_hires(app: AppHandle, name: String) -> CmdResult<Option<String>> {
     blocking(move || Ok(art::resolve_hires(&app, &name))).await
 }
 
 /// Wipe the cover cache (URLs + downloaded images) so everything re-resolves.
 #[tauri::command(async)]
-pub(crate) async fn clear_cover_cache(app: AppHandle) -> Result<(), String> {
+pub(crate) async fn clear_cover_cache(app: AppHandle) -> CmdResult<()> {
     blocking(move || art::clear_cache(&app)).await
 }
 
 /// Reclassify an entry as an application or a game (`"app"` / `"game"`), or clear
 /// the override (any other value) to fall back to auto-detection.
 #[tauri::command(async)]
-pub(crate) fn set_game_type(app: AppHandle, id: String, kind: String) -> Result<(), String> {
+pub(crate) fn set_game_type(app: AppHandle, id: String, kind: String) -> CmdResult<()> {
     let k = kind.as_str();
-    storage::set_type_override(&app, &id, if k == "app" || k == "game" { Some(k) } else { None })
+    storage::set_type_override(&app, &id, if k == "app" || k == "game" { Some(k) } else { None }).map_err(AppError::with(ErrorCode::Io))
 }
 
 /// Hide a game from the library (e.g. a non-game picked up by the registry scan).
 #[tauri::command(async)]
-pub(crate) fn hide_game(app: AppHandle, id: String) -> Result<(), String> {
-    storage::set_hidden(&app, &id, true)
+pub(crate) fn hide_game(app: AppHandle, id: String) -> CmdResult<()> {
+    storage::set_hidden(&app, &id, true).map_err(AppError::with(ErrorCode::Io))
 }
 
 /// Unhide a game from the library.
 #[tauri::command(async)]
-pub(crate) fn unhide_game(app: AppHandle, id: String) -> Result<(), String> {
-    storage::set_hidden(&app, &id, false)
+pub(crate) fn unhide_game(app: AppHandle, id: String) -> CmdResult<()> {
+    storage::set_hidden(&app, &id, false).map_err(AppError::with(ErrorCode::Io))
 }
 
 /// Get the cached metadata of hidden games.
 #[tauri::command(async)]
-pub(crate) fn get_hidden_library(app: AppHandle) -> Result<Vec<Game>, String> {
-    storage::load_hidden_cache(&app)
+pub(crate) fn get_hidden_library(app: AppHandle) -> CmdResult<Vec<Game>> {
+    storage::load_hidden_cache(&app).map_err(AppError::with(ErrorCode::Io))
 }
 
 /// Number of currently-hidden games (shown in settings so they can be restored).
 #[tauri::command(async)]
-pub(crate) fn hidden_count(app: AppHandle) -> Result<usize, String> {
+pub(crate) fn hidden_count(app: AppHandle) -> CmdResult<usize> {
     Ok(storage::load_hidden(&app).len())
 }
 
 /// Restore every hidden game.
 #[tauri::command(async)]
-pub(crate) fn restore_hidden(app: AppHandle) -> Result<(), String> {
-    storage::clear_hidden(&app)
+pub(crate) fn restore_hidden(app: AppHandle) -> CmdResult<()> {
+    storage::clear_hidden(&app).map_err(AppError::with(ErrorCode::Io))
 }
 
 /// A remote cover URL is downloaded into `user_covers/` (see `set_cover`).
@@ -338,10 +338,10 @@ pub(crate) async fn add_manual_app(
     name: String,
     executable: String,
     cover_url: Option<String>,
-) -> Result<Game, String> {
+) -> CmdResult<Game> {
     let name = name.trim().to_string();
     if name.is_empty() {
-        return Err("El nombre no puede estar vacío".into());
+        return Err(AppError::new(ErrorCode::InvalidInput, "the name cannot be empty"));
     }
 
     blocking(move || {
@@ -382,7 +382,7 @@ pub(crate) async fn add_manual_app(
 
 /// Remove a manually-added app. Store-managed entries are ignored.
 #[tauri::command(async)]
-pub(crate) fn remove_game(app: AppHandle, id: String) -> Result<(), String> {
+pub(crate) fn remove_game(app: AppHandle, id: String) -> CmdResult<()> {
     let mut manual = storage::load_manual(&app)?;
     let before = manual.len();
     manual.retain(|g| g.id != id);
@@ -394,55 +394,55 @@ pub(crate) fn remove_game(app: AppHandle, id: String) -> Result<(), String> {
 
 /// Mark or unmark a game as favorite (applies to any source, not just manual).
 #[tauri::command(async)]
-pub(crate) fn set_favorite(app: AppHandle, id: String, favorite: bool) -> Result<(), String> {
-    storage::set_favorite(&app, &id, favorite)
+pub(crate) fn set_favorite(app: AppHandle, id: String, favorite: bool) -> CmdResult<()> {
+    storage::set_favorite(&app, &id, favorite).map_err(AppError::with(ErrorCode::Io))
 }
 
 /// Replace the manual category list for a game id (empty list clears it).
 #[tauri::command(async)]
-pub(crate) fn set_categories(app: AppHandle, id: String, categories: Vec<String>) -> Result<(), String> {
-    storage::set_categories(&app, &id, &categories)
+pub(crate) fn set_categories(app: AppHandle, id: String, categories: Vec<String>) -> CmdResult<()> {
+    storage::set_categories(&app, &id, &categories).map_err(AppError::with(ErrorCode::Io))
 }
 
 /// Every explicitly-created category with its icon (persist even with zero games).
 #[tauri::command(async)]
-pub(crate) fn list_categories(app: AppHandle) -> Result<Vec<Category>, String> {
+pub(crate) fn list_categories(app: AppHandle) -> CmdResult<Vec<Category>> {
     Ok(storage::load_categories_meta(&app))
 }
 
 /// Create a category by name, optionally with an icon key from the bundled set.
 #[tauri::command(async)]
-pub(crate) fn add_category(app: AppHandle, name: String, icon: Option<String>) -> Result<(), String> {
-    storage::add_category_name(&app, &name, icon.as_deref())
+pub(crate) fn add_category(app: AppHandle, name: String, icon: Option<String>) -> CmdResult<()> {
+    storage::add_category_name(&app, &name, icon.as_deref()).map_err(AppError::with(ErrorCode::Io))
 }
 
 /// Set (or clear, with None) the icon key for an existing category.
 #[tauri::command(async)]
-pub(crate) fn set_category_icon(app: AppHandle, name: String, icon: Option<String>) -> Result<(), String> {
-    storage::set_category_icon(&app, &name, icon.as_deref())
+pub(crate) fn set_category_icon(app: AppHandle, name: String, icon: Option<String>) -> CmdResult<()> {
+    storage::set_category_icon(&app, &name, icon.as_deref()).map_err(AppError::with(ErrorCode::Io))
 }
 
 /// Delete a category and strip it from every game.
 #[tauri::command(async)]
-pub(crate) fn remove_category(app: AppHandle, name: String) -> Result<(), String> {
-    storage::remove_category_name(&app, &name)
+pub(crate) fn remove_category(app: AppHandle, name: String) -> CmdResult<()> {
+    storage::remove_category_name(&app, &name).map_err(AppError::with(ErrorCode::Io))
 }
 
 /// Rename a category everywhere (merges if the new name already exists).
 #[tauri::command(async)]
-pub(crate) fn rename_category(app: AppHandle, old: String, new: String) -> Result<(), String> {
-    storage::rename_category_name(&app, &old, &new)
+pub(crate) fn rename_category(app: AppHandle, old: String, new: String) -> CmdResult<()> {
+    storage::rename_category_name(&app, &old, &new).map_err(AppError::with(ErrorCode::Io))
 }
 
 /// Persist the explicit category order (as shown in the sidebar).
 #[tauri::command(async)]
-pub(crate) fn set_category_order(app: AppHandle, names: Vec<String>) -> Result<(), String> {
-    storage::set_category_order(&app, &names)
+pub(crate) fn set_category_order(app: AppHandle, names: Vec<String>) -> CmdResult<()> {
+    storage::set_category_order(&app, &names).map_err(AppError::with(ErrorCode::Io))
 }
 
 /// Accumulated play stats (seconds + last played) for a game id.
 #[tauri::command(async)]
-pub(crate) fn get_playtime(app: AppHandle, id: String) -> Result<playtime::PlayStat, String> {
+pub(crate) fn get_playtime(app: AppHandle, id: String) -> CmdResult<playtime::PlayStat> {
     Ok(playtime::get(&app, &id))
 }
 
@@ -450,7 +450,7 @@ pub(crate) fn get_playtime(app: AppHandle, id: String) -> Result<playtime::PlayS
 #[tauri::command(async)]
 pub(crate) fn all_playtime(
     app: AppHandle,
-) -> Result<std::collections::HashMap<String, playtime::PlayStat>, String> {
+) -> CmdResult<std::collections::HashMap<String, playtime::PlayStat>> {
     Ok(playtime::all(&app))
 }
 
@@ -460,10 +460,10 @@ pub(crate) fn all_playtime(
 /// validated, so the webview cannot ask for the size of an arbitrary directory.
 /// `None` = the entry has no known folder.
 #[tauri::command(async)]
-pub(crate) async fn game_dir_size(app: AppHandle, id: String) -> Result<Option<u64>, String> {
+pub(crate) async fn game_dir_size(app: AppHandle, id: String) -> CmdResult<Option<u64>> {
     blocking(move || {
         let Some(game) = resolve_game(&app, &id) else {
-            return Err(format!("Entrada desconocida: {id}"));
+            return Err(format!("unknown entry: {id}"));
         };
         let Some(folder) = game_folder(&game) else {
             return Ok(None);
@@ -484,7 +484,7 @@ pub(crate) async fn game_dir_size(app: AppHandle, id: String) -> Result<Option<u
 pub(crate) async fn steam_playtime(
     app: AppHandle,
     id: String,
-) -> Result<Option<steam_playtime::SteamPlaytime>, String> {
+) -> CmdResult<Option<steam_playtime::SteamPlaytime>> {
     blocking(move || {
         let Some(game) = resolve_game(&app, &id) else {
             return Err(format!("Unknown entry: {id}"));
@@ -520,7 +520,7 @@ pub(crate) fn icon_sources(ids: &[String], manual: &[Game], cached: &[Game]) -> 
 /// Takes ids, never paths: this used to be `app_icon(path)`, which parsed whatever
 /// file the webview named and added any `.ico` it named to the asset scope.
 #[tauri::command(async)]
-pub(crate) async fn app_icons(app: AppHandle, ids: Vec<String>) -> Result<Vec<Option<String>>, String> {
+pub(crate) async fn app_icons(app: AppHandle, ids: Vec<String>) -> CmdResult<Vec<Option<String>>> {
     batch::check_len(ids.len())?;
     blocking(move || {
         let manual = storage::load_manual(&app).unwrap_or_else(|e| {
@@ -541,13 +541,14 @@ pub(crate) async fn app_icons(app: AppHandle, ids: Vec<String>) -> Result<Vec<Op
 /// Id-based for the same reason as `game_dir_size`: the old `open_path(path)`
 /// handed an arbitrary webview-supplied string to Explorer.
 #[tauri::command(async)]
-pub(crate) fn open_game_folder(app: AppHandle, id: String) -> Result<(), String> {
+pub(crate) fn open_game_folder(app: AppHandle, id: String) -> CmdResult<()> {
     let Some(game) = resolve_game(&app, &id) else {
-        return Err(format!("Entrada desconocida: {id}"));
+        return Err(AppError::new(ErrorCode::NotFound, format!("unknown entry: {id}")));
     };
-    let folder = game_folder(&game).ok_or_else(|| "La entrada no tiene carpeta".to_string())?;
-    let dir = files::validate_dir(&folder)?;
-    files::open_folder(&dir)
+    let folder = game_folder(&game)
+        .ok_or_else(|| AppError::new(ErrorCode::NotFound, "the entry has no folder"))?;
+    let dir = files::validate_dir(&folder).map_err(AppError::with(ErrorCode::NotFound))?;
+    files::open_folder(&dir).map_err(AppError::with(ErrorCode::Io))
 }
 
 /// Open one of the detail page's community links in the user's browser.
@@ -556,15 +557,15 @@ pub(crate) fn open_game_folder(app: AppHandle, id: String) -> Result<(), String>
 /// navigates the app window itself, and the target host must not be whatever a
 /// library entry happens to contain.
 #[tauri::command(async)]
-pub(crate) fn open_external(url: String) -> Result<(), String> {
-    files::open_external(&url)
+pub(crate) fn open_external(url: String) -> CmdResult<()> {
+    files::open_external(&url).map_err(AppError::with(ErrorCode::InvalidInput))
 }
 
 /// The user's own screenshots for a game (Steam + Windows Game Bar).
 #[tauri::command(async)]
-pub(crate) fn user_screenshots(app: AppHandle, id: String) -> Result<Vec<String>, String> {
+pub(crate) fn user_screenshots(app: AppHandle, id: String) -> CmdResult<Vec<String>> {
     let Some(game) = resolve_game(&app, &id) else {
-        return Err(format!("Entrada desconocida: {id}"));
+        return Err(AppError::new(ErrorCode::NotFound, format!("unknown entry: {id}")));
     };
     Ok(screenshots::user_screenshots(&app, &game))
 }
@@ -582,12 +583,13 @@ pub(crate) fn user_screenshots(app: AppHandle, id: String) -> Result<Vec<String>
 /// COM single-threaded apartment, which the main thread has (the webview runtime
 /// initializes it) and the blocking pool does not.
 #[tauri::command]
-pub(crate) async fn launch_game(app: AppHandle, id: String) -> Result<(), String> {
+pub(crate) async fn launch_game(app: AppHandle, id: String) -> CmdResult<()> {
     let resolver = app.clone();
     let game = blocking(move || {
         resolve_game(&resolver, &id).ok_or_else(|| format!("Unknown library entry: {id}"))
     })
-    .await?;
+    .await
+    .map_err(|e| AppError::new(ErrorCode::NotFound, e.detail))?;
     let (tx, rx) = std::sync::mpsc::channel();
     app.run_on_main_thread(move || {
         let _ = tx.send(launcher::launch(&game));
@@ -600,4 +602,5 @@ pub(crate) async fn launch_game(app: AppHandle, id: String) -> Result<(), String
             .unwrap_or_else(|_| Err("The launch was dropped before it ran".into()))
     })
     .await
+    .map_err(|e| AppError::new(ErrorCode::LaunchFailed, e.detail))
 }

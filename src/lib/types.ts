@@ -10,6 +10,7 @@ import type { AppSettings } from './bindings/AppSettings';
 import type { Game as GameModel } from './bindings/Game';
 
 export type { AboutInfo } from './bindings/AboutInfo';
+export type { AppError } from './bindings/AppError';
 export type { AppSettings } from './bindings/AppSettings';
 export type { AutostartState } from './bindings/AutostartState';
 export type { BackupExportReport } from './bindings/BackupExportReport';
@@ -19,6 +20,7 @@ export type { Category } from './bindings/Category';
 export type { CoverAnswer } from './bindings/CoverAnswer';
 export type { DiskInfo } from './bindings/DiskInfo';
 export type { DisplayInfo } from './bindings/DisplayInfo';
+export type { ErrorCode } from './bindings/ErrorCode';
 export type { GameSource } from './bindings/GameSource';
 export type { GpuInfo } from './bindings/GpuInfo';
 export type { GpuKind } from './bindings/GpuKind';
