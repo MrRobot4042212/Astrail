@@ -236,7 +236,7 @@ fn spawn(bin: &PathBuf, mode: &Mode) -> std::io::Result<Child> {
     #[cfg(windows)]
     crate::jobobj::assign(&child);
     if let Some(err) = child.stderr.take() {
-        crate::sidecar_log::forward("cputemp", err);
+        crate::sidecar_log::forward("cputemp", err, None);
     }
     if let Some(out) = child.stdout.take() {
         std::thread::spawn(move || {

@@ -10,8 +10,29 @@
 //! said a sidecar exited and never why. Each child now gets one reader thread
 //! that forwards a bounded number of lines at `warn`; the rest is counted, so a
 //! sidecar that spams cannot fill the 1 MiB log.
+//!
+//! A sidecar may also declare a `Notice`: text it prints on every start that is
+//! expected and harmless (PresentMon without elevation explains, on four lines,
+//! that it cannot see processes of other accounts). Those lines are summed up in
+//! one `info` line per run instead of four warnings on every game.
 
 use std::io::{BufRead, BufReader, Read};
+use std::sync::atomic::{AtomicBool, Ordering};
+
+/// Expected stderr text of a sidecar, logged once per run as `summary`.
+pub struct Notice {
+    /// Fragments that identify the notice's lines; a line containing any of them
+    /// belongs to it.
+    pub fragments: &'static [&'static str],
+    pub summary: &'static str,
+    pub logged: AtomicBool,
+}
+
+impl Notice {
+    fn matches(&self, line: &str) -> bool {
+        self.fragments.iter().any(|f| line.contains(f))
+    }
+}
 
 /// Lines forwarded per child; anything after is only counted.
 const MAX_LINES: usize = 20;
@@ -20,9 +41,16 @@ const MAX_CHARS: usize = 300;
 
 /// Forward `stderr` of the sidecar `name` to the log on its own thread. The
 /// thread ends when the child closes the pipe (exit or kill).
-pub fn forward<R: Read + Send + 'static>(name: &'static str, stderr: R) {
+pub fn forward<R: Read + Send + 'static>(name: &'static str, stderr: R, notice: Option<&'static Notice>) {
     std::thread::spawn(move || {
-        let skipped = pump(BufReader::new(stderr), |line| log::warn!("{name} stderr: {line}"));
+        let skipped = pump(BufReader::new(stderr), |line| match notice {
+            Some(n) if n.matches(line) => {
+                if !n.logged.swap(true, Ordering::Relaxed) {
+                    log::info!("{name}: {}", n.summary);
+                }
+            }
+            _ => log::warn!("{name} stderr: {line}"),
+        });
         if skipped > 0 {
             log::warn!("{name} stderr: {skipped} more lines not logged");
         }
@@ -93,6 +121,31 @@ mod tests {
         assert_eq!(out[0].chars().count(), MAX_CHARS + 1);
         assert!(out[0].ends_with('…'));
         assert!(out[1].ends_with("oops"));
+    }
+
+    #[test]
+    fn a_known_notice_is_one_info_line_per_run_not_four_warnings() {
+        // Regression: PresentMon without elevation logged these four lines as
+        // warnings on every game start.
+        static NOTICE: Notice = Notice {
+            fragments: &["requires elevated privilege", "short-running or started on another account"],
+            summary: "running without elevation",
+            logged: AtomicBool::new(false),
+        };
+        let stderr = "warning: PresentMon requires elevated privilege in order to query processes that are
+                      short-running or started on another account.  Without it, those processes will
+                      real problem
+";
+        let (mut notices, mut warnings) = (0, Vec::new());
+        pump(stderr.as_bytes(), |line| {
+            if NOTICE.matches(line) {
+                notices += 1;
+            } else {
+                warnings.push(line.to_string());
+            }
+        });
+        assert_eq!(notices, 2);
+        assert_eq!(warnings, vec!["real problem"]);
     }
 
     #[test]

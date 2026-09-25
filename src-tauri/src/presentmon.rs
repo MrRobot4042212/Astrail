@@ -31,6 +31,20 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Manager};
 
+/// What PresentMon prints on every start when Astrail is not elevated (the
+/// Performance Log Users path): expected, and FPS still works for the game's own
+/// account. Logged once per run instead of as four warnings per game.
+static NOT_ELEVATED_NOTICE: crate::sidecar_log::Notice = crate::sidecar_log::Notice {
+    fragments: &[
+        "requires elevated privilege",
+        "short-running or started on another account",
+        "be listed as '<unknown>'",
+        "--terminate_on_proc_exit",
+    ],
+    summary: "running without elevation; processes of other accounts are not visible (expected)",
+    logged: std::sync::atomic::AtomicBool::new(false),
+};
+
 /// Latest FPS / frametime as hundredths (0 = no data), so they fit in atomics.
 static FPS_X100: AtomicU32 = AtomicU32::new(0);
 static FRAMETIME_X100: AtomicU32 = AtomicU32::new(0);
@@ -182,7 +196,7 @@ fn spawn(bin: &Path, pid: u32) -> std::io::Result<Child> {
     #[cfg(windows)]
     crate::jobobj::assign(&child);
     if let Some(err) = child.stderr.take() {
-        crate::sidecar_log::forward("PresentMon", err);
+        crate::sidecar_log::forward("PresentMon", err, Some(&NOT_ELEVATED_NOTICE));
     }
     if let Some(out) = child.stdout.take() {
         std::thread::spawn(move || parse_stdout(out, pid));
