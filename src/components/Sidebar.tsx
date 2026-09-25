@@ -6,7 +6,7 @@
 
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { GameSource, Category } from '@/lib/types';
+import type { Category } from '@/lib/types';
 import { SOURCE_META, SOURCE_ORDER } from '@/lib/sources';
 import { CATEGORY_ICONS } from '@/lib/categoryIcons';
 import {
@@ -15,7 +15,7 @@ import {
   GridIcon, StarIcon, TagIcon, PlusIcon, AppIcon, HomeIcon, AstrailIcon
 } from './icons';
 
-export type Filter = 'home' | 'all' | 'favorites' | GameSource | `cat:${string}`;
+import type { Filter } from '@/lib/libraryView';
 
 type NavItem = { id: Filter; label: string; Icon: typeof GridIcon };
 

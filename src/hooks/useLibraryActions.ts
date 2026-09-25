@@ -23,7 +23,7 @@ import {
 } from '@/lib/tauri';
 import { planCategoryAdd } from '@/lib/libraryView';
 import type { Category, Game } from '@/lib/types';
-import type { Filter } from '@/components/Sidebar';
+import type { Filter } from '@/lib/libraryView';
 import { failureText } from '@/i18n/failureText';
 
 export interface ConfirmRequest {

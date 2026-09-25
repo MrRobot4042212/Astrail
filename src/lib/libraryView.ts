@@ -6,9 +6,15 @@
 // categories and counts, the filtered and ordered grid, and the category merge
 // the bulk actions apply. No React, no IPC, so every rule here has a test.
 
-import type { Category, Game, PlayStat } from './types';
+import type { Category, Game, GameSource, PlayStat } from './types';
 import { SOURCE_ORDER } from './sources';
 import { fuzzyScore } from './fuzzy';
+
+/** What the sidebar selected: a fixed view, a store, or a user category. */
+export type Filter = 'home' | 'all' | 'favorites' | GameSource | `cat:${string}`;
+
+/** Grid sort order chosen in the top bar. */
+export type SortKey = 'name' | 'recent' | 'played';
 
 /** The sidebar's selection. Structural twin of `Filter` in `Sidebar.tsx`, kept
  *  as a string here so this module does not import from a component. */

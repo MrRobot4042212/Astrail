@@ -5,7 +5,7 @@
 import { useTranslation } from 'react-i18next';
 import { SearchIcon, ScanIcon, PlayIcon, BellIcon, HelpIcon } from './icons';
 
-export type SortKey = 'name' | 'recent' | 'played';
+import type { SortKey } from '@/lib/libraryView';
 
 /** i18n key for each sort option's label. */
 export const SORT_LABEL_KEYS: Record<SortKey, string> = {

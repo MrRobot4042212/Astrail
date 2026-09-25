@@ -11,8 +11,7 @@ import {
   visibleGames,
 } from '@/lib/libraryView';
 import type { Category, Game, PlayStat } from '@/lib/types';
-import type { Filter } from '@/components/Sidebar';
-import type { SortKey } from '@/components/TopBar';
+import type { Filter, SortKey } from '@/lib/libraryView';
 
 const QUERY_DEBOUNCE_MS = 150;
 
