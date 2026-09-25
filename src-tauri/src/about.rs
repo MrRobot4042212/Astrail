@@ -25,6 +25,7 @@ pub const REPOSITORY: &str = "https://github.com/MrRobot4042212/Astrail";
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
 pub struct AboutInfo {
     pub version: &'static str,
     pub author: &'static str,

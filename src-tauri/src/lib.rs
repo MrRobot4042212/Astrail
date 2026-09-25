@@ -1051,6 +1051,7 @@ fn username() -> String {
 /// *and* `pawnio`. Group membership is fixed at logon; PawnIO can be installed
 /// while Astrail runs, so the screen re-asks each time it opens.
 #[derive(serde::Serialize, Clone, Copy, Debug)]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
 pub struct MetricsAccess {
     pub elevated: bool,
     pub etw: bool,

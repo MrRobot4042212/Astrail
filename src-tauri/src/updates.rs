@@ -43,14 +43,19 @@ const CHECK_TIMEOUT: Duration = Duration::from_secs(15);
 /// is built from it), plus the channel the offer came from.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export, rename = "UpdateOffer"))]
 pub struct UpdateMetadata {
+    #[cfg_attr(test, ts(type = "number"))]
     rid: ResourceId,
     current_version: String,
     version: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(test, ts(optional))]
     date: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(test, ts(optional))]
     body: Option<String>,
+    #[cfg_attr(test, ts(type = "Record<string, unknown>"))]
     raw_json: serde_json::Value,
     channel: UpdateChannel,
 }

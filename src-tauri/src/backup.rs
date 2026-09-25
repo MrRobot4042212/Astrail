@@ -109,6 +109,7 @@ struct Bundle {
 
 /// What an export wrote, for the settings card.
 #[derive(Debug, Default, Clone, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export, rename = "BackupExportReport"))]
 pub struct ExportReport {
     pub path: String,
     pub covers: usize,
@@ -120,6 +121,7 @@ pub struct ExportReport {
 
 /// What a backup file holds, shown before the user confirms the restore.
 #[derive(Debug, Default, Clone, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export, rename = "BackupSummary"))]
 pub struct ImportSummary {
     pub file_name: String,
     pub created: u64,
@@ -135,6 +137,7 @@ pub struct ImportSummary {
 
 /// What a restore did.
 #[derive(Debug, Default, Clone, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export, rename = "BackupImportReport"))]
 pub struct ImportReport {
     pub covers: usize,
     /// Where the data that was replaced went.

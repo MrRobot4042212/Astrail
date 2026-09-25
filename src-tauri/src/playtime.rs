@@ -84,6 +84,7 @@ const EXCLUDE: &[&str] = &[
 
 /// One finished play session.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
 pub struct Session {
     pub start: u64,
     pub end: u64,
@@ -96,6 +97,7 @@ pub struct Session {
 
 /// Accumulated play stats for one game, keyed by `Game.id`.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
 pub struct PlayStat {
     /// Total seconds played (cached sum of `history`).
     pub seconds: u64,

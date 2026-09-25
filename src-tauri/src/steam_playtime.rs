@@ -34,6 +34,7 @@ const MAX_FILE_BYTES: u64 = 32 * 1024 * 1024;
 const APPS_PATH: [&str; 4] = ["Software", "Valve", "Steam", "apps"];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
 pub struct SteamPlaytime {
     /// Minutes, as Steam stores them. Never 0: an unplayed app is reported as absent.
     pub minutes: u32,

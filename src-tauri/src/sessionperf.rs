@@ -51,6 +51,7 @@ const TEMP_MAX_C: u32 = 150;
 /// What was measured during one play session. Every figure is optional: FPS needs
 /// PresentMon (administrator), CPU temperature needs the sensor sidecar.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
 pub struct SessionPerf {
     /// Frames presented divided by the time they took, not a mean of FPS readings.
     #[serde(default, skip_serializing_if = "Option::is_none")]

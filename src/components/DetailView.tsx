@@ -124,7 +124,7 @@ export function DetailView({
   onHide?: (g: Game) => void;
 }) {
   const { t } = useTranslation();
-  const [play, setPlay] = useState<PlayStat>({ seconds: 0, history: [] });
+  const [play, setPlay] = useState<PlayStat>({ seconds: 0, last_played: null, history: [] });
   const [size, setSize] = useState<number | null | undefined>(undefined);
   const [shots, setShots] = useState<string[]>([]);
   const [shot, setShot] = useState<string | null>(null);

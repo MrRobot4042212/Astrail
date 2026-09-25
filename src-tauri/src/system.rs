@@ -14,16 +14,30 @@ use serde::Serialize;
 /// set only for metric-capable GPUs — those can be picked for the overlay; empty
 /// otherwise.
 #[derive(Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
 pub struct GpuInfo {
     pub name: String,
     pub vendor: String,
     pub vram_mb: u64,
-    /// "integrated" | "discrete" | "" (unknown); the panel translates it.
-    pub kind: String,
+    /// The panel translates it.
+    pub kind: GpuKind,
     pub key: String,
 }
 
+/// Whether a GPU is built into the CPU. `Unknown` serializes as `""`, the value
+/// the panel has always received when Windows could not tell.
+#[derive(Serialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
+pub enum GpuKind {
+    Integrated,
+    Discrete,
+    #[serde(rename = "")]
+    Unknown,
+}
+
 #[derive(Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
 pub struct DiskInfo {
     pub name: String,
     pub fs: String,
@@ -32,6 +46,7 @@ pub struct DiskInfo {
 }
 
 #[derive(Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
 pub struct DisplayInfo {
     pub name: String,
     pub width: u32,
@@ -44,9 +59,11 @@ pub struct DisplayInfo {
 /// plus the system-config levers that decide whether Windows grants the HUD a hardware
 /// overlay plane (MPO). Surfaced in the overlay settings so the user can fix their config.
 #[derive(Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
 pub struct MpoDiagnostics {
     /// Live overlay health: 0 unknown, 1 free (HUD on a hardware plane), 2 costing
     /// (DWM compositing the HUD → the game loses independent-flip).
+    #[cfg_attr(test, ts(type = "0 | 1 | 2"))]
     pub health: u8,
     /// Number of active monitors. Multi-monitor is the most common MPO blocker.
     pub monitors: u32,
@@ -61,6 +78,7 @@ pub struct MpoDiagnostics {
 }
 
 #[derive(Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
 pub struct SystemInfo {
     pub cpu: String,
     pub cpu_cores: usize,
@@ -122,7 +140,7 @@ fn gpus() -> Vec<GpuInfo> {
                         name,
                         vendor: "NVIDIA".to_string(),
                         vram_mb,
-                        kind: "discrete".to_string(),
+                        kind: GpuKind::Discrete,
                         key: format!("nvml:{i}"),
                     });
                 }
@@ -153,11 +171,10 @@ fn gpus() -> Vec<GpuInfo> {
                 vendor: vendor_name(adapter.vendor_id).to_string(),
                 vram_mb: adapter.dedicated_vram_bytes / MB,
                 kind: match dxgi::is_integrated(&adapter) {
-                    Some(true) => "integrated",
-                    Some(false) => "discrete",
-                    None => "",
-                }
-                .to_string(),
+                    Some(true) => GpuKind::Integrated,
+                    Some(false) => GpuKind::Discrete,
+                    None => GpuKind::Unknown,
+                },
                 key,
             });
         }

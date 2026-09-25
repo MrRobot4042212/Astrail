@@ -2,23 +2,40 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Additional terms under GPL-3.0 section 7 apply: see ADDITIONAL-TERMS.md
 
-// Types that cross the IPC boundary are generated from the Rust models by ts-rs
-// (`cargo test` writes `./bindings/`); never edit them by hand. What follows in
-// this file is either not generated yet or only exists on this side.
+// Every type that crosses the IPC boundary is generated from its Rust definition
+// by ts-rs (`npm run bindings` writes `./bindings/`); never edit those by hand,
+// and never hand-write a mirror of a Rust type here. What this file defines is
+// either only on this side or not a Rust type at all.
 import type { AppSettings } from './bindings/AppSettings';
 import type { Game as GameModel } from './bindings/Game';
-import type { UpdateChannel } from './bindings/UpdateChannel';
 
+export type { AboutInfo } from './bindings/AboutInfo';
 export type { AppSettings } from './bindings/AppSettings';
 export type { AutostartState } from './bindings/AutostartState';
+export type { BackupExportReport } from './bindings/BackupExportReport';
+export type { BackupImportReport } from './bindings/BackupImportReport';
+export type { BackupSummary } from './bindings/BackupSummary';
 export type { Category } from './bindings/Category';
+export type { CoverAnswer } from './bindings/CoverAnswer';
+export type { DiskInfo } from './bindings/DiskInfo';
+export type { DisplayInfo } from './bindings/DisplayInfo';
 export type { GameSource } from './bindings/GameSource';
+export type { GpuInfo } from './bindings/GpuInfo';
+export type { GpuKind } from './bindings/GpuKind';
 export type { HudFontSize } from './bindings/HudFontSize';
+export type { MetricsAccess } from './bindings/MetricsAccess';
+export type { MpoDiagnostics } from './bindings/MpoDiagnostics';
 export type { MpoMode } from './bindings/MpoMode';
 export type { OverlayPosition } from './bindings/OverlayPosition';
 export type { OverlaySettings } from './bindings/OverlaySettings';
+export type { PlayStat } from './bindings/PlayStat';
+export type { Session } from './bindings/Session';
+export type { SessionPerf } from './bindings/SessionPerf';
 export type { ShortcutsSettings } from './bindings/ShortcutsSettings';
+export type { SteamPlaytime } from './bindings/SteamPlaytime';
+export type { SystemInfo } from './bindings/SystemInfo';
 export type { UpdateChannel } from './bindings/UpdateChannel';
+export type { UpdateOffer } from './bindings/UpdateOffer';
 
 export type Game = GameModel & {
   /** Client-side only: extracted exe icon path (apps without cover/brand logo).
@@ -26,180 +43,22 @@ export type Game = GameModel & {
   icon?: string;
 };
 
-/** What the HUD measured during a session (`sessionperf.rs`). Every figure is
- *  optional: FPS needs PresentMon, temperatures need their sensor, and all of it
- *  is only measured while the HUD is on screen with the game in front. */
-export interface SessionPerf {
-  avg_fps?: number | null;
-  /** 99th-percentile frame time of the whole session, as FPS. */
-  low_1_fps?: number | null;
-  /** Seconds of frames the FPS figures cover — not the session length. */
-  fps_secs?: number | null;
-  max_gpu_temp_c?: number | null;
-  max_cpu_temp_c?: number | null;
-}
-
-/** One finished play session (unix timestamps, seconds). */
-export interface Session {
-  start: number;
-  end: number;
-  perf?: SessionPerf | null;
-}
-
-/** Accumulated play stats for a game. */
-export interface PlayStat {
-  seconds: number;
-  last_played?: number | null;
-  history: Session[];
-}
-
-/** What the Steam client recorded for an app (`steam_playtime.rs`). Steam's
- *  figure, across every machine of the account; never added to `PlayStat`. */
-export interface SteamPlaytime {
-  /** Minutes; never 0 (an unplayed app comes back as `null` instead). */
-  minutes: number;
-  /** Unix seconds. */
-  last_played: number | null;
-}
-
-/** What `export_user_data` wrote (`backup.rs`). */
-export interface BackupExportReport {
-  path: string;
-  covers: number;
-  /** Covers left out because the file would have grown past its cap. */
-  covers_skipped: number;
-  /** Store files that exist but could not be read; they are not in the backup. */
-  unreadable: string[];
-}
-
-/** What a picked backup holds, shown before the user confirms the import. Every
- *  value comes from the file, validated in Rust. */
-export interface BackupSummary {
-  file_name: string;
-  /** Unix seconds; 0 when the file does not say. */
-  created: number;
-  app_version: string;
-  manual_apps: number;
-  played_games: number;
-  favorites: number;
-  hidden: number;
-  categories: number;
-  covers: number;
-  includes_settings: boolean;
-}
-
-/** What `apply_user_data_backup` did. */
-export interface BackupImportReport {
-  covers: number;
-  /** Where the data that was replaced went. */
-  safety_copy: string;
-}
-
-/** One answer of `resolve_covers` (mirrors `art::Cover`). `unavailable` means
- *  nobody could be asked (offline, rate limited, no credentials): it says nothing
- *  about the game and must not be remembered as a miss. */
-export type CoverAnswer =
-  | { status: 'found'; path: string }
-  | { status: 'not_found' }
-  | { status: 'unavailable' };
-
-/** Live overlay health: 0 unknown, 1 free (hardware plane), 2 costing (DWM composing). */
+/** Payload of the `overlay-health` event (`metrics::overlay_health`): 0 unknown,
+ *  1 free (hardware plane), 2 costing (DWM composing). */
 export type OverlayHealth = 0 | 1 | 2;
-
-/**
- * Why the in-game overlay may be costing performance: live composition health plus the
- * system-config levers that decide whether Windows grants the HUD a hardware plane (MPO).
- */
-export interface MpoDiagnostics {
-  health: OverlayHealth;
-  monitors: number;
-  refresh_rates: number[];
-  mixed_refresh: boolean;
-  hags: boolean | null;
-}
 
 /** A partial `AppSettings` for `patchAppSettings`: nested objects merge key by key. */
 export type AppSettingsPatch = {
   [K in keyof AppSettings]?: AppSettings[K] extends object ? Partial<AppSettings[K]> : AppSettings[K];
 };
 
-/**
- * What `check_update` returns: the updater plugin's own metadata (its `Update`
- * class is built from it) plus the channel the offer came from.
- */
-export interface UpdateOffer {
-  rid: number;
-  currentVersion: string;
-  version: string;
-  date?: string;
-  body?: string;
-  rawJson: Record<string, unknown>;
-  channel: UpdateChannel;
-}
-
-/** A GPU as reported by `system_info`. `key` is set only for metric-capable GPUs. */
-export interface GpuInfo {
-  name: string;
-  vendor: string;
-  vram_mb: number;
-  /** Empty when Windows could not tell. */
-  kind: 'integrated' | 'discrete' | '';
-  key: string;
-}
-
-export interface DiskInfo {
-  name: string;
-  fs: string;
-  total_mb: number;
-  available_mb: number;
-}
-
-export interface DisplayInfo {
-  name: string;
-  width: number;
-  height: number;
-  refresh_hz: number;
-  primary: boolean;
-}
-
-/** Mirror of `lib.rs::MetricsAccess`: what the privileged metrics can use. */
-export interface MetricsAccess {
-  /** Astrail runs as administrator. */
-  elevated: boolean;
-  /** PresentMon can open its ETW session: elevated or in Performance Log Users (FPS). */
-  etw: boolean;
-  /** The PawnIO driver is installed (CPU temperature, together with `elevated`). */
-  pawnio: boolean;
-}
-
-/** Hardware/system info for the "Mi equipo" panel. */
-export interface SystemInfo {
-  cpu: string;
-  cpu_cores: number;
-  cpu_threads: number;
-  ram_total_mb: number;
-  os: string;
-  motherboard: string | null;
-  gpus: GpuInfo[];
-  disks: DiskInfo[];
-  displays: DisplayInfo[];
-}
-
-/** Version, author and license of the running build, for Settings → "Acerca de". */
-export interface AboutInfo {
-  version: string;
-  author: string;
-  repository: string;
-  license: string;
-  /** False in any build that did not come out of the project's own release workflow. */
-  official: boolean;
-}
-
-/** The legal documents embedded in the binary. */
+/** The legal documents embedded in the binary (the argument `legal_document`
+ *  accepts; `about::document` rejects anything else). */
 export type LegalDocument = 'license' | 'additional-terms' | 'third-party-notices';
 
-/** One telemetry sample. The live HUD is now drawn natively in Rust; this type is
- *  kept for the settings-panel live preview (mock data) and the shared `OverlayPanel`. */
+/** One telemetry sample, for the settings-panel live preview (mock data) and the
+ *  shared `OverlayPanel`. Not an IPC type: the HUD is drawn natively in Rust and
+ *  no sample crosses to the webview any more. */
 export interface MetricsSample {
   game?: string | null;
   /** Null on the first tick after a wake: CPU % needs two samples. */
@@ -227,4 +86,3 @@ export interface MetricsSample {
    *  PresentMon only, and only while every frame carries a reading. */
   gpu_busy_pct?: number | null;
 }
-

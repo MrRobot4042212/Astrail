@@ -146,6 +146,7 @@ fn image_id_from_url(url: &str) -> String {
 /// first is a fact worth remembering, the second has to be asked again.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(tag = "status", content = "path", rename_all = "snake_case")]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export, rename = "CoverAnswer"))]
 pub enum Cover {
     /// A local file path, or the remote IGDB URL when the download failed.
     Found(String),
