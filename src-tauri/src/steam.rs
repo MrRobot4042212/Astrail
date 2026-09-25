@@ -15,12 +15,12 @@ const BLOCKLIST: &[u32] = &[
 /// Errors from individual libraries/apps are skipped rather than aborting the
 /// whole scan, so one corrupt manifest can't hide the rest of the collection.
 pub fn scan() -> Result<Vec<Game>, String> {
-    let steam_dir = SteamDir::locate().map_err(|e| format!("No se encontró Steam: {e}"))?;
+    let steam_dir = SteamDir::locate().map_err(|e| format!("Steam was not found: {e}"))?;
     let mut games = Vec::new();
 
     let libraries = steam_dir
         .libraries()
-        .map_err(|e| format!("No se pudieron leer las librerías de Steam: {e}"))?;
+        .map_err(|e| format!("Could not read the Steam libraries: {e}"))?;
 
     for library in libraries {
         let Ok(library) = library else { continue };

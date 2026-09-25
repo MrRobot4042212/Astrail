@@ -154,6 +154,8 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
   con mando, y el aviso daba a entender un soporte que no existe.
 
 ### Corregido
+- **«Mi equipo» ya no muestra «Desconocido» en español** con la interfaz en
+  inglés cuando Windows no informa del procesador o del sistema.
 - **Los errores se muestran en tu idioma.** Los mensajes de error que venían del
   núcleo de Astrail (al lanzar un juego, importar una copia, cambiar un ajuste…)
   llegaban en inglés y sin distinguir el motivo. Ahora cada error tiene un tipo

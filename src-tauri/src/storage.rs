@@ -72,7 +72,7 @@ pub fn save_cover_image(
     ext: &str,
 ) -> Result<String, String> {
     if data.is_empty() {
-        return Err("La imagen está vacía".into());
+        return Err("The image is empty".into());
     }
     let ext = ext.trim().trim_start_matches('.').to_lowercase();
     let ext = if COVER_EXTS.contains(&ext.as_str()) {
@@ -272,7 +272,7 @@ pub fn load_category_icons(app: &AppHandle) -> HashMap<String, String> {
 pub fn set_category_icon(app: &AppHandle, name: &str, icon: Option<&str>) -> Result<(), String> {
     let name = name.trim();
     if name.is_empty() {
-        return Err("El nombre no puede estar vacío".into());
+        return Err("The name cannot be empty".into());
     }
     let mut map = load_category_icons(app);
     match icon.map(str::trim).filter(|i| !i.is_empty()) {
@@ -303,7 +303,7 @@ pub fn load_categories_meta(app: &AppHandle) -> Vec<Category> {
 pub fn add_category_name(app: &AppHandle, name: &str, icon: Option<&str>) -> Result<(), String> {
     let name = name.trim();
     if name.is_empty() {
-        return Err("El nombre no puede estar vacío".into());
+        return Err("The name cannot be empty".into());
     }
     let mut names = load_category_names(app);
     if !names.iter().any(|n| n.eq_ignore_ascii_case(name)) {
@@ -335,7 +335,7 @@ pub fn set_category_order(app: &AppHandle, names: &[String]) -> Result<(), Strin
 pub fn rename_category_name(app: &AppHandle, old: &str, new: &str) -> Result<(), String> {
     let new = new.trim();
     if new.is_empty() {
-        return Err("El nombre no puede estar vacío".into());
+        return Err("The name cannot be empty".into());
     }
 
     // 1. Names list — replace old with new in place, normalizing/merging.

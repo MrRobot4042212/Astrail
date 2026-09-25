@@ -167,7 +167,7 @@ unsafe fn init() -> Result<Dcomp> {
             match $e {
                 Ok(v) => v,
                 Err(e) => {
-                    crate::overlay_diag::log(&format!("init DComp falló en {}: {e}", $name));
+                    crate::overlay_diag::log(&format!("DComp init failed at {}: {e}", $name));
                     return Err(e);
                 }
             }
@@ -792,11 +792,11 @@ pub fn log_composition_mode() {
     STATE.with(|s| {
         let guard = s.borrow();
         let Some(d) = guard.as_ref() else {
-            crate::overlay_diag::log("composición: swapchain DComp no inicializado");
+            crate::overlay_diag::log("composition: DComp swapchain not initialised");
             return;
         };
         if !d.visible {
-            crate::overlay_diag::log("composición: HUD oculto (sin frames que medir)");
+            crate::overlay_diag::log("composition: HUD hidden (no frames to measure)");
             return;
         }
         let media: Result<IDXGISwapChainMedia> = d.swapchain.cast();
@@ -807,18 +807,18 @@ pub fn log_composition_mode() {
                     Ok(()) => {
                         let mode = stats.CompositionMode.0;
                         crate::overlay_diag::log(&format!(
-                            "composición swapchain: {} (CompositionMode={mode}, approvedPresentDuration={})",
+                            "swapchain composition: {} (CompositionMode={mode}, approvedPresentDuration={})",
                             crate::overlay_diag::composition_mode_name(mode),
                             stats.ApprovedPresentDuration
                         ));
                     }
                     Err(e) => crate::overlay_diag::log(&format!(
-                        "GetFrameStatisticsMedia falló: {e} (frecuente justo tras mostrar; reintenta el siguiente heartbeat)"
+                        "GetFrameStatisticsMedia failed: {e} (common right after showing; retried on the next heartbeat)"
                     )),
                 }
             }
             Err(e) => {
-                crate::overlay_diag::log(&format!("IDXGISwapChainMedia no disponible: {e}"))
+                crate::overlay_diag::log(&format!("IDXGISwapChainMedia unavailable: {e}"))
             }
         }
     });

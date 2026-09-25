@@ -230,7 +230,7 @@ pub fn render(cfg: &OverlaySettings, m: &MetricsSample, monitor: MonitorGeometry
             1
         } else {
             crate::overlay_diag::log(
-                "DirectComposition no disponible → HUD desactivado (sin fallback GDI)",
+                "DirectComposition unavailable → HUD disabled (no GDI fallback)",
             );
             3
         };
@@ -291,7 +291,7 @@ pub fn log_composition_mode() {
     if current() == 1 {
         crate::overlay_dcomp::log_composition_mode();
     } else {
-        crate::overlay_diag::log("composición: HUD no activo en backend DComp");
+        crate::overlay_diag::log("composition: HUD not active on the DComp backend");
     }
 }
 

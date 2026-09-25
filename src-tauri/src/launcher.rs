@@ -58,7 +58,7 @@ pub fn launch(game: &Game) -> Result<(), String> {
         GameSource::Steam => {
             let app_id = game
                 .app_id
-                .ok_or_else(|| "Juego de Steam sin AppID".to_string())?;
+                .ok_or_else(|| "Steam game without an AppID".to_string())?;
             open_uri(&format!("steam://rungameid/{app_id}"))
         }
         // Battle.net's `battlenet://` protocol only focuses the launcher, it
@@ -70,7 +70,7 @@ pub fn launch(game: &Game) -> Result<(), String> {
             } else if let Some(uri) = game.launch_uri.as_deref().filter(|u| !u.trim().is_empty()) {
                 open_uri(uri)
             } else {
-                Err(format!("No hay forma de lanzar «{}»", game.name))
+                Err(format!("\"{}\" has no way to be launched", game.name))
             }
         }
         _ => {
@@ -79,7 +79,7 @@ pub fn launch(game: &Game) -> Result<(), String> {
             } else if let Some(exe) = game.executable.as_deref().filter(|e| !e.trim().is_empty()) {
                 spawn_exe(game, exe)
             } else {
-                Err(format!("No hay forma de lanzar «{}»", game.name))
+                Err(format!("\"{}\" has no way to be launched", game.name))
             }
         }
     }
@@ -128,7 +128,7 @@ pub(crate) fn is_allowed_uri(uri: &str) -> bool {
 /// Open a protocol URI through the OS handler, after the allowlist check.
 fn open_uri(uri: &str) -> Result<(), String> {
     if !is_allowed_uri(uri) {
-        return Err(format!("URI de lanzamiento no permitida: «{uri}»"));
+        return Err(format!("Launch URI not allowed: \"{uri}\""));
     }
     #[cfg(target_os = "windows")]
     {
@@ -143,7 +143,7 @@ fn open_uri(uri: &str) -> Result<(), String> {
             Command::new(explorer)
                 .arg(uri)
                 .spawn()
-                .map_err(|e| format!("No se pudo abrir «{uri}»: {e}"))?;
+                .map_err(|e| format!("Could not open \"{uri}\": {e}"))?;
             return Ok(());
         }
         shell_execute(uri, None)?;
@@ -153,7 +153,7 @@ fn open_uri(uri: &str) -> Result<(), String> {
         Command::new("xdg-open")
             .arg(uri)
             .spawn()
-            .map_err(|e| format!("No se pudo abrir «{uri}»: {e}"))?;
+            .map_err(|e| format!("Could not open \"{uri}\": {e}"))?;
     }
     Ok(())
 }
@@ -191,7 +191,7 @@ fn shell_execute(target: &str, dir: Option<&Path>) -> Result<(), String> {
         Ok(())
     } else {
         Err(format!(
-            "No se pudo abrir «{target}» (error {})",
+            "Could not open \"{target}\" (error {})",
             result.0 as isize
         ))
     }
@@ -202,9 +202,9 @@ fn shell_execute(target: &str, dir: Option<&Path>) -> Result<(), String> {
 /// that still exists, live inside that directory.
 fn validate_exe(game: &Game, exe: &str) -> Result<PathBuf, String> {
     let canon =
-        std::fs::canonicalize(exe).map_err(|e| format!("No se pudo resolver «{exe}»: {e}"))?;
+        std::fs::canonicalize(exe).map_err(|e| format!("Could not resolve \"{exe}\": {e}"))?;
     if !canon.is_file() {
-        return Err(format!("«{exe}» no es un archivo ejecutable"));
+        return Err(format!("\"{exe}\" is not an executable file"));
     }
     let ext_ok = canon
         .extension()
@@ -212,7 +212,7 @@ fn validate_exe(game: &Game, exe: &str) -> Result<PathBuf, String> {
         .map(|e| e.to_ascii_lowercase())
         .is_some_and(|e| ALLOWED_EXE_EXT.contains(&e.as_str()));
     if !ext_ok {
-        return Err(format!("Extensión no permitida para lanzar: «{exe}»"));
+        return Err(format!("Extension not allowed to launch: \"{exe}\""));
     }
     if let Some(dir) = game.install_dir.as_deref().filter(|d| !d.trim().is_empty()) {
         // Only enforced when the install dir still resolves: an entry whose
@@ -220,7 +220,7 @@ fn validate_exe(game: &Game, exe: &str) -> Result<PathBuf, String> {
         if let Ok(root) = std::fs::canonicalize(dir) {
             if !canon.starts_with(&root) {
                 return Err(format!(
-                    "El ejecutable de «{}» está fuera de su carpeta de instalación",
+                    "The executable of \"{}\" is outside its install folder",
                     game.name
                 ));
             }
@@ -250,7 +250,7 @@ fn spawn_exe(game: &Game, exe: &str) -> Result<(), String> {
         cmd.current_dir(parent);
     }
     cmd.spawn()
-        .map_err(|e| format!("No se pudo iniciar «{}»: {e}", game.name))?;
+        .map_err(|e| format!("Could not start \"{}\": {e}", game.name))?;
     Ok(())
 }
 

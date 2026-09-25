@@ -235,6 +235,9 @@ pub(crate) fn set_cover_image(
     data: Vec<u8>,
     ext: String,
 ) -> CmdResult<String> {
+    if data.is_empty() {
+        return Err(AppError::new(ErrorCode::InvalidInput, "the image is empty"));
+    }
     let path = storage::save_cover_image(&app, &id, &data, &ext)?;
     storage::set_cover_override(&app, &id, Some(&path))?;
     Ok(path)
@@ -421,12 +424,23 @@ pub(crate) fn list_categories(app: AppHandle) -> CmdResult<Vec<Category>> {
 /// Create a category by name, optionally with an icon key from the bundled set.
 #[tauri::command(async)]
 pub(crate) fn add_category(app: AppHandle, name: String, icon: Option<String>) -> CmdResult<()> {
+    require_name(&name)?;
     storage::add_category_name(&app, &name, icon.as_deref()).map_err(AppError::with(ErrorCode::Io))
+}
+
+/// A category name the webview sent: blank is the user's mistake, not a disk
+/// failure, so it is refused here with its own code (`storage` checks it again).
+pub(crate) fn require_name(name: &str) -> CmdResult<()> {
+    if name.trim().is_empty() {
+        return Err(AppError::new(ErrorCode::InvalidInput, "the name cannot be empty"));
+    }
+    Ok(())
 }
 
 /// Set (or clear, with None) the icon key for an existing category.
 #[tauri::command(async)]
 pub(crate) fn set_category_icon(app: AppHandle, name: String, icon: Option<String>) -> CmdResult<()> {
+    require_name(&name)?;
     storage::set_category_icon(&app, &name, icon.as_deref()).map_err(AppError::with(ErrorCode::Io))
 }
 
@@ -439,6 +453,7 @@ pub(crate) fn remove_category(app: AppHandle, name: String) -> CmdResult<()> {
 /// Rename a category everywhere (merges if the new name already exists).
 #[tauri::command(async)]
 pub(crate) fn rename_category(app: AppHandle, old: String, new: String) -> CmdResult<()> {
+    require_name(&new)?;
     storage::rename_category_name(&app, &old, &new).map_err(AppError::with(ErrorCode::Io))
 }
 

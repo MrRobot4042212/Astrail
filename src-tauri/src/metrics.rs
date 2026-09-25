@@ -711,7 +711,7 @@ pub fn start(app: AppHandle) {
                 let state = (active, raw_game.is_some(), game.is_some());
                 if state != diag_state {
                     crate::overlay_diag::log(&format!(
-                        "gate: overlay_on={active} settings_open={settings_open} game={:?} pid={pid} fg_pid={fg_pid} → dibujar={} | {}",
+                        "gate: overlay_on={active} settings_open={settings_open} game={:?} pid={pid} fg_pid={fg_pid} → draw={} | {}",
                         raw_game,
                         game.is_some(),
                         crate::overlay_diag::foreground_report()
@@ -984,7 +984,7 @@ pub fn start(app: AppHandle) {
                     {
                         diag_heartbeat = std::time::Instant::now();
                         crate::overlay_diag::log(&format!(
-                            "muestra: fps={:?} frame={:?}ms gpu={:?}% gpuTemp={:?}°C cpu={:?}% cpuTemp={:?}°C ram={}/{}MB",
+                            "sample: fps={:?} frame={:?}ms gpu={:?}% gpuTemp={:?}°C cpu={:?}% cpuTemp={:?}°C ram={}/{}MB",
                             sample.fps,
                             sample.frametime_ms,
                             sample.gpu_usage,

@@ -56,9 +56,9 @@ pub fn strip_verbatim(path: &Path) -> PathBuf {
 /// Resolve a path and require it to be an existing directory.
 pub fn validate_dir(path: &str) -> Result<PathBuf, String> {
     let canon =
-        fs::canonicalize(path).map_err(|e| format!("No se pudo resolver «{path}»: {e}"))?;
+        fs::canonicalize(path).map_err(|e| format!("Could not resolve \"{path}\": {e}"))?;
     if !canon.is_dir() {
-        return Err(format!("«{path}» no es una carpeta"));
+        return Err(format!("\"{path}\" is not a folder"));
     }
     Ok(canon)
 }
@@ -139,7 +139,7 @@ pub fn open_folder(dir: &Path) -> Result<(), String> {
                 Command::new(system_exe("explorer.exe"))
                     .arg(&path)
                     .spawn()
-                    .map_err(|e| format!("No se pudo abrir «{}»: {e}", path.display()))?;
+                    .map_err(|e| format!("Could not open \"{}\": {e}", path.display()))?;
             }
         }
     }
@@ -148,7 +148,7 @@ pub fn open_folder(dir: &Path) -> Result<(), String> {
         Command::new("xdg-open")
             .arg(&path)
             .spawn()
-            .map_err(|e| format!("No se pudo abrir «{}»: {e}", path.display()))?;
+            .map_err(|e| format!("Could not open \"{}\": {e}", path.display()))?;
     }
     Ok(())
 }
@@ -209,7 +209,7 @@ pub fn is_allowed_external(url: &str) -> bool {
 /// itself** away from the app (there is no browser chrome to come back with).
 pub fn open_external(url: &str) -> Result<(), String> {
     if !is_allowed_external(url) {
-        return Err(format!("URL externa no permitida: «{url}»"));
+        return Err(format!("External URL not allowed: \"{url}\""));
     }
     #[cfg(target_os = "windows")]
     {
@@ -236,7 +236,7 @@ pub fn open_external(url: &str) -> Result<(), String> {
             )
         };
         if (result.0 as isize) <= 32 {
-            return Err(format!("No se pudo abrir «{url}»"));
+            return Err(format!("Could not open \"{url}\""));
         }
     }
     #[cfg(not(target_os = "windows"))]
@@ -244,7 +244,7 @@ pub fn open_external(url: &str) -> Result<(), String> {
         Command::new("xdg-open")
             .arg(url)
             .spawn()
-            .map_err(|e| format!("No se pudo abrir «{url}»: {e}"))?;
+            .map_err(|e| format!("Could not open \"{url}\": {e}"))?;
     }
     Ok(())
 }

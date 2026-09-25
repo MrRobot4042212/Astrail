@@ -80,11 +80,11 @@ pub struct MpoDiagnostics {
 #[derive(Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS), ts(export))]
 pub struct SystemInfo {
-    pub cpu: String,
+    pub cpu: Option<String>,
     pub cpu_cores: usize,
     pub cpu_threads: usize,
     pub ram_total_mb: u64,
-    pub os: String,
+    pub os: Option<String>,
     pub motherboard: Option<String>,
     pub gpus: Vec<GpuInfo>,
     pub disks: Vec<DiskInfo>,
@@ -96,8 +96,9 @@ const MB: u64 = 1024 * 1024;
 /// Gather everything for the panel. Best-effort: any source that fails is just
 /// omitted (empty list / `None`), never an error.
 pub fn collect() -> SystemInfo {
-    let cpu = crate::sysstat::cpu_brand().unwrap_or_else(|| "Desconocido".to_string());
-    let os = crate::sysstat::os_description().unwrap_or_else(|| "Desconocido".to_string());
+    // `None` when Windows would not say; the panel shows its own "unknown".
+    let cpu = crate::sysstat::cpu_brand();
+    let os = crate::sysstat::os_description();
     let (cores, threads) = crate::sysstat::cpu_counts();
     let (_, ram_total_mb) = crate::sysstat::mem_mb();
 

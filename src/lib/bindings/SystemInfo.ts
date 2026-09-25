@@ -3,4 +3,4 @@ import type { DiskInfo } from "./DiskInfo";
 import type { DisplayInfo } from "./DisplayInfo";
 import type { GpuInfo } from "./GpuInfo";
 
-export type SystemInfo = { cpu: string, cpu_cores: number, cpu_threads: number, ram_total_mb: number, os: string, motherboard: string | null, gpus: Array<GpuInfo>, disks: Array<DiskInfo>, displays: Array<DisplayInfo>, };
+export type SystemInfo = { cpu: string | null, cpu_cores: number, cpu_threads: number, ram_total_mb: number, os: string | null, motherboard: string | null, gpus: Array<GpuInfo>, disks: Array<DiskInfo>, displays: Array<DisplayInfo>, };

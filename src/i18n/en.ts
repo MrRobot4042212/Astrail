@@ -287,6 +287,7 @@ export const en = {
     loading: 'Loading…',
   },
   settings: {
+    sUnknown: 'Unknown',
     title: 'Settings',
     tabMetrics: 'Metrics',
     tabSystem: 'System information',

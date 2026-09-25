@@ -96,4 +96,38 @@ mod tests {
         assert_eq!(internal.code, ErrorCode::Internal);
         assert_eq!(internal.detail, "boom");
     }
+
+    #[test]
+    fn no_spanish_text_is_written_in_the_core() {
+        // The detail of an error reaches the screen inside the translated message
+        // and the log, so it has to be English whatever the UI language is. These
+        // markers caught the last ones ("No se pudo abrir «…»", "Desconocido").
+        const MARKERS: &[&str] = &["«", "»", "¿", "¡", "No se ", "no se pudo", "Desconocid", "vacío", "carpeta"];
+        let mut dirs = vec![std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src")];
+        let mut found = Vec::new();
+        while let Some(dir) = dirs.pop() {
+            for entry in std::fs::read_dir(&dir).expect("source dir") {
+                let path = entry.expect("dir entry").path();
+                if path.is_dir() {
+                    dirs.push(path);
+                    continue;
+                }
+                if path.extension().is_none_or(|e| e != "rs") || path.ends_with("error.rs") {
+                    continue;
+                }
+                let text = std::fs::read_to_string(&path).expect("source file");
+                let code = text.split("#[cfg(test)]").next().unwrap_or_default();
+                for (n, line) in code.lines().enumerate() {
+                    let trimmed = line.trim_start();
+                    if trimmed.starts_with("//") {
+                        continue;
+                    }
+                    if MARKERS.iter().any(|m| line.contains(m)) {
+                        found.push(format!("{}:{}: {}", path.display(), n + 1, trimmed));
+                    }
+                }
+            }
+        }
+        assert!(found.is_empty(), "Spanish text in the core:\n{}", found.join("\n"));
+    }
 }

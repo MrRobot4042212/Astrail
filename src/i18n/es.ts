@@ -286,6 +286,7 @@ export const es = {
     loading: 'Cargando…',
   },
   settings: {
+    sUnknown: 'Desconocido',
     title: 'Ajustes',
     tabMetrics: 'Métricas',
     tabSystem: 'Información del sistema',

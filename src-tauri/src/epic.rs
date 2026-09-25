@@ -44,7 +44,7 @@ pub fn scan() -> Result<Vec<Game>, String> {
     };
 
     let mut games = Vec::new();
-    let entries = fs::read_dir(&dir).map_err(|e| format!("No se pudo leer Epic: {e}"))?;
+    let entries = fs::read_dir(&dir).map_err(|e| format!("Could not read the Epic manifests: {e}"))?;
 
     for entry in entries.flatten() {
         let path = entry.path();

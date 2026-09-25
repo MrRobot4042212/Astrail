@@ -65,7 +65,7 @@ pub fn init(app: &tauri::AppHandle) {
         let path = dir.join("overlay-debug.log");
         Some(path)
     });
-    log("=== overlay debug iniciado (ASTRAIL_OVERLAY_DEBUG=1) ===");
+    log("=== overlay debug started (ASTRAIL_OVERLAY_DEBUG=1) ===");
     if let Some(Some(p)) = LOG_PATH.get() {
         log(&format!("log file: {}", p.display()));
     }
@@ -97,11 +97,11 @@ pub fn log(msg: &str) {
 /// 0=COMPOSED, 1=OVERLAY, 2=NONE, 3=COMPOSITION_FAILURE.
 pub fn composition_mode_name(mode: i32) -> &'static str {
     match mode {
-        0 => "COMPOSED (DWM compone → posible input lag)",
-        1 => "OVERLAY (plano hardware/MPO → sin coste)",
-        2 => "NONE (sin frames presentados aún)",
-        3 => "COMPOSITION_FAILURE (driver rechazó el plano)",
-        _ => "DESCONOCIDO",
+        0 => "COMPOSED (DWM composes → possible input lag)",
+        1 => "OVERLAY (hardware/MPO plane → no cost)",
+        2 => "NONE (no frames presented yet)",
+        3 => "COMPOSITION_FAILURE (the driver refused the plane)",
+        _ => "UNKNOWN",
     }
 }
 
@@ -170,17 +170,17 @@ pub fn foreground_report() -> String {
         let monitors = GetSystemMetrics(SM_CMONITORS);
 
         let kind = if covers_monitor && !has_caption {
-            "BORDERLESS/EXCLUSIVE fullscreen (MPO posible)"
+            "BORDERLESS/EXCLUSIVE fullscreen (MPO possible)"
         } else if covers_monitor && has_caption {
-            "MAXIMIZADA con borde"
+            "MAXIMIZED with border"
         } else if has_caption || has_thickframe {
-            "VENTANA (con borde)"
+            "WINDOW (with border)"
         } else {
-            "sin borde, no cubre monitor"
+            "borderless, does not cover the monitor"
         };
 
         format!(
-            "fg: pid={pid} «{title}» class={class} win={ww}x{wh}@({},{}) mon={mw}x{mh} caption={has_caption} monitores={monitors} primario={on_primary} → {kind}",
+            "fg: pid={pid} \"{title}\" class={class} win={ww}x{wh}@({},{}) mon={mw}x{mh} caption={has_caption} monitors={monitors} primary={on_primary} → {kind}",
             wr.left, wr.top
         )
     }

@@ -25,10 +25,10 @@ export function SystemTab({ sys }: { sys: SystemInfo | null }) {
             <dl className="space-y-2 text-sm">
               <InfoRow
                 label={t('settings.sCpu')}
-                value={`${sys.cpu} · ${t('settings.sCoresThreads', { cores: sys.cpu_cores, threads: sys.cpu_threads })}`}
+                value={`${sys.cpu ?? t('settings.sUnknown')} · ${t('settings.sCoresThreads', { cores: sys.cpu_cores, threads: sys.cpu_threads })}`}
               />
               <InfoRow label={t('settings.sRam')} value={fmtMem(sys.ram_total_mb)} />
-              <InfoRow label={t('settings.sOs')} value={sys.os} />
+              <InfoRow label={t('settings.sOs')} value={sys.os ?? t('settings.sUnknown')} />
               {sys.motherboard && <InfoRow label={t('settings.sMotherboard')} value={sys.motherboard} />}
             </dl>
           </Card>

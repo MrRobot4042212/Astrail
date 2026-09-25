@@ -469,6 +469,16 @@ mod tests {
     }
 
     #[test]
+    fn a_blank_category_name_is_the_users_input_not_a_disk_error() {
+        // Regression: storage refused it in Spanish and the command reported it
+        // as a disk failure.
+        for blank in ["", "   ", "	"] {
+            assert_eq!(require_name(blank).unwrap_err().code, error::ErrorCode::InvalidInput);
+        }
+        assert!(require_name("RPG").is_ok());
+    }
+
+    #[test]
     fn a_hud_option_the_backend_does_not_know_is_refused() {
         // Regression: position, font size and MPO mode were free strings, so a
         // patch could store `"mpo_mode": "banana"` and the HUD silently used the
