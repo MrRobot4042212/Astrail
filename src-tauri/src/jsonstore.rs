@@ -163,7 +163,7 @@ fn check_schema_in(dir: &Path) -> Schema {
             let file = SchemaFile { version: SCHEMA_VERSION };
             match serde_json::to_vec_pretty(&file) {
                 Ok(bytes) => match write_atomic(&path, &bytes) {
-                    Ok(()) => log::info!("data dir schema {from} -> {SCHEMA_VERSION}"),
+                    Ok(()) => log::info!("{}", schema_note(from)),
                     Err(e) => log::warn!("could not record the data schema: {e}"),
                 },
                 Err(e) => log::warn!("could not record the data schema: {e}"),
@@ -171,6 +171,16 @@ fn check_schema_in(dir: &Path) -> Schema {
         }
     }
     state
+}
+
+/// Log line for a recorded schema: the first record of a dir that had no
+/// `schema.json` is not a migration, so it must not read like one ("1 -> 1").
+fn schema_note(from: u32) -> String {
+    if from == SCHEMA_VERSION {
+        format!("data dir schema {SCHEMA_VERSION} recorded (no schema.json before)")
+    } else {
+        format!("data dir schema {from} -> {SCHEMA_VERSION}")
+    }
 }
 
 /// Refuse a store write when a newer build owns the data dir.
@@ -338,6 +348,15 @@ mod tests {
         assert_eq!(check_schema_in(&dir), Schema::Current);
         assert_eq!(fs::read_to_string(dir.join("favorites.json")).unwrap(), "[\"steam:1\"]");
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn recording_the_first_schema_is_not_logged_as_a_migration() {
+        // Seen in the log of the first run: "data dir schema 1 -> 1".
+        assert_eq!(schema_note(SCHEMA_VERSION), format!("data dir schema {SCHEMA_VERSION} recorded (no schema.json before)"));
+        if SCHEMA_VERSION > 1 {
+            assert_eq!(schema_note(1), format!("data dir schema 1 -> {SCHEMA_VERSION}"));
+        }
     }
 
     #[test]
