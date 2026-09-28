@@ -34,6 +34,8 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
   o categorizar varios juegos a la vez podía guardar solo algunos aunque la
   biblioteca mostrara todos cambiados; al reiniciar, el resto había vuelto atrás.
   Lo mismo al añadir una aplicación manual mientras se descargaban carátulas.
+- **Un nombre con ciertos caracteres (Ω, K, İ…) ya no cierra Astrail** al buscar
+  su carátula; como la búsqueda se repite en cada arranque, se cerraba siempre.
 - Un archivo de datos que no se puede leer (por ejemplo, guardado en UTF-16) ya
   no se sustituye por uno vacío al cambiar algo en la biblioteca.
 - **Cerrar o actualizar Astrail con el HUD activo ya no deja nada a medias.**

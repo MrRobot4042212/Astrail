@@ -330,7 +330,12 @@ fn name_variants(name: &str) -> Vec<String> {
         "directors cut",
         "director's cut",
     ];
-    let lower = cleaned.to_lowercase();
+    // ASCII lowercasing keeps every byte offset of `cleaned`, so `pos` below can
+    // slice it. `to_lowercase` does not: 'Ω' (U+2126) and 'K' (U+212A) shrink,
+    // 'İ' grows, and a shifted offset inside a multi-byte character panicked, which
+    // under `panic = "abort"` ended the app on every cover pass (X-K7). The suffixes
+    // are ASCII, so nothing they could match is lost.
+    let lower = cleaned.to_ascii_lowercase();
     for suffix in SUFFIXES {
         if let Some(pos) = lower.rfind(suffix) {
             if pos + suffix.len() >= lower.len().saturating_sub(1) {
@@ -727,6 +732,25 @@ mod tests {
 
         // Deduplicated: a plain ASCII name yields exactly one variant.
         assert_eq!(name_variants("Portal 2").len(), 1);
+    }
+
+    #[test]
+    fn edition_suffixes_are_cut_at_the_right_byte_in_any_script() {
+        // Regression (X-K7): the suffix was found in `to_lowercase()`'s output and
+        // its offset used on the original. Ω (U+2126) and K (U+212A) shrink when
+        // lowercased and İ grows, so the offset landed mid-character (a panic, and
+        // with `panic = "abort"` a crash on every cover pass) or cut the wrong text.
+        let cases = [
+            ("\u{2126}\u{e9}remastered", "\u{2126}\u{e9}"),
+            ("\u{2126}\u{e9} Remastered", "\u{2126}\u{e9}"),
+            ("\u{212a}\u{e9}y Remastered", "\u{212a}\u{e9}y"),
+            ("\u{130}stanbul Remastered", "\u{130}stanbul"),
+            ("P\u{f6}kemon GOTY Edition", "P\u{f6}kemon"),
+        ];
+        for (name, stripped) in cases {
+            let v = name_variants(name);
+            assert!(v.iter().any(|s| s == stripped), "{name}: {v:?}");
+        }
     }
 
     #[test]
