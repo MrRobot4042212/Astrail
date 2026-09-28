@@ -82,6 +82,20 @@ body {
   background: rgb(var(--muted-foreground));
 }
 
+/* Keyboard focus is always visible (2026-09-27 audit, D12): no element showed
+   where focus was. In the base layer, so an element that styles its own focus
+   (`outline-none` + a border, as the inputs do) still wins. A dialog panel takes
+   focus only as a fallback when nothing inside can; it is not a control. */
+@layer base {
+  :focus-visible {
+    outline: 2px solid rgb(var(--ring));
+    outline-offset: 2px;
+  }
+  [role='dialog']:focus-visible {
+    outline: none;
+  }
+}
+
 /* Don't let users select UI text like a webpage */
 .no-select {
   user-select: none;

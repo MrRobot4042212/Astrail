@@ -35,6 +35,7 @@ import { Home } from '@/components/Home';
 import { TopBar } from '@/components/TopBar';
 import { UpdatePrompt } from '@/components/UpdatePrompt';
 import { useEscape } from '@/hooks/useEscape';
+import { useReturnFocusToCard } from '@/hooks/useReturnFocusToCard';
 
 // Loaded on demand: none of these render until the user opens something, so
 // keeping them in the first-load chunk only delayed the library appearing.
@@ -172,6 +173,8 @@ function MainApp() {
       un.then((f) => f());
     };
   }, []);
+
+  useReturnFocusToCard(selectedId);
 
   // Esc closes the detail page, or exits multi-select.
   const exitSelection = selection.exit;

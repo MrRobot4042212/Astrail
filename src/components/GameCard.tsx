@@ -135,6 +135,22 @@ export const GameCard = memo(function GameCard({
   // Mount-on-hover for the tool chrome (see the render below).
   const [hovered, setHovered] = useState(false);
 
+  // The card is a keyboard stop of its own (2026-09-27 audit, D1): the library
+  // was mouse-only, since the card was a plain div and its one focusable child
+  // sat in an overlay shown on hover. Enter or Space does what a click does; the
+  // tools inside stay out of the Tab order (one stop per card, not five) and are
+  // all in the context menu, which the Menu key or Shift+F10 opens.
+  function handleKey(e: React.KeyboardEvent<HTMLDivElement>) {
+    if (e.target !== e.currentTarget) return;
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    e.preventDefault();
+    if (selectionMode || e.ctrlKey || e.metaKey) {
+      onToggleSelect?.(game);
+    } else {
+      onOpen?.(game);
+    }
+  }
+
   function handleDragEnd() {
     // Reset transform to identity on drag end.
     if (ref.current) {
@@ -159,6 +175,7 @@ export const GameCard = memo(function GameCard({
     <div
       ref={ref}
       data-tour="game-card"
+      data-game-id={game.id}
       draggable={!selectionMode}
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
@@ -177,10 +194,23 @@ export const GameCard = memo(function GameCard({
       onContextMenu={(e) => {
         if (!onContextMenu) return;
         e.preventDefault();
-        onContextMenu(game, e.clientX, e.clientY);
+        // From the keyboard the point is not over the card: open it on the card.
+        const r = e.currentTarget.getBoundingClientRect();
+        const over =
+          e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+        onContextMenu(
+          game,
+          over ? e.clientX : r.left + r.width / 2,
+          over ? e.clientY : r.top + r.height / 2,
+        );
       }}
+      onKeyDown={handleKey}
+      tabIndex={0}
+      aria-label={game.name}
       onMouseEnter={() => setHovered(true)}
-      className={`group relative aspect-[2/3] overflow-hidden border bg-elevated shadow-card hover:shadow-glow ${
+      // The focus ring is drawn inside: `content-visibility` on the wrapper clips
+      // anything outside the card.
+      className={`group relative aspect-[2/3] overflow-hidden border bg-elevated shadow-card hover:shadow-glow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring ${
         selectionMode ? 'cursor-pointer' : 'cursor-grab active:cursor-grabbing'
       } ${
         selected
@@ -249,7 +279,7 @@ export const GameCard = memo(function GameCard({
       {/* Hover overlay (hidden in selection mode) */}
       <div
         className={`pointer-events-none absolute inset-0 flex flex-col justify-end bg-gradient-to-t from-void via-void/40 to-transparent opacity-0 transition-opacity duration-200 ${
-          selectionMode ? '' : 'group-hover:opacity-100'
+          selectionMode ? '' : 'group-hover:opacity-100 group-focus-visible:opacity-100'
         }`}
       >
         <div className="pointer-events-auto p-3">
@@ -257,6 +287,7 @@ export const GameCard = memo(function GameCard({
             {game.name}
           </p>
           <button
+            tabIndex={-1}
             onClick={(e) => {
               e.stopPropagation();
               onLaunch(game);
@@ -274,6 +305,7 @@ export const GameCard = memo(function GameCard({
           backdrop-filter, i.e. its own compositor layer. */}
       {onToggleFavorite && !selectionMode && (game.favorite || hovered) && (
         <button
+          tabIndex={-1}
           onClick={(e) => {
             e.stopPropagation();
             onToggleFavorite(game);
@@ -298,6 +330,7 @@ export const GameCard = memo(function GameCard({
       >
         {onEditCategories && (
           <button
+            tabIndex={-1}
             onClick={(e) => {
               e.stopPropagation();
               onEditCategories(game);
@@ -310,6 +343,7 @@ export const GameCard = memo(function GameCard({
         )}
         {onEditCover && (
           <button
+            tabIndex={-1}
             onClick={(e) => {
               e.stopPropagation();
               onEditCover(game);
@@ -322,6 +356,7 @@ export const GameCard = memo(function GameCard({
         )}
         {onHide && (
           <button
+            tabIndex={-1}
             onClick={(e) => {
               e.stopPropagation();
               onHide(game);
@@ -334,6 +369,7 @@ export const GameCard = memo(function GameCard({
         )}
         {onRemove && (
           <button
+            tabIndex={-1}
             onClick={(e) => {
               e.stopPropagation();
               onRemove(game);

@@ -12,7 +12,12 @@ export type MenuItem =
   | { type: 'separator' };
 
 /** A floating right-click menu anchored at (x, y). Closes on outside click, Esc,
- *  scroll or resize. Clamps itself to stay inside the viewport. */
+ *  scroll or resize. Clamps itself to stay inside the viewport.
+ *
+ *  Also a keyboard menu (2026-09-27 audit, D1): it opens from the Menu key or
+ *  Shift+F10 on a card, so focus moves to its first item, ↑/↓/Home/End move
+ *  between items, Enter picks one, Tab or Esc closes it, and focus goes back to
+ *  where it was. */
 export function ContextMenu({
   x,
   y,
@@ -41,6 +46,37 @@ export function ContextMenu({
 
   useEscape(onClose);
 
+  const itemsOf = () =>
+    Array.from(ref.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? []);
+
+  useEffect(() => {
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    ref.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus({ preventScroll: true });
+    return () => {
+      if (previous?.isConnected) previous.focus({ preventScroll: true });
+    };
+  }, []);
+
+  function onKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      onClose();
+      return;
+    }
+    const all = itemsOf();
+    if (all.length === 0) return;
+    const at = all.indexOf(document.activeElement as HTMLElement);
+    const next =
+      e.key === 'ArrowDown' ? (at + 1) % all.length
+      : e.key === 'ArrowUp' ? (at <= 0 ? all.length - 1 : at - 1)
+      : e.key === 'Home' ? 0
+      : e.key === 'End' ? all.length - 1
+      : null;
+    if (next === null) return;
+    e.preventDefault();
+    all[next].focus();
+  }
+
   useEffect(() => {
     window.addEventListener('resize', onClose);
     window.addEventListener('scroll', onClose, true);
@@ -54,22 +90,25 @@ export function ContextMenu({
     <div className="fixed inset-0 z-[60]" onClick={onClose} onContextMenu={(e) => e.preventDefault()}>
       <div
         ref={ref}
+        role="menu"
         data-tour="context-menu"
         style={{ left: pos.x, top: pos.y }}
         onClick={(e) => e.stopPropagation()}
+        onKeyDown={onKeyDown}
         className="absolute min-w-[200px] border border-line bg-popover py-1 shadow-card"
       >
         {items.map((it, i) =>
           'type' in it && it.type === 'separator' ? (
-            <div key={i} className="my-1 h-px bg-line" />
+            <div key={i} role="separator" className="my-1 h-px bg-line" />
           ) : (
             <button
               key={i}
+              role="menuitem"
               onClick={() => {
                 (it as Extract<MenuItem, { onClick: () => void }>).onClick();
                 onClose();
               }}
-              className={`flex w-full items-center gap-3 px-3 py-2 text-left text-sm transition-colors hover:bg-elevated ${
+              className={`flex w-full items-center gap-3 px-3 py-2 text-left text-sm transition-colors hover:bg-elevated focus-visible:bg-elevated focus-visible:outline-none ${
                 (it as { danger?: boolean }).danger
                   ? 'text-destructive hover:text-destructive'
                   : 'text-ink'

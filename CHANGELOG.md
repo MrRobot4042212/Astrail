@@ -27,6 +27,9 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
   lectura (lows con pocos frames, GPU busy, primeras lecturas de una GPU AMD,
   temperatura de CPU, primer tick de CPU). Antes cada cambio recolocaba las filas
   y redimensionaba el HUD.
+- **La biblioteca se puede usar con el teclado.** Tab recorre las carátulas (una
+  parada por juego, con un marco visible), Intro abre el juego y la tecla Menú o
+  Mayús+F10 abre sus acciones; al volver del detalle, el foco vuelve a la carátula.
 - **Los diálogos se comportan como diálogos.** El foco entra al abrirlos, Tab ya
   no se escapa a la ventana de detrás, Esc cierra solo el diálogo de arriba (antes
   podía cerrar la página de detrás y dejar el diálogo flotando) y el foco vuelve a

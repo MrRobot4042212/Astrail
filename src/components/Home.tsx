@@ -331,13 +331,24 @@ function PosterRow({
         const secs = playtimes[g.id]?.seconds ?? 0;
         return (
           <div key={g.id} className="w-[150px] shrink-0">
+            {/* A keyboard stop like the library's cards (D1): Enter opens it. */}
             <div
               onClick={() => onOpen(g)}
-              className="group relative aspect-[2/3] cursor-pointer overflow-hidden border border-line bg-elevated shadow-card transition hover:border-accent/40 hover:shadow-glow"
+              onKeyDown={(e) => {
+                if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
+                  e.preventDefault();
+                  onOpen(g);
+                }
+              }}
+              tabIndex={0}
+              aria-label={g.name}
+              data-game-id={g.id}
+              className="group relative aspect-[2/3] cursor-pointer overflow-hidden border border-line bg-elevated shadow-card transition hover:border-accent/40 hover:shadow-glow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
             >
               <Thumb game={g} className="h-full w-full" big />
-              <div className="pointer-events-none absolute inset-0 flex items-end bg-gradient-to-t from-void via-void/30 to-transparent opacity-0 transition-opacity group-hover:opacity-100">
+              <div className="pointer-events-none absolute inset-0 flex items-end bg-gradient-to-t from-void via-void/30 to-transparent opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
                 <button
+                  tabIndex={-1}
                   onClick={(e) => {
                     e.stopPropagation();
                     onLaunch(g);
