@@ -6,6 +6,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useDialog } from '@/hooks/useDialog';
 import type { Game } from '@/lib/types';
 import { spotlightPick, spotlightResults } from '@/lib/spotlight';
 import { coverSrc } from '@/lib/cover';
@@ -35,6 +36,9 @@ export function Spotlight({
   const [debounced, setDebounced] = useState('');
   const [idx, setIdx] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  // A modal palette. The input keeps its own Escape (it consumes the key); the
+  // stack closes the palette when focus is on a result.
+  const dialog = useDialog({ onClose });
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -80,6 +84,8 @@ export function Spotlight({
     >
       <div
         className="h-fit w-full max-w-xl overflow-hidden border border-line bg-popover shadow-card"
+        {...dialog}
+        aria-label={t('spotlight.placeholder')}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-3 border-b border-line px-4">
@@ -93,6 +99,7 @@ export function Spotlight({
             }}
             onKeyDown={onKeyDown}
             placeholder={t('spotlight.placeholder')}
+            aria-label={t('spotlight.placeholder')}
             className="w-full bg-transparent py-4 text-base text-ink outline-none placeholder:text-muted/60"
           />
         </div>

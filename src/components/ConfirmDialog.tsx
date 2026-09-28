@@ -4,9 +4,10 @@
 
 'use client';
 
+import { useId } from 'react';
 import { useTranslation } from 'react-i18next';
 import { CloseIcon } from './icons';
-import { useEscape } from '@/hooks/useEscape';
+import { useDialog } from '@/hooks/useDialog';
 
 /** A themed confirmation modal for destructive actions (hide / remove / delete).
  *  Enter confirms, Esc cancels. */
@@ -26,9 +27,11 @@ export function ConfirmDialog({
   onClose: () => void;
 }) {
   const { t } = useTranslation();
-  // Enter is not handled here: the confirm button has focus, so the browser
-  // clicks it. A second handler used to run `onConfirm` twice.
-  useEscape(onClose);
+  // Enter is not handled here: the focused button gets the browser's click. A
+  // second handler used to run `onConfirm` twice. A destructive action starts on
+  // Cancel, so a stray Enter never removes anything.
+  const titleId = useId();
+  const dialog = useDialog({ onClose, labelledBy: titleId });
 
   return (
     <div
@@ -37,11 +40,13 @@ export function ConfirmDialog({
     >
       <div
         className="w-full max-w-sm border border-line bg-surface p-6 shadow-card"
+        {...dialog}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-3 flex items-start justify-between gap-3">
-          <h2 className="font-display text-lg font-semibold text-ink">{title}</h2>
+          <h2 id={titleId} className="font-display text-lg font-semibold text-ink">{title}</h2>
           <button
+            aria-label={t('common.close')}
             onClick={onClose}
             className="grid h-8 w-8 shrink-0 place-items-center text-muted hover:bg-elevated hover:text-ink"
           >
@@ -53,13 +58,14 @@ export function ConfirmDialog({
 
         <div className="flex justify-end gap-2">
           <button
+            autoFocus={danger}
             onClick={onClose}
             className="px-4 py-2 text-sm text-muted hover:text-ink"
           >
             {t('common.cancel')}
           </button>
           <button
-            autoFocus
+            autoFocus={!danger}
             onClick={() => {
               onConfirm();
               onClose();

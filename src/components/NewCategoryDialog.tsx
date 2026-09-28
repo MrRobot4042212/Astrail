@@ -4,8 +4,9 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useId } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useDialog } from '@/hooks/useDialog';
 import { addCategory } from '@/lib/tauri';
 import { CATEGORY_ICONS, CATEGORY_ICON_KEYS } from '@/lib/categoryIcons';
 import { CloseIcon, TagIcon } from './icons';
@@ -24,6 +25,8 @@ export function NewCategoryDialog({
   onCreated: (name: string) => void;
 }) {
   const { t } = useTranslation();
+  const titleId = useId();
+  const dialog = useDialog({ onClose, labelledBy: titleId });
   const [name, setName] = useState('');
   const [icon, setIcon] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -56,11 +59,13 @@ export function NewCategoryDialog({
     >
       <div
         className="w-full max-w-sm border border-line bg-surface p-6 shadow-card"
+        {...dialog}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-5 flex items-center justify-between">
-          <h2 className="font-display text-lg font-semibold text-ink">{t('sidebar.newCategory')}</h2>
+          <h2 id={titleId} className="font-display text-lg font-semibold text-ink">{t('sidebar.newCategory')}</h2>
           <button
+            aria-label={t('common.close')}
             onClick={onClose}
             className="grid h-8 w-8 shrink-0 place-items-center text-muted hover:bg-elevated hover:text-ink"
           >

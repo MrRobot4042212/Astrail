@@ -4,8 +4,9 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useId } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useDialog } from '@/hooks/useDialog';
 import { open } from '@tauri-apps/plugin-dialog';
 import { addManualApp } from '@/lib/tauri';
 import type { Game } from '@/lib/types';
@@ -25,6 +26,8 @@ export function AddAppDialog({
   onAdded: (g: Game) => void;
 }) {
   const { t } = useTranslation();
+  const titleId = useId();
+  const dialog = useDialog({ onClose, labelledBy: titleId });
   const [name, setName] = useState('');
   const [exe, setExe] = useState('');
   const [cover, setCover] = useState('');
@@ -69,13 +72,15 @@ export function AddAppDialog({
     >
       <div
         className="w-full max-w-md rounded-xl2 border border-line bg-surface p-6 shadow-card"
+        {...dialog}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-5 flex items-center justify-between">
-          <h2 className="font-display text-lg font-semibold text-ink">
+          <h2 id={titleId} className="font-display text-lg font-semibold text-ink">
             {t('dialog.addTitle')}
           </h2>
           <button
+            aria-label={t('common.close')}
             onClick={onClose}
             className="grid h-8 w-8 place-items-center rounded-lg text-muted hover:bg-elevated hover:text-ink"
           >

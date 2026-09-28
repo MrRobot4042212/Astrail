@@ -27,9 +27,15 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
   lectura (lows con pocos frames, GPU busy, primeras lecturas de una GPU AMD,
   temperatura de CPU, primer tick de CPU). Antes cada cambio recolocaba las filas
   y redimensionaba el HUD.
+- **Los diálogos se comportan como diálogos.** El foco entra al abrirlos, Tab ya
+  no se escapa a la ventana de detrás, Esc cierra solo el diálogo de arriba (antes
+  podía cerrar la página de detrás y dejar el diálogo flotando) y el foco vuelve a
+  donde estaba. Los lectores de pantalla anuncian cada diálogo por su título.
 - **El rojo de la marca tiene contraste suficiente.** Los botones principales y
   los textos en rojo cumplen el contraste mínimo de accesibilidad (WCAG AA): el
   rojo de los botones es algo más oscuro y el de los textos algo más claro.
+- Confirmar una acción destructiva empieza con el foco en «Cancelar», así que un
+  Intro accidental no borra nada.
 - **Al terminar una partida, el HUD libera la GPU.** Su dispositivo gráfico y la
   biblioteca de NVIDIA se quedaban cargados hasta cerrar Astrail; ahora se
   liberan un minuto después de dejar de jugar o de apagar el overlay.

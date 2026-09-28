@@ -4,8 +4,9 @@
 
 'use client';
 
-import { useRef, useState } from 'react';
+import { useRef, useState, useId } from 'react';
 import { useTranslation, Trans } from 'react-i18next';
+import { useDialog } from '@/hooks/useDialog';
 import { setCover, setCoverImage } from '@/lib/tauri';
 import { coverSrc } from '@/lib/cover';
 import type { Game } from '@/lib/types';
@@ -26,6 +27,8 @@ export function CoverDialog({
 }) {
   // Prefill only manual (remote) overrides; a local cached path isn't editable text.
   const { t } = useTranslation();
+  const titleId = useId();
+  const dialog = useDialog({ onClose, labelledBy: titleId });
   const isRemote = /^https?:\/\//i.test(game.cover_url ?? '');
   const [url, setUrl] = useState(isRemote ? (game.cover_url as string) : '');
   const [busy, setBusy] = useState(false);
@@ -78,13 +81,15 @@ export function CoverDialog({
     >
       <div
         className="w-full max-w-md border border-line bg-surface p-6 shadow-card"
+        {...dialog}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-5 flex items-center justify-between">
-          <h2 className="line-clamp-1 font-display text-lg font-semibold text-ink">
+          <h2 id={titleId} className="line-clamp-1 font-display text-lg font-semibold text-ink">
             {t('dialog.coverTitle', { name: game.name })}
           </h2>
           <button
+            aria-label={t('common.close')}
             onClick={onClose}
             className="grid h-8 w-8 shrink-0 place-items-center text-muted hover:bg-elevated hover:text-ink"
           >

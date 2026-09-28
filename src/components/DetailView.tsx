@@ -7,6 +7,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { onEvent } from '@/lib/events';
+import { useEscape } from '@/hooks/useEscape';
 import type { Game, PlayStat, Session } from '@/lib/types';
 import {
   getPlaytime,
@@ -128,6 +129,8 @@ export function DetailView({
   const [size, setSize] = useState<number | null | undefined>(undefined);
   const [shots, setShots] = useState<string[]>([]);
   const [shot, setShot] = useState<string | null>(null);
+  // Escape closes the enlarged screenshot, not the detail page under it.
+  useEscape(() => setShot(null), shot !== null);
   const [activeTab, setActiveTab] = useState<'galeria' | 'grial' | 'local'>('galeria');
 
   // Applications aren't games: skip the screenshots + tabs section.
@@ -489,7 +492,10 @@ export function DetailView({
           className="fixed inset-0 z-50 grid place-items-center bg-void/90 p-8"
           onClick={() => setShot(null)}
         >
-          <button className="absolute right-6 top-6 text-muted hover:text-ink">
+          <button
+            aria-label={t('common.close')}
+            className="absolute right-6 top-6 text-muted hover:text-ink"
+          >
             <CloseIcon className="h-6 w-6" />
           </button>
           {/* eslint-disable-next-line @next/next/no-img-element */}

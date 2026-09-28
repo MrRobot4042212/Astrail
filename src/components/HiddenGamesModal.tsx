@@ -4,8 +4,9 @@
 
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useId } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useDialog } from '@/hooks/useDialog';
 import { getHiddenLibrary, unhideGame } from '@/lib/tauri';
 import type { Game } from '@/lib/types';
 import { CloseIcon, EyeOffIcon } from './icons';
@@ -18,6 +19,8 @@ export function HiddenGamesModal({
   onChanged: () => void;
 }) {
   const { t } = useTranslation();
+  const titleId = useId();
+  const dialog = useDialog({ onClose, labelledBy: titleId });
   const [games, setGames] = useState<Game[]>([]);
   const [busy, setBusy] = useState(false);
 
@@ -47,14 +50,16 @@ export function HiddenGamesModal({
     >
       <div
         className="flex w-full max-w-md max-h-[80vh] flex-col rounded-xl2 border border-line bg-surface p-6 shadow-card"
+        {...dialog}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-5 flex shrink-0 items-center justify-between">
           <div className="flex items-center gap-2 text-ink">
             <EyeOffIcon className="h-5 w-5" />
-            <h2 className="font-display text-lg font-semibold">{t('sidebar.hiddenItems')}</h2>
+            <h2 id={titleId} className="font-display text-lg font-semibold">{t('sidebar.hiddenItems')}</h2>
           </div>
           <button
+            aria-label={t('common.close')}
             onClick={onClose}
             className="grid h-8 w-8 place-items-center rounded-lg text-muted hover:bg-elevated hover:text-ink"
           >

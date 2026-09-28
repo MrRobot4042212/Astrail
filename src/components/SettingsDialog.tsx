@@ -7,7 +7,7 @@
 // The settings drawer: tab rail, slide-in and close. State and actions live in
 // `useSettingsModel`, each tab in `./settings/`.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSettingsModel } from '@/hooks/useSettingsModel';
 import { CloseIcon, InfoIcon, GearIcon, FireIcon, BookIcon } from './icons';
@@ -15,7 +15,7 @@ import { AboutTab } from './AboutTab';
 import { AppTab } from './settings/AppTab';
 import { MetricsTab } from './settings/MetricsTab';
 import { SystemTab } from './settings/SystemTab';
-import { useEscape } from '@/hooks/useEscape';
+import { useDialog } from '@/hooks/useDialog';
 
 type Tab = 'system' | 'app' | 'metrics' | 'about';
 
@@ -48,8 +48,9 @@ export function SettingsDialog({
     setShown(true);
   }, []);
 
-  // Esc closes the drawer, unless a layer opened over it takes the key.
-  useEscape(onClose);
+  // A modal drawer: Esc closes it unless a layer opened over it takes the key.
+  const titleId = useId();
+  const dialog = useDialog({ onClose, labelledBy: titleId });
 
   return (
     <div
@@ -58,6 +59,7 @@ export function SettingsDialog({
     >
       {/* Drawer: slides in from the left, spans 80% of the viewport width. */}
       <div
+        {...dialog}
         onClick={(e) => e.stopPropagation()}
         className={`absolute inset-y-0 left-0 flex h-full w-[80vw] max-w-[1280px] border-r border-line bg-surface shadow-card transition-transform duration-300 ease-out ${
           shown ? 'translate-x-0' : '-translate-x-full'
@@ -66,7 +68,7 @@ export function SettingsDialog({
         {/* Vertical tab rail. */}
         <nav className="flex w-64 shrink-0 flex-col border-r border-line bg-sidebar">
           <div className="flex items-center gap-2 px-5 py-5">
-            <h2 className="font-display text-lg font-semibold text-ink">{t('settings.title')}</h2>
+            <h2 id={titleId} className="font-display text-lg font-semibold text-ink">{t('settings.title')}</h2>
           </div>
           <div className="flex flex-1 flex-col gap-0.5 px-3">
             {TABS.map((tabDef) => {
@@ -76,6 +78,7 @@ export function SettingsDialog({
                 <button
                   key={tabDef.id}
                   onClick={() => setTab(tabDef.id)}
+                  aria-current={active ? 'page' : undefined}
                   className={`flex items-center gap-3 border-l-2 px-3 py-2.5 text-left text-sm transition ${
                     active
                       ? 'border-accent bg-elevated font-medium text-ink'
