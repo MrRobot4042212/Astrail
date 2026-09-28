@@ -40,8 +40,11 @@ export function TopBar({
 }) {
   const { t } = useTranslation();
   return (
-    <div className="relative flex h-16 shrink-0 items-center justify-center border-b border-line px-6">
-      {/* Search box centered */}
+    <div className="flex h-16 shrink-0 items-center gap-4 border-b border-line px-6">
+      {/* Search box, centered in the room the controls leave. The controls used to
+          float over a bar-centered search and covered 339 px of it at the default
+          1280 px window in the library view (2026-09-27 audit, D11). */}
+      <div className="flex min-w-0 flex-1 justify-center">
       <div data-tour="search" className="relative w-full max-w-xl transition-all duration-300">
         <SearchIcon className="absolute left-3.5 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-muted" />
         <input
@@ -54,9 +57,10 @@ export function TopBar({
         {/* Decorative subtle border glow when focused */}
         <div className="pointer-events-none absolute inset-0 -z-10 rounded-xl bg-accent/5 opacity-0 transition-opacity peer-focus:opacity-100" />
       </div>
+      </div>
 
       {/* Right side controls (Notifications and settings/actions) */}
-      <div className="absolute right-6 flex items-center gap-2">
+      <div className="flex shrink-0 items-center gap-2">
         <button
           onClick={onStartTour}
           title={t('topbar.tour')}

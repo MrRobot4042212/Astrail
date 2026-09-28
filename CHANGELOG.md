@@ -37,6 +37,9 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
 - **El rojo de la marca tiene contraste suficiente.** Los botones principales y
   los textos en rojo cumplen el contraste mínimo de accesibilidad (WCAG AA): el
   rojo de los botones es algo más oscuro y el de los textos algo más claro.
+- Los botones de la barra superior ya no tapan el buscador en ventanas de 1280 px
+  o menos, y la barra de atajos del pie ya no se desplaza de lado: muestra los que
+  caben, «Esc» entre los primeros.
 - Confirmar una acción destructiva empieza con el foco en «Cancelar», así que un
   Intro accidental no borra nada.
 - **Al terminar una partida, el HUD libera la GPU.** Su dispositivo gráfico y la

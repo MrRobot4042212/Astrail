@@ -57,13 +57,19 @@ export function Footer() {
   }, []);
 
   return (
-    <footer data-tour="footer" className="flex shrink-0 items-center gap-5 overflow-x-auto border-t border-line bg-sidebar px-4 py-2 text-[11px] text-muted">
+    // One row, most useful first: hints that do not fit wrap onto a second row
+    // that the fixed height hides, instead of a horizontal scrollbar that hid the
+    // last ones (1236 px of hints in 1072 px at the default window, D25).
+    <footer
+      data-tour="footer"
+      className="flex h-9 shrink-0 flex-wrap content-start items-center gap-x-5 gap-y-3 overflow-hidden border-t border-line bg-sidebar px-4 py-2 text-[11px] text-muted"
+    >
       <Shortcut keys={formatShortcut(spotlightShortcut, t('common.keySpace'))} label={t('footer.spotlight')} />
       <Shortcut keys={[t('footer.rightClick')]} label={t('footer.actions')} />
+      <Shortcut keys={['Esc']} label={t('footer.closeBack')} />
       <Shortcut keys={['Ctrl', t('footer.click')]} label={t('footer.selectMultiple')} />
       <Shortcut keys={[t('footer.drag')]} label={t('footer.categorizeReorder')} />
       <Shortcut keys={['↑', '↓', '↵']} label={t('footer.navigateSearch')} />
-      <Shortcut keys={['Esc']} label={t('footer.closeBack')} />
     </footer>
   );
 }
