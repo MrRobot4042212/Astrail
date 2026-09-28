@@ -20,9 +20,10 @@
   --sidebar: 176 176 176;
   --border: 80 80 80;
   --muted-foreground: 74 74 74;
-  --primary: 44, 49, 58;
+  --primary: 44 49 58;
   --primary-foreground: 255 255 255;
   --primary-soft: 211 47 47;
+  --primary-text: 183 28 28;
   --ring: 183 28 28;
   --popover: 176 176 176;
   --info: 70 130 180;
@@ -40,9 +41,15 @@
   --sidebar: 20 20 20;
   --border: 74 74 74;
   --muted-foreground: 160 160 160;
-  --primary: 223 79 79;
+  /* No single red passes WCAG AA both as a fill under white text and as text on
+     these dark surfaces (2026-09-27 audit, D4), so the two are separate tokens:
+     `--primary` fills and borders (white on it 4.67:1; hover `--primary-soft` is
+     darker, 5.69:1), `--primary-text` is the red of text and icons (4.70:1 on
+     elevated, more on every darker surface; `text-accent` reads it). */
+  --primary: 209 63 63;
   --primary-foreground: 255 255 255;
-  --primary-soft: 235 100 100;
+  --primary-soft: 187 54 54;
+  --primary-text: 244 120 120;
   --ring: 223 79 79;
   --popover: 42 42 42;
   --info: 100 181 246;

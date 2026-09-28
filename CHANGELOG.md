@@ -27,6 +27,9 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
   lectura (lows con pocos frames, GPU busy, primeras lecturas de una GPU AMD,
   temperatura de CPU, primer tick de CPU). Antes cada cambio recolocaba las filas
   y redimensionaba el HUD.
+- **El rojo de la marca tiene contraste suficiente.** Los botones principales y
+  los textos en rojo cumplen el contraste mínimo de accesibilidad (WCAG AA): el
+  rojo de los botones es algo más oscuro y el de los textos algo más claro.
 - **Al terminar una partida, el HUD libera la GPU.** Su dispositivo gráfico y la
   biblioteca de NVIDIA se quedaban cargados hasta cerrar Astrail; ahora se
   liberan un minuto después de dejar de jugar o de apagar el overlay.

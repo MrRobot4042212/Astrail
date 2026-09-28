@@ -44,6 +44,14 @@ const config: Config = {
           soft: v('primary-soft'),
         },
       },
+      // Text and icons in the brand red use `--primary-text`, lighter than the
+      // `--primary` fills carry white text on: no single red passes WCAG AA for
+      // both on these dark surfaces (see globals.css). Only the text utilities
+      // change, so `bg-accent` / `border-accent` keep the fill red.
+      textColor: {
+        accent: { DEFAULT: v('primary-text') },
+        primary: { DEFAULT: v('primary-text') },
+      },
       fontFamily: {
         display: ['var(--font-oxanium)', 'system-ui', 'sans-serif'],
         sans: ['var(--font-oxanium)', 'system-ui', 'sans-serif'],
