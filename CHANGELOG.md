@@ -42,6 +42,8 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
   o categorizar varios juegos a la vez podía guardar solo algunos aunque la
   biblioteca mostrara todos cambiados; al reiniciar, el resto había vuelto atrás.
   Lo mismo al añadir una aplicación manual mientras se descargaban carátulas.
+- **Spotlight lanza el juego que has escrito.** Escribir un nombre y pulsar Intro
+  enseguida podía lanzar el primer favorito o el juego de una búsqueda anterior.
 - **Un nombre con ciertos caracteres (Ω, K, İ…) ya no cierra Astrail** al buscar
   su carátula; como la búsqueda se repite en cada arranque, se cerraba siempre.
 - **Abrir Astrail mientras ya se ejecuta como administrador avisa** de que está

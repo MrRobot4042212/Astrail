@@ -7,12 +7,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Game } from '@/lib/types';
-import { fuzzyScore } from '@/lib/fuzzy';
+import { spotlightPick, spotlightResults } from '@/lib/spotlight';
 import { coverSrc } from '@/lib/cover';
 import { SOURCE_META } from '@/lib/sources';
 import { SearchIcon, PlayIcon } from './icons';
-
-const MAX_RESULTS = 8;
 
 function thumbOf(game: Game): string | null {
   if (game.cover_url) return coverSrc(game.cover_url) ?? null;
@@ -47,24 +45,7 @@ export function Spotlight({
     return () => clearTimeout(t);
   }, [query]);
 
-  const results = useMemo(() => {
-    const q = debounced.trim();
-    if (!q) {
-      // No query: surface favorites first, then alphabetical, as a starting set.
-      return [...games]
-        .sort(
-          (a, b) =>
-            Number(!!b.favorite) - Number(!!a.favorite) || a.name.localeCompare(b.name),
-        )
-        .slice(0, MAX_RESULTS);
-    }
-    return games
-      .map((g) => ({ g, s: fuzzyScore(q, g.name) }))
-      .filter((x): x is { g: Game; s: number } => x.s !== null)
-      .sort((a, b) => b.s - a.s)
-      .slice(0, MAX_RESULTS)
-      .map((x) => x.g);
-  }, [games, debounced]);
+  const results = useMemo(() => spotlightResults(games, debounced), [games, debounced]);
 
   // Keep the selection index within the current result set.
   useEffect(() => {
@@ -83,7 +64,8 @@ export function Spotlight({
       setIdx((i) => Math.max(i - 1, 0));
     } else if (e.key === 'Enter') {
       e.preventDefault();
-      const game = results[idx];
+      // The list may still show the query of 100 ms ago (see `spotlightPick`).
+      const game = spotlightPick(games, results, debounced, query, idx);
       if (game) {
         onLaunch(game);
         onClose();
