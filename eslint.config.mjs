@@ -15,6 +15,35 @@ import reactHooks from 'eslint-plugin-react-hooks';
 import nextPlugin from '@next/eslint-plugin-next';
 import globals from 'globals';
 
+// House rules no published plugin covers.
+const astrail = {
+  rules: {
+    // A link inside the app navigates the launcher's own webview away from it:
+    // the webview is the app. External pages open through `openExternal`, which
+    // validates the URL in Rust. The rule for that existed only in review, and a
+    // credit link in the sidebar slipped past it (2026-09-27 audit, X-G3).
+    'no-anchor': {
+      meta: {
+        type: 'problem',
+        messages: {
+          anchor:
+            'No <a> in the app: open external pages with openExternal from src/lib/tauri.ts (a link navigates the webview itself).',
+        },
+        schema: [],
+      },
+      create(context) {
+        return {
+          JSXOpeningElement(node) {
+            if (node.name.type === 'JSXIdentifier' && node.name.name === 'a') {
+              context.report({ node, messageId: 'anchor' });
+            }
+          },
+        };
+      },
+    },
+  },
+};
+
 export default tseslint.config(
   {
     ignores: [
@@ -37,10 +66,13 @@ export default tseslint.config(
     plugins: {
       'react-hooks': reactHooks,
       '@next/next': nextPlugin,
+      astrail,
     },
     rules: {
       ...reactHooks.configs.recommended.rules,
       ...nextPlugin.configs.recommended.rules,
+
+      'astrail/no-anchor': 'error',
 
       // A missing dependency is how a memoized callback goes stale, and a
       // changing one is how memoization stops working. Both are bugs here.

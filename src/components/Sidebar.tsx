@@ -7,6 +7,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Category } from '@/lib/types';
+import { openExternal } from '@/lib/tauri';
 import { SOURCE_META, SOURCE_ORDER } from '@/lib/sources';
 import { CATEGORY_ICONS } from '@/lib/categoryIcons';
 import {
@@ -18,6 +19,8 @@ import {
 import type { Filter } from '@/lib/libraryView';
 
 type NavItem = { id: Filter; label: string; Icon: typeof GridIcon };
+
+const AUTHOR_URL = 'https://github.com/MrRobot4042212';
 
 export function Sidebar({
   filter,
@@ -278,9 +281,16 @@ export function Sidebar({
           <span>{t('sidebar.settings')}</span>
         </button>
         <span className="text-xs text-muted border-t border-line pt-2 mt-2 text-center">
-          {t('sidebar.madeBy')} <a href="https://github.com/MrRobot4042212" className="text-underline hover:text-accent">
+          {t('sidebar.madeBy')}{' '}
+          {/* Through the validated `open_external`, never a bare link: an `<a href>`
+              navigated the launcher's own webview to the page (X-G3). */}
+          <button
+            type="button"
+            onClick={() => void openExternal(AUTHOR_URL)}
+            className="underline hover:text-accent"
+          >
             Dalfon_dev
-          </a>
+          </button>
         </span>
       </div>
     </aside>

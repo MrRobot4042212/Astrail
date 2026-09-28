@@ -44,6 +44,9 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
   Lo mismo al añadir una aplicación manual mientras se descargaban carátulas.
 - **Spotlight lanza el juego que has escrito.** Escribir un nombre y pulsar Intro
   enseguida podía lanzar el primer favorito o el juego de una búsqueda anterior.
+- **El enlace del autor en la barra lateral se abre en el navegador.** Antes
+  sustituía la ventana de Astrail por la página, sin forma de volver salvo
+  reiniciando.
 - **Un nombre con ciertos caracteres (Ω, K, İ…) ya no cierra Astrail** al buscar
   su carátula; como la búsqueda se repite en cada arranque, se cerraba siempre.
 - **Abrir Astrail mientras ya se ejecuta como administrador avisa** de que está
