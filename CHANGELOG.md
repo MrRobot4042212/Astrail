@@ -36,6 +36,9 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
   Lo mismo al añadir una aplicación manual mientras se descargaban carátulas.
 - **Un nombre con ciertos caracteres (Ω, K, İ…) ya no cierra Astrail** al buscar
   su carátula; como la búsqueda se repite en cada arranque, se cerraba siempre.
+- **Abrir Astrail mientras ya se ejecuta como administrador avisa** de que está
+  en la bandeja, en lugar de arrancar una segunda copia (dos HUD, dos iconos en la
+  bandeja y cada partida registrada dos veces).
 - Un archivo de datos que no se puede leer (por ejemplo, guardado en UTF-16) ya
   no se sustituye por uno vacío al cambiar algo en la biblioteca.
 - **Cerrar o actualizar Astrail con el HUD activo ya no deja nada a medias.**

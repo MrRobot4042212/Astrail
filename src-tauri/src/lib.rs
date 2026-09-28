@@ -123,10 +123,19 @@ pub fn run() {
 
     #[cfg(windows)]
     elevation::await_previous_instance();
-    START_HIDDEN.store(
-        autostart::started_minimized(std::env::args()),
-        std::sync::atomic::Ordering::Relaxed,
-    );
+    let started_minimized = autostart::started_minimized(std::env::args());
+    // The single-instance plugin below misses an elevated instance (see
+    // `elevated_instance_running`): leave it alone and say where it is. A logon
+    // start stays silent, like the plugin's hand-off does.
+    #[cfg(windows)]
+    if elevation::elevated_instance_running(&context.config().identifier) {
+        log::info!("an elevated Astrail is already running: this launch exits and leaves it alone");
+        if !started_minimized {
+            elevation::show_elevated_instance_notice(tray::system_is_spanish());
+        }
+        return;
+    }
+    START_HIDDEN.store(started_minimized, std::sync::atomic::Ordering::Relaxed);
 
     tauri::Builder::default()
         // First, so a second launch exits before it registers a tray icon or global

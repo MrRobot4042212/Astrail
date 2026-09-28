@@ -120,6 +120,80 @@ fn await_exit_pid<I: IntoIterator<Item = String>>(args: I) -> Option<u32> {
         .filter(|pid| *pid != 0)
 }
 
+/// Name of the single-instance plugin's mutex (tauri-plugin-single-instance 2.x,
+/// `platform_impl/windows.rs`, built without its `semver` feature).
+fn instance_mutex_name(identifier: &str) -> String {
+    format!("{identifier}-sim")
+}
+
+/// Whether another Astrail is running **elevated** while this launch is not.
+///
+/// The single-instance plugin creates its mutex with default security and takes
+/// only `ERROR_ALREADY_EXISTS` as "already running". An elevated process's objects
+/// are closed to a medium-integrity one, so a normal launch next to an elevated
+/// Astrail got `ERROR_ACCESS_DENIED` instead and started as a full second
+/// instance: two trays, two HUDs, two PresentMon sessions under one name stopping
+/// each other, every session recorded twice (2026-09-27 audit, X-I2). Any other
+/// outcome (no instance, or one this process can open) is the plugin's to handle.
+pub fn elevated_instance_running(identifier: &str) -> bool {
+    use windows::core::HSTRING;
+    use windows::Win32::Foundation::ERROR_ACCESS_DENIED;
+    use windows::Win32::System::Threading::{OpenMutexW, SYNCHRONIZATION_SYNCHRONIZE};
+
+    let name = HSTRING::from(instance_mutex_name(identifier));
+    // SAFETY: OpenMutexW has no preconditions; a returned handle is closed once.
+    match unsafe { OpenMutexW(SYNCHRONIZATION_SYNCHRONIZE, false, &name) } {
+        Ok(handle) => {
+            // SAFETY: `handle` was just returned by OpenMutexW and is not used again.
+            let _ = unsafe { CloseHandle(handle) };
+            false
+        }
+        Err(e) => e.code() == ERROR_ACCESS_DENIED.to_hresult(),
+    }
+}
+
+/// `(title, text)` of the notice a launch shows when an elevated Astrail already
+/// runs. It cannot hand over to that instance the way the plugin does: Windows
+/// blocks messages from a medium-integrity process to an elevated one, and opening
+/// that door would expose the plugin's message handler, which reads the payload
+/// without bounds, to every unelevated process.
+fn elevated_instance_notice(spanish: bool) -> (&'static str, &'static str) {
+    if spanish {
+        (
+            "Astrail",
+            "Astrail ya se está ejecutando como administrador.\n\n\
+             Ábrelo desde su icono en la bandeja del sistema, o ciérralo desde ahí \
+             antes de abrirlo de nuevo sin permisos de administrador.",
+        )
+    } else {
+        (
+            "Astrail",
+            "Astrail is already running as administrator.\n\n\
+             Open it from its icon in the system tray, or quit it from there before \
+             opening it again without administrator rights.",
+        )
+    }
+}
+
+/// Tell the user an elevated Astrail is already running (see
+/// `elevated_instance_running`). Blocks until the notice is dismissed.
+pub fn show_elevated_instance_notice(spanish: bool) {
+    use windows::core::HSTRING;
+    use windows::Win32::UI::WindowsAndMessaging::{
+        MessageBoxW, MB_ICONINFORMATION, MB_OK, MB_SETFOREGROUND,
+    };
+    let (title, text) = elevated_instance_notice(spanish);
+    // SAFETY: both strings outlive the call; no owner window.
+    unsafe {
+        MessageBoxW(
+            None,
+            &HSTRING::from(text),
+            &HSTRING::from(title),
+            MB_OK | MB_ICONINFORMATION | MB_SETFOREGROUND,
+        );
+    }
+}
+
 /// Called first thing in `run()`: if this process is the elevated copy started by
 /// `relaunch_elevated`, block until the old instance has exited, so the
 /// single-instance guard does not see it and forward to a process about to quit.
@@ -187,6 +261,38 @@ mod tests {
 
     fn args(v: &[&str]) -> Vec<String> {
         v.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn the_instance_check_opens_the_plugins_own_mutex() {
+        // The plugin names it `<identifier>-sim` (single-instance 2.4.4, no
+        // `semver` feature). A different name would find nothing and let a second
+        // instance start next to an elevated one again (X-I2).
+        assert_eq!(instance_mutex_name("com.alfonso.meteor"), "com.alfonso.meteor-sim");
+        // Nothing holds this name: not "an elevated instance is running".
+        assert!(!elevated_instance_running("astrail-test-no-such-instance"));
+    }
+
+    #[test]
+    fn a_mutex_this_process_can_open_is_left_to_the_plugin() {
+        use windows::core::HSTRING;
+        use windows::Win32::System::Threading::CreateMutexW;
+        let id = format!("astrail-test-{}", std::process::id());
+        let name = HSTRING::from(instance_mutex_name(&id));
+        // SAFETY: default security, not initially owned; closed below.
+        let mutex = unsafe { CreateMutexW(None, false, &name) }.expect("test mutex");
+        assert!(!elevated_instance_running(&id));
+        // SAFETY: created above, not used again.
+        let _ = unsafe { CloseHandle(mutex) };
+    }
+
+    #[test]
+    fn the_elevated_instance_notice_says_where_to_find_it() {
+        for spanish in [true, false] {
+            let (title, text) = elevated_instance_notice(spanish);
+            assert_eq!(title, "Astrail");
+            assert!(text.contains(if spanish { "bandeja" } else { "tray" }), "{text}");
+        }
     }
 
     #[test]

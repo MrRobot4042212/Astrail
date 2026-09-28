@@ -51,7 +51,7 @@ fn resolve(setting: &str, system_is_spanish: bool) -> Lang {
 }
 
 /// Whether the Windows display language is Spanish (any region).
-fn system_is_spanish() -> bool {
+pub(crate) fn system_is_spanish() -> bool {
     #[cfg(windows)]
     {
         use windows::Win32::Globalization::GetUserDefaultUILanguage;
