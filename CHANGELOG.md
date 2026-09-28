@@ -10,6 +10,12 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
 
 ## [No publicado] — Trabajo en curso
 
+## [1.2.0] — 2026-09-29
+
+### Añadido
+- **Frecuencia de actualización del HUD** (0,5 s / 1 s / 2 s) en Ajustes →
+  Métricas, para GPU, CPU y memoria; los FPS siguen el ritmo de PresentMon.
+
 ### Corregido
 - **«Iniciar con Windows» avisa cuando Windows lo bloquea.** Si el ejecutable
   está marcado «Ejecutar como administrador» (Propiedades → Compatibilidad),
@@ -74,10 +80,6 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
   Astrail salga; antes podían quedar la sesión ETW de PresentMon abierta o el
   driver de sensores cargado hasta reiniciar. El sidecar tampoco queda
   registrado como «terminado por su cuenta».
-
-### Añadido
-- **Frecuencia de actualización del HUD** (0,5 s / 1 s / 2 s) en Ajustes →
-  Métricas, para GPU, CPU y memoria; los FPS siguen el ritmo de PresentMon.
 
 ## [1.1.0] — 2026-09-25
 
