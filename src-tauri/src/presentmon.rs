@@ -212,15 +212,57 @@ fn spawn(bin: &Path, pid: u32) -> std::io::Result<Child> {
         crate::sidecar_log::forward("PresentMon", err, Some(&NOT_ELEVATED_NOTICE));
     }
     if let Some(out) = child.stdout.take() {
-        std::thread::spawn(move || parse_stdout(out, pid));
+        #[cfg(windows)]
+        let pending = {
+            use std::os::windows::io::AsRawHandle;
+            let raw = out.as_raw_handle() as isize;
+            move || pipe_has_data(raw)
+        };
+        #[cfg(not(windows))]
+        let pending = || false;
+        std::thread::spawn(move || parse_stdout(out, pid, pending));
     }
     Ok(child)
 }
 
+/// Whether the pipe still holds unread bytes. False on any error: a closed pipe
+/// ends the reader on its next `read_line` anyway.
+#[cfg(windows)]
+fn pipe_has_data(raw: isize) -> bool {
+    use windows::Win32::Foundation::HANDLE;
+    use windows::Win32::System::Pipes::PeekNamedPipe;
+    let mut available: u32 = 0;
+    // SAFETY: `raw` is the child's stdout handle, owned by the `ChildStdout` the
+    // reader thread reads from; the closure that calls this lives on that thread
+    // and dies with it, so the handle is open for every call.
+    let peeked = unsafe {
+        PeekNamedPipe(
+            HANDLE(raw as *mut core::ffi::c_void),
+            None,
+            0,
+            None,
+            Some(&mut available),
+            None,
+        )
+    };
+    peeked.is_ok() && available > 0
+}
+
+/// Whether the reader has just drained a burst: frames were parsed since the last
+/// signal, nothing is buffered, and the pipe is empty. That is the moment the FPS
+/// numbers are settled until the next ETW flush (see `metrics::frames_arrived`).
+/// `pending` is a syscall, so it is only asked once the buffer has run dry.
+fn burst_ended(dirty: bool, buffered: bool, pending: impl FnOnce() -> bool) -> bool {
+    dirty && !buffered && !pending()
+}
+
 /// Frames kept per swapchain: roughly the last second of presents.
 const WINDOW_MS: f32 = 1000.0;
-/// A swapchain that has not presented for this long no longer competes for "busiest".
-const CHAIN_TTL_MS: u64 = 1000;
+/// A swapchain that has not presented for this long (arrival time) no longer
+/// competes for "busiest". Rows arrive in ETW flushes about one second apart, with
+/// gaps up to 1.1 s measured, so one second was short enough to evict the only
+/// chain on every late flush and rebuild its window from scratch.
+const CHAIN_TTL_MS: u64 = 2000;
 /// Upper bound on tracked swapchains, so a process that churns swapchains cannot
 /// grow the table without limit.
 const MAX_CHAINS: usize = 8;
@@ -232,7 +274,7 @@ const HISTORY_CAP: usize = 8192;
 /// to follow what the game is doing now.
 const HISTORY_WINDOW_MS: f64 = 30_000.0;
 /// A frame longer than this is the game not presenting (loading screen, alt-tab,
-/// pause), not a slow frame. Same threshold as `CHAIN_TTL_MS`. It still counts for
+/// pause), not a slow frame (game time, unlike `CHAIN_TTL_MS`). It still counts for
 /// the FPS window, but it stays out of the lows and the graph, where a single one
 /// would otherwise own the 0.1 % low for the next 30 s.
 const GAP_MS: f32 = 1000.0;
@@ -644,9 +686,11 @@ fn parse_address(field: &str) -> u64 {
 
 /// Read PresentMon's CSV stream and publish the busiest swapchain's FPS/frametime.
 /// `pid` is the process this PresentMon follows; it tags what goes to `sessionperf`.
-fn parse_stdout(out: impl std::io::Read, pid: u32) {
+fn parse_stdout(out: impl std::io::Read, pid: u32, pending: impl Fn() -> bool) {
     let mut reader = BufReader::new(out);
     let mut parser = FrameParser::new();
+    // Frames parsed since the sampler was last told.
+    let mut dirty = false;
 
     // One reused buffer instead of `lines()`, which hands back an owned `String` per
     // line: this reads one line per presented frame, so at the 200-800 fps this path
@@ -695,6 +739,13 @@ fn parse_stdout(out: impl std::io::Read, pid: u32) {
                 graph_version = parser.graph_version();
                 *GRAPH.lock().unwrap_or_else(PoisonError::into_inner) = parser.graph();
             }
+            dirty = true;
+        }
+        // The pipe is drained: this ETW flush is fully parsed, redraw on it. One
+        // `PeekNamedPipe` per burst when the buffer runs dry, none per row.
+        if burst_ended(dirty, !reader.buffer().is_empty(), &pending) {
+            dirty = false;
+            crate::metrics::frames_arrived();
         }
     }
     // Stream ended (game closed / PresentMon stopped): the last half second still
@@ -1089,13 +1140,31 @@ mod tests {
         for i in 0..144u64 {
             p.feed(&row("0x1", 1000.0 / 144.0), 1 + i * 7);
         }
-        // Slow chain keeps going past the busy chain's TTL.
+        // Slow chain keeps going. Inside the busy chain's TTL the busy one is still
+        // reported (a late ETW flush must not hand the HUD to a slower chain)…
         let mut last = None;
-        for i in 0..20u64 {
+        for i in 0..15u64 {
             last = p.feed(&row("0x2", 100.0), 1_100 + i * 100);
         }
         let (fps, _) = last.expect("value");
-        assert!((fps - 10.0).abs() < 0.5, "fps {fps}");
+        assert!((fps - 144.0).abs() < 1.0, "fps {fps} within the TTL");
+        // …and past it the slow chain is the only one left.
+        for i in 15..40u64 {
+            last = p.feed(&row("0x2", 100.0), 1_100 + i * 100);
+        }
+        let (fps, _) = last.expect("value");
+        assert!((fps - 10.0).abs() < 0.5, "fps {fps} past the TTL");
+    }
+
+    #[test]
+    fn the_sampler_is_told_once_per_drained_burst() {
+        // Regression: the sampler's own timer beat against PresentMon's 1 s flushes.
+        assert!(burst_ended(true, false, || false));
+        assert!(!burst_ended(false, false, || false), "nothing parsed since the last signal");
+        assert!(!burst_ended(true, true, || false), "lines still buffered");
+        assert!(!burst_ended(true, false, || true), "bytes still in the pipe");
+        // The pipe is only peeked once the buffer has run dry (one syscall per burst).
+        assert!(!burst_ended(true, true, || panic!("peeked with lines still buffered")));
     }
 
     #[test]

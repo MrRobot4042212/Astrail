@@ -503,11 +503,16 @@ enum DrawItem {
 }
 
 /// Render the HUD. Returns false on a hard failure so the facade can fall back to GDI.
-pub fn render(cfg: &OverlaySettings, m: &MetricsSample, monitor: MonitorGeometry) -> bool {
+pub fn render(
+    cfg: &OverlaySettings,
+    m: &MetricsSample,
+    monitor: MonitorGeometry,
+    sources: crate::overlay::RowSources,
+) -> bool {
     STATE.with(|s| {
         let mut guard = s.borrow_mut();
         let Some(d) = guard.as_mut() else { return false };
-        match unsafe { render_inner(d, cfg, m, monitor) } {
+        match unsafe { render_inner(d, cfg, m, monitor, sources) } {
             Ok(()) => true,
             Err(e) => {
                 log::error!("HUD render failed; the HUD stays off for this session: {e}");
@@ -522,9 +527,10 @@ unsafe fn render_inner(
     cfg: &OverlaySettings,
     m: &MetricsSample,
     monitor: MonitorGeometry,
+    sources: crate::overlay::RowSources,
 ) -> Result<()> {
     let scale = monitor.scale;
-    let (title_str, rows) = crate::overlay::build_rows(cfg, m);
+    let (title_str, rows) = crate::overlay::build_rows(cfg, m, sources);
     if rows.is_empty() {
         hide();
         return Ok(());

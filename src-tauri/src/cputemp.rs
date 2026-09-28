@@ -329,9 +329,12 @@ pub fn shutdown() {
 /// Start the controller thread. Idle until the overlay wants a sidecar reading and
 /// a game is running; restarts the sidecar when the wanted mode changes and tears
 /// it down (unloading its driver) when nothing is wanted.
-pub fn start(app: AppHandle) {
-    std::thread::spawn(move || {
-        // Neither elevation nor the driver install is re-read while we run.
+/// Whether the sidecar may read the CPU temperature: elevated, with the PawnIO
+/// driver installed. Neither changes while the process runs, so it is read once
+/// (and the HUD reserves the row only when this holds).
+pub fn cpu_temp_readable() -> bool {
+    static READABLE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *READABLE.get_or_init(|| {
         #[cfg(windows)]
         let elevated = crate::elevation::is_elevated();
         #[cfg(not(windows))]
@@ -340,7 +343,13 @@ pub fn start(app: AppHandle) {
         if elevated && !pawnio {
             log::info!("CPU temperature unavailable: PawnIO driver not installed");
         }
-        let cpu_temp_readable = elevated && pawnio;
+        elevated && pawnio
+    })
+}
+
+pub fn start(app: AppHandle) {
+    std::thread::spawn(move || {
+        let cpu_temp_readable = cpu_temp_readable();
 
         let mut bin_missing_logged = false;
         let mut seen: u64 = 0;

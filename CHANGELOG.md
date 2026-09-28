@@ -11,6 +11,19 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
 ## [No publicado] — Trabajo en curso
 
 ### Corregido
+- **El HUD sigue el ritmo real de los FPS.** PresentMon entrega los frames en
+  tandas de un segundo; el HUD se redibuja al llegar cada tanda en lugar de con
+  su propio temporizador, así que el valor de FPS ya no se repite un tick y se
+  salta el siguiente. Un retraso puntual de esa entrega tampoco borra las filas
+  de FPS durante un tick.
+- **Las filas del HUD ya no aparecen y desaparecen.** Cada métrica activada cuya
+  fuente existe en el equipo conserva su sitio y muestra «—» mientras no hay
+  lectura (lows con pocos frames, GPU busy, primeras lecturas de una GPU AMD,
+  temperatura de CPU, primer tick de CPU). Antes cada cambio recolocaba las filas
+  y redimensionaba el HUD.
+- **Al terminar una partida, el HUD libera la GPU.** Su dispositivo gráfico y la
+  biblioteca de NVIDIA se quedaban cargados hasta cerrar Astrail; ahora se
+  liberan un minuto después de dejar de jugar o de apagar el overlay.
 - **Cerrar o actualizar Astrail con el HUD activo ya no deja nada a medias.**
   PresentMon y el sidecar de temperaturas terminan de pararse antes de que
   Astrail salga; antes podían quedar la sesión ETW de PresentMon abierta o el

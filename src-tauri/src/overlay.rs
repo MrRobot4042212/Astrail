@@ -39,6 +39,28 @@ pub(crate) struct HudRow {
     pub rgb: (u8, u8, u8),
 }
 
+/// Shown in place of a value that a present source has not delivered yet.
+pub(crate) const PLACEHOLDER: &str = "—";
+
+/// Which HUD sources exist this session, decided by the sampler from what the
+/// machine has (not from the last reading). A row whose source exists keeps its
+/// place with [`PLACEHOLDER`] while a reading is missing; a row without one is
+/// left out. Before this every row came and went with its data: the lows needed
+/// 100 / 1000 frames, GPU busy a full window, the AMD sidecar its first line,
+/// the CPU meter a priming tick, and each change resized the swapchain
+/// (`ResizeBuffers` + `SetWindowPos`) and shifted every row below.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct RowSources {
+    /// PresentMon can run (elevated or Performance Log Users): FPS, lows,
+    /// frametime and GPU busy. Off, FPS may still come from the AMD sidecar in
+    /// exclusive fullscreen, so the FPS row stays dynamic then.
+    pub presentmon: bool,
+    /// A GPU backend was found (NVML or the AMD sidecar): GPU %, GPU °C, VRAM.
+    pub gpu: bool,
+    /// The sidecar may read the CPU temperature (elevated + PawnIO).
+    pub cpu_temp: bool,
+}
+
 /// Parse a CSS hex color ("#rrggbb") to (r, g, b). Bad input → white.
 ///
 /// Operates on bytes, never on `&str` slices: the value comes from the settings
@@ -77,62 +99,57 @@ pub(crate) fn gpu_bound(busy_pct: f32) -> bool {
 
 /// Build the HUD title + visible rows from the config + sample (single source of
 /// truth shared by both backends, so the metric list never drifts).
-pub(crate) fn build_rows(cfg: &OverlaySettings, m: &MetricsSample) -> (Option<String>, Vec<HudRow>) {
+pub(crate) fn build_rows(
+    cfg: &OverlaySettings,
+    m: &MetricsSample,
+    sources: RowSources,
+) -> (Option<String>, Vec<HudRow>) {
     let accent = parse_rgb(&cfg.accent_color);
     let value = parse_rgb(&cfg.value_color);
+    let label = parse_rgb(&cfg.label_color);
     let mut rows: Vec<HudRow> = Vec::new();
     let gb = |mb: u64| format!("{:.1}", mb as f64 / 1024.0);
+    // A row is pushed with its value; without one it keeps its place (in the
+    // label colour, so a placeholder never reads as a number) only when its
+    // source is known to exist this session.
+    let mut push = |show: bool, reserved: bool, name: &'static str, row: Option<(String, (u8, u8, u8))>| {
+        if !show {
+            return;
+        }
+        match row {
+            Some((v, rgb)) => rows.push(HudRow { label: name, value: v, rgb }),
+            None if reserved => rows.push(HudRow { label: name, value: PLACEHOLDER.into(), rgb: label }),
+            None => {}
+        }
+    };
 
-    if cfg.show_fps {
-        if let Some(f) = m.fps {
-            rows.push(HudRow { label: "FPS", value: format!("{:.0}", f), rgb: accent });
-        }
-    }
-    if cfg.show_lows {
-        // Each appears on its own once the history can back it (100 / 1000 frames).
-        if let Some(f) = m.fps_low_1 {
-            rows.push(HudRow { label: "1% low", value: format!("{:.0}", f), rgb: value });
-        }
-        if let Some(f) = m.fps_low_01 {
-            rows.push(HudRow { label: "0.1% low", value: format!("{:.0}", f), rgb: value });
-        }
-    }
-    if cfg.show_frametime {
-        if let Some(ft) = m.frametime_ms {
-            rows.push(HudRow { label: "Frame", value: format!("{:.1} ms", ft), rgb: value });
-        }
-    }
-    if cfg.show_gpu_busy {
-        if let Some(p) = m.gpu_busy_pct {
-            let rgb = if gpu_bound(p) { accent } else { value };
-            rows.push(HudRow { label: "GPU busy", value: format!("{:.0}%", p), rgb });
-        }
-    }
-    if cfg.show_gpu {
-        if let Some(u) = m.gpu_usage {
-            rows.push(HudRow { label: "GPU", value: format!("{}%", u), rgb: accent });
-        }
-    }
-    if cfg.show_gpu_temp {
-        if let Some(t) = m.gpu_temp_c {
-            rows.push(HudRow { label: "GPU °C", value: format!("{}°", t), rgb: temp_rgb(t) });
-        }
-    }
-    if cfg.show_vram {
-        if let (Some(u), Some(t)) = (m.vram_used_mb, m.vram_total_mb) {
-            rows.push(HudRow { label: "VRAM", value: format!("{}/{} GB", gb(u), gb(t)), rgb: value });
-        }
-    }
-    if cfg.show_cpu {
-        if let Some(c) = m.cpu_usage {
-            rows.push(HudRow { label: "CPU", value: format!("{:.0}%", c), rgb: accent });
-        }
-    }
-    if cfg.show_cpu_temp {
-        if let Some(t) = m.cpu_temp_c {
-            rows.push(HudRow { label: "CPU °C", value: format!("{}°", t), rgb: temp_rgb(t) });
-        }
-    }
+    push(cfg.show_fps, sources.presentmon, "FPS", m.fps.map(|f| (format!("{:.0}", f), accent)));
+    // PresentMon only; each is backed once the history has 100 / 1000 frames.
+    push(cfg.show_lows, sources.presentmon, "1% low", m.fps_low_1.map(|f| (format!("{:.0}", f), value)));
+    push(cfg.show_lows, sources.presentmon, "0.1% low", m.fps_low_01.map(|f| (format!("{:.0}", f), value)));
+    push(
+        cfg.show_frametime,
+        sources.presentmon,
+        "Frame",
+        m.frametime_ms.map(|ft| (format!("{:.1} ms", ft), value)),
+    );
+    push(
+        cfg.show_gpu_busy,
+        sources.presentmon,
+        "GPU busy",
+        m.gpu_busy_pct.map(|p| (format!("{:.0}%", p), if gpu_bound(p) { accent } else { value })),
+    );
+    push(cfg.show_gpu, sources.gpu, "GPU", m.gpu_usage.map(|u| (format!("{u}%"), accent)));
+    push(cfg.show_gpu_temp, sources.gpu, "GPU °C", m.gpu_temp_c.map(|t| (format!("{t}°"), temp_rgb(t))));
+    push(
+        cfg.show_vram,
+        sources.gpu,
+        "VRAM",
+        m.vram_used_mb.zip(m.vram_total_mb).map(|(u, t)| (format!("{}/{} GB", gb(u), gb(t)), value)),
+    );
+    // The meter always exists; only its priming tick has no reading (MT6).
+    push(cfg.show_cpu, true, "CPU", m.cpu_usage.map(|c| (format!("{:.0}%", c), accent)));
+    push(cfg.show_cpu_temp, sources.cpu_temp, "CPU °C", m.cpu_temp_c.map(|t| (format!("{t}°"), temp_rgb(t))));
     if cfg.show_ram {
         rows.push(HudRow {
             label: "RAM",
@@ -221,7 +238,7 @@ fn current() -> u8 {
 /// Draw + present the HUD via DirectComposition. If DComp can't init (or fails at
 /// runtime) the HUD is disabled for the session — no GDI fallback, so we never
 /// force composition on the game (see the BACKEND comment).
-pub fn render(cfg: &OverlaySettings, m: &MetricsSample, monitor: MonitorGeometry) {
+pub fn render(cfg: &OverlaySettings, m: &MetricsSample, monitor: MonitorGeometry, sources: RowSources) {
     let mut b = current();
     if b == 0 {
         b = if crate::overlay_dcomp::try_init() {
@@ -236,7 +253,7 @@ pub fn render(cfg: &OverlaySettings, m: &MetricsSample, monitor: MonitorGeometry
         };
         BACKEND.with(|c| c.set(b));
     }
-    if b == 1 && !crate::overlay_dcomp::render(cfg, m, monitor) {
+    if b == 1 && !crate::overlay_dcomp::render(cfg, m, monitor, sources) {
         // Runtime failure: disable the HUD for the rest of the session.
         crate::overlay_dcomp::hide();
         BACKEND.with(|c| c.set(3));
@@ -369,7 +386,7 @@ mod tests {
         let mut m = sample(None);
         m.frametime_ms = Some(7.0);
         let row = |cfg: &OverlaySettings, m: &MetricsSample| {
-            build_rows(cfg, m).1.into_iter().find(|r| r.label == "GPU busy")
+            build_rows(cfg, m, RowSources::default()).1.into_iter().find(|r| r.label == "GPU busy")
         };
         assert!(row(&on, &m).is_none(), "no reading, no row");
         m.gpu_busy_pct = Some(62.4);
@@ -379,29 +396,30 @@ mod tests {
         m.gpu_busy_pct = Some(97.2);
         let high = row(&on, &m).expect("row");
         assert_eq!((high.value.as_str(), high.rgb), ("97%", accent));
-        // Right after the frametime it explains.
-        let labels: Vec<_> = build_rows(&on, &m).1.iter().map(|r| r.label).collect();
-        assert_eq!(labels, ["Frame", "GPU busy", "RAM"]);
+        // Right after the frametime it explains (CPU keeps its slot: see
+        // `cpu_row_never_shows_a_made_up_number`).
+        let labels: Vec<_> = build_rows(&on, &m, RowSources::default()).1.iter().map(|r| r.label).collect();
+        assert_eq!(labels, ["Frame", "GPU busy", "CPU", "RAM"]);
     }
 
     #[test]
     fn low_rows_follow_the_data_and_the_switch() {
         let cfg = OverlaySettings::default();
         let labels = |cfg: &OverlaySettings, m: &MetricsSample| {
-            build_rows(cfg, m).1.iter().map(|r| r.label).collect::<Vec<_>>()
+            build_rows(cfg, m, RowSources::default()).1.iter().map(|r| r.label).collect::<Vec<_>>()
         };
         let mut m = sample(None);
         m.fps = Some(143.6);
-        assert_eq!(labels(&cfg, &m), ["FPS", "RAM"], "no lows without enough frames");
+        assert_eq!(labels(&cfg, &m), ["FPS", "CPU", "RAM"], "no lows without enough frames");
         m.fps_low_1 = Some(97.4);
-        assert_eq!(labels(&cfg, &m), ["FPS", "1% low", "RAM"]);
+        assert_eq!(labels(&cfg, &m), ["FPS", "1% low", "CPU", "RAM"]);
         m.fps_low_01 = Some(61.5);
-        let (_, rows) = build_rows(&cfg, &m);
+        let (_, rows) = build_rows(&cfg, &m, RowSources::default());
         assert_eq!(rows[1].value, "97");
         assert_eq!(rows[2].label, "0.1% low");
         assert_eq!(rows[2].value, "62");
         let off = OverlaySettings { show_lows: false, ..OverlaySettings::default() };
-        assert_eq!(labels(&off, &m), ["FPS", "RAM"]);
+        assert_eq!(labels(&off, &m), ["FPS", "CPU", "RAM"]);
     }
 
     #[test]
@@ -435,14 +453,65 @@ mod tests {
     }
 
     #[test]
-    fn cpu_row_is_hidden_until_there_is_a_real_reading() {
-        // Regression (MT6): the priming tick drew `CPU 0%`.
+    fn cpu_row_never_shows_a_made_up_number() {
+        // Regression (MT6): the priming tick drew `CPU 0%`. It now keeps its place
+        // with the placeholder, so the rows below do not shift on the second tick.
         let cfg = OverlaySettings { show_cpu: true, ..OverlaySettings::default() };
-        let (_, rows) = build_rows(&cfg, &sample(None));
-        assert!(rows.iter().all(|r| r.label != "CPU"));
-        let (_, rows) = build_rows(&cfg, &sample(Some(37.4)));
+        let (_, rows) = build_rows(&cfg, &sample(None), RowSources::default());
+        let cpu = rows.iter().find(|r| r.label == "CPU").expect("cpu row");
+        assert_eq!((cpu.value.as_str(), cpu.rgb), (PLACEHOLDER, parse_rgb(&cfg.label_color)));
+        let (_, rows) = build_rows(&cfg, &sample(Some(37.4)), RowSources::default());
         let cpu = rows.iter().find(|r| r.label == "CPU").expect("cpu row");
         assert_eq!(cpu.value, "37%");
+    }
+
+    #[test]
+    fn rows_with_a_known_source_keep_their_place_with_a_placeholder() {
+        // Regression: every row came and went with its reading (lows after 100 /
+        // 1000 frames, GPU busy after half a window, the AMD sidecar's first line,
+        // a loading screen expiring the FPS rows), and each change resized the HUD.
+        let cfg = OverlaySettings {
+            show_gpu_busy: true,
+            show_cpu_temp: true,
+            ..OverlaySettings::default()
+        };
+        let all = RowSources { presentmon: true, gpu: true, cpu_temp: true };
+        let labels = |m: &MetricsSample, s: RowSources| {
+            build_rows(&cfg, m, s).1.iter().map(|r| r.label).collect::<Vec<_>>()
+        };
+        let empty = sample(None);
+        // Nothing measured yet: the whole layout is already there.
+        assert_eq!(
+            labels(&empty, all),
+            ["FPS", "1% low", "0.1% low", "Frame", "GPU busy", "GPU", "GPU °C", "VRAM", "CPU", "CPU °C", "RAM"]
+        );
+        let (_, rows) = build_rows(&cfg, &empty, all);
+        assert!(rows.iter().filter(|r| r.label != "RAM").all(|r| r.value == PLACEHOLDER));
+        // Readings fill the same slots: same labels, same order.
+        let mut m = sample(Some(12.0));
+        m.fps = Some(143.6);
+        m.fps_low_1 = Some(97.4);
+        m.gpu_usage = Some(80);
+        m.cpu_temp_c = Some(61);
+        assert_eq!(labels(&m, all), labels(&empty, all));
+        let (_, rows) = build_rows(&cfg, &m, all);
+        assert_eq!(rows[0].value, "144");
+        assert_eq!(rows[1].value, "97");
+        assert_eq!(rows[2].value, PLACEHOLDER, "0.1 % low still unbacked");
+        // A source that does not exist on this machine leaves no placeholder.
+        let none = RowSources::default();
+        assert_eq!(labels(&empty, none), ["CPU", "RAM"]);
+        // Without a known source a row still shows when a reading is there (the
+        // sidecar's opportunistic FPS, a CPU temperature that arrived anyway) and
+        // goes when it is not (no lows without PresentMon).
+        m.fps_low_1 = None;
+        assert_eq!(
+            labels(&m, RowSources { gpu: true, ..none }),
+            ["FPS", "GPU", "GPU °C", "VRAM", "CPU", "CPU °C", "RAM"]
+        );
+        m.fps = None;
+        m.cpu_temp_c = None;
+        assert_eq!(labels(&m, RowSources { gpu: true, ..none }), ["GPU", "GPU °C", "VRAM", "CPU", "RAM"]);
     }
 
     #[test]

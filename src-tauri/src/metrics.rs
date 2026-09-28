@@ -94,6 +94,18 @@ static CFG_GEN: AtomicU64 = AtomicU64::new(0);
 /// running, and wake instantly when that changes — instead of ticking ~86 000
 /// times a day to discover there is nothing to draw.
 static WAKE_EVENT: AtomicIsize = AtomicIsize::new(0);
+/// Set by `wake()`: the sampler runs its body at once (config or game changed),
+/// whatever its timer deadline says.
+static TICK_FORCED: AtomicBool = AtomicBool::new(false);
+/// Set by the PresentMon reader once a burst of frames has been parsed. PresentMon's
+/// ETW session flushes about once a second and the whole second arrives at once
+/// (measured 2026-09-27: ~100 rows at t = 2.0, 3.0, 4.0 s, none between), so the
+/// HUD redraws when the numbers move instead of beating against them with a
+/// free-running timer of its own — which showed the same FPS for two ticks, then
+/// skipped one.
+static FRAMES_ARRIVED: AtomicBool = AtomicBool::new(false);
+/// Shortest gap between two redraws on a burst (see `TickClock::burst_gap`).
+const MIN_FRAME_REDRAW_MS: u64 = 250;
 
 /// Live overlay health, derived from the swapchain's real composition mode:
 /// 0 = unknown (no game / not yet measured), 1 = free (HUD on a hardware MPO plane →
@@ -214,6 +226,81 @@ pub fn wait_sidecar(seen: &mut u64, timeout: Option<Duration>) {
 
 /// Wake the sampler thread (config changed, game started/stopped…).
 pub fn wake() {
+    TICK_FORCED.store(true, Ordering::Relaxed);
+    signal_wake();
+}
+
+/// A burst of PresentMon frames was parsed: redraw on it (see `FRAMES_ARRIVED`).
+pub fn frames_arrived() {
+    FRAMES_ARRIVED.store(true, Ordering::Relaxed);
+    signal_wake();
+}
+
+/// When the sampler runs its body, on the `clock_ms` scale.
+///
+/// PresentMon's ETW session flushes about once a second and the whole second of
+/// frames arrives at once, so the HUD has to draw *on* those bursts. The first
+/// version (V2) let a burst run the body only if the last body of any kind was at
+/// least `MIN_FRAME_REDRAW_MS` ago. With flush gaps of 1.0–1.1 s against a 1 s timer,
+/// the timer body ran just before nearly every burst, the burst was then dropped,
+/// and the HUD kept showing FPS about 0.9 s old (2026-09-27 audit, X-K2).
+///
+/// The rules now:
+/// - a forced wake (config or game change) always runs;
+/// - while inactive nothing else does, so a stale deadline never runs the idle body;
+/// - a burst runs the body unless the last *burst* body is closer than
+///   `burst_gap`: a timer body never holds a burst back;
+/// - the timer is the fallback. After a burst body it waits one and a half
+///   intervals, past the next expected flush, so it cannot pre-empt it; otherwise
+///   one interval, which is also the cadence while no frames arrive.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct TickClock {
+    /// Next timer deadline (0 = due at once).
+    deadline_ms: u64,
+    /// When a burst last ran the body.
+    last_burst_ms: Option<u64>,
+}
+
+impl TickClock {
+    /// How long until the timer is due.
+    pub(crate) fn remaining_ms(&self, now_ms: u64) -> u64 {
+        self.deadline_ms.saturating_sub(now_ms)
+    }
+
+    /// Whether the body runs now. `frames`: a burst arrived since the last wake.
+    pub(crate) fn due(&self, forced: bool, frames: bool, active: bool, now_ms: u64, interval_ms: u64) -> bool {
+        forced
+            || (active
+                && (now_ms >= self.deadline_ms
+                    || (frames && self.burst_allowed(now_ms, interval_ms))))
+    }
+
+    /// The body ran at `now_ms`; `frames` as passed to `due`.
+    pub(crate) fn ran(&mut self, now_ms: u64, frames: bool, interval_ms: u64) {
+        if frames {
+            self.last_burst_ms = Some(now_ms);
+            self.deadline_ms = now_ms + interval_ms + interval_ms / 2;
+        } else {
+            self.deadline_ms = now_ms + interval_ms;
+        }
+    }
+
+    fn burst_allowed(&self, now_ms: u64, interval_ms: u64) -> bool {
+        self.last_burst_ms
+            .is_none_or(|at| now_ms.saturating_sub(at) >= Self::burst_gap(interval_ms))
+    }
+
+    /// Shortest gap between two burst bodies: a little under the interval, so a
+    /// flush that lands slightly early still draws at 1 s, the several signals one
+    /// flush can raise fold into one redraw, and at 2 s every other flush draws.
+    fn burst_gap(interval_ms: u64) -> u64 {
+        interval_ms
+            .saturating_sub(MIN_FRAME_REDRAW_MS)
+            .max(MIN_FRAME_REDRAW_MS)
+    }
+}
+
+fn signal_wake() {
     #[cfg(windows)]
     {
         let raw = WAKE_EVENT.load(Ordering::Relaxed);
@@ -449,9 +536,11 @@ pub fn is_fresh(stamp_ms: u64, now_ms: u64, max_age_ms: u64) -> bool {
     stamp_ms != 0 && now_ms.saturating_sub(stamp_ms) <= max_age_ms
 }
 
-/// Oldest FPS/frametime reading still shown: two sampler ticks, never under 2 s.
+/// Oldest FPS/frametime reading still shown: two sampler ticks, never under 3 s.
+/// The floor is three of PresentMon's ~1 s ETW flushes (gaps up to 1.1 s were
+/// measured): a 2 s floor hid every FPS row whenever one flush ran late.
 pub fn fps_max_age_ms() -> u64 {
-    (INTERVAL_MS.load(Ordering::Relaxed) * 2).max(2000)
+    (INTERVAL_MS.load(Ordering::Relaxed) * 2).max(3000)
 }
 
 const MB: u64 = 1024 * 1024;
@@ -460,6 +549,27 @@ const MB: u64 = 1024 * 1024;
 /// and the HUD's DirectComposition stack.
 #[cfg(windows)]
 const BACKEND_IDLE_SECS: u64 = 60;
+
+/// How long an inactive sampler may wait before its next body: until the held
+/// backends are due for release, or without a timeout when nothing is held.
+///
+/// The release used to be checked only inside a body, and once the game exited
+/// (or the overlay was switched off) the sampler waited without a timeout, so the
+/// 60 s never ran out: the D3D11/DComp stack, the HUD window and nvml.dll stayed
+/// loaded for the rest of the tray session (2026-09-27 audit, X-I3).
+#[cfg(windows)]
+fn idle_wait(held: bool, idle_for: Option<Duration>) -> Option<Duration> {
+    if !held {
+        return None;
+    }
+    Some(Duration::from_secs(BACKEND_IDLE_SECS).saturating_sub(idle_for.unwrap_or_default()))
+}
+
+/// Whether the held backends are due for release (see `idle_wait`).
+#[cfg(windows)]
+fn release_due(held: bool, idle_for: Option<Duration>) -> bool {
+    held && idle_for.is_some_and(|d| d >= Duration::from_secs(BACKEND_IDLE_SECS))
+}
 
 /// One initialization attempt per backend release cycle.
 ///
@@ -580,6 +690,20 @@ pub fn monitor_geometry(hwnd: isize) -> MonitorGeometry {
 /// the frametime row is left empty on this path. The lows and the graph need every
 /// frame, which this source never sees, so they go with it: PresentMon numbers from
 /// a targeted pid must not sit next to the FPS of "whatever is fullscreen".
+/// What this session can measure at all (see `overlay::RowSources`). PresentMon's
+/// rows are not reserved while the AMD sidecar owns the FPS: `apply_sidecar_fps`
+/// blanks frametime, the lows and GPU busy then, and reserving them from
+/// `can_trace()` alone left four "—" rows on screen for the whole session
+/// (2026-09-27 audit, X-K12; MT5 had hidden the derived frametime row on purpose).
+#[cfg(windows)]
+fn row_sources(can_trace: bool, sidecar_fps: bool, gpu: bool, cpu_temp: bool) -> overlay::RowSources {
+    overlay::RowSources {
+        presentmon: can_trace && !sidecar_fps,
+        gpu,
+        cpu_temp,
+    }
+}
+
 fn apply_sidecar_fps(sample: &mut MetricsSample, fps: f32) {
     sample.fps = Some(fps);
     sample.frametime_ms = None;
@@ -615,6 +739,9 @@ pub fn start(app: AppHandle) {
         let mut amd_init = InitOnce::default();
         #[cfg(windows)]
         let mut backends_idle_since: Option<Instant> = None;
+        // Whether a drawn tick has created backends that a release would free.
+        #[cfg(windows)]
+        let mut backends_held = false;
         // Global CPU%/RAM: direct Win32 (GetSystemTimes / GlobalMemoryStatusEx),
         // one syscall each and zero allocation.
         #[cfg(windows)]
@@ -660,20 +787,47 @@ pub fn start(app: AppHandle) {
         let mut fps_session_start: Option<Instant> = None;
         let mut sidecar_fps_at: Option<Instant> = None;
 
+        // When the body runs: on bursts of PresentMon frames, with the timer as the
+        // fallback (see `TickClock`).
+        let mut clock = TickClock::default();
+
         loop {
             // Idle (overlay off, no game, or the settings screen open) → wait with
             // no timeout; a config change or a game starting wakes us instantly.
+            // Held backends are the exception: wait until they are due for release.
             let active_now = OVERLAY_ENABLED.load(Ordering::Relaxed)
                 && HAS_GAME.load(Ordering::Relaxed)
                 && !SETTINGS_OPEN.load(Ordering::Relaxed);
+            let remaining_ms = clock.remaining_ms(clock_ms());
             #[cfg(windows)]
             wait_tick(if active_now {
-                INTERVAL_MS.load(Ordering::Relaxed) as u32
+                remaining_ms.min(u32::MAX as u64 - 1) as u32
             } else {
-                windows::Win32::System::Threading::INFINITE
+                match idle_wait(backends_held, backends_idle_since.map(|t| t.elapsed())) {
+                    Some(wait) => wait.as_millis().min(u32::MAX as u128 - 1) as u32,
+                    None => windows::Win32::System::Threading::INFINITE,
+                }
             });
             #[cfg(not(windows))]
-            std::thread::sleep(Duration::from_millis(INTERVAL_MS.load(Ordering::Relaxed)));
+            std::thread::sleep(Duration::from_millis(remaining_ms));
+
+            // A window message or a rate-limited burst is not a tick: wait on. While
+            // inactive only a forced wake counts (PresentMon may still stream with
+            // the settings screen open; every inactive → active transition wakes
+            // through `wake()`), so a stale deadline never runs the idle body.
+            let now_ms = clock_ms();
+            let forced = TICK_FORCED.swap(false, Ordering::Relaxed);
+            // The idle body is where held backends are released.
+            #[cfg(windows)]
+            let forced = forced
+                || (!active_now
+                    && release_due(backends_held, backends_idle_since.map(|t| t.elapsed())));
+            let frames = FRAMES_ARRIVED.swap(false, Ordering::Relaxed) && active_now;
+            let interval_ms = INTERVAL_MS.load(Ordering::Relaxed);
+            if !clock.due(forced, frames, active_now, now_ms, interval_ms) {
+                continue;
+            }
+            clock.ran(now_ms, frames, interval_ms);
 
             // Refresh the cached config only when something actually changed.
             let gen = CFG_GEN.load(Ordering::Relaxed);
@@ -754,15 +908,17 @@ pub fn start(app: AppHandle) {
                 // D3D11 device, swapchain, D2D context and HWND used to stay
                 // resident for the rest of the session once a game had run.
                 #[cfg(windows)]
-                {
-                    let idle_for = backends_idle_since.get_or_insert_with(Instant::now);
-                    if idle_for.elapsed() >= Duration::from_secs(BACKEND_IDLE_SECS) {
+                if backends_held {
+                    let idle_for = backends_idle_since.get_or_insert_with(Instant::now).elapsed();
+                    if release_due(backends_held, Some(idle_for)) {
                         nvml = None;
                         amd_keys = Vec::new();
                         nvml_init.reset();
                         amd_init.reset();
                         overlay::teardown();
+                        backends_held = false;
                         backends_idle_since = None; // released; nothing left to do
+                        log::info!("HUD and GPU telemetry released after {}s without a game in front", idle_for.as_secs());
                     }
                 }
                 // No game in the foreground → health is meaningless; clear it and reset
@@ -785,6 +941,7 @@ pub fn start(app: AppHandle) {
             #[cfg(windows)]
             {
                 backends_idle_since = None;
+                backends_held = true;
                 if amd_init.should_try() {
                     amd_keys = crate::system::amd_gpu_keys();
                 }
@@ -904,6 +1061,15 @@ pub fn start(app: AppHandle) {
                 session_age,
             );
             publish_fps_source(true, sidecar_fps);
+            // What this session can measure at all (see `row_sources`): a row with
+            // a source keeps its place while its reading is missing.
+            #[cfg(windows)]
+            let sources = row_sources(
+                crate::presentmon::can_trace(),
+                sidecar_fps,
+                !matches!(route, GpuRoute::None),
+                crate::cputemp::cpu_temp_readable(),
+            );
 
             // Session summary (`sessionperf`): the game is in front and being
             // measured, so its frames count from here on, and so do these readings.
@@ -950,7 +1116,7 @@ pub fn start(app: AppHandle) {
                             shown = false;
                         }
                     } else {
-                        overlay::render(cfg, &sample, monitor);
+                        overlay::render(cfg, &sample, monitor, sources);
                         shown = true;
 
                         // Classify free vs costing once the present window has settled
@@ -1086,13 +1252,183 @@ mod tests {
     }
 
     #[test]
-    fn fps_max_age_is_two_ticks_with_a_two_second_floor() {
+    fn fps_max_age_is_two_ticks_with_a_three_second_floor() {
         let prev = INTERVAL_MS.load(Ordering::Relaxed);
         INTERVAL_MS.store(250, Ordering::Relaxed);
-        assert_eq!(fps_max_age_ms(), 2_000);
+        assert_eq!(fps_max_age_ms(), 3_000);
+        INTERVAL_MS.store(1_000, Ordering::Relaxed);
+        assert_eq!(fps_max_age_ms(), 3_000, "three ETW flushes at the default interval");
         INTERVAL_MS.store(5_000, Ordering::Relaxed);
         assert_eq!(fps_max_age_ms(), 10_000);
         INTERVAL_MS.store(prev, Ordering::Relaxed);
+    }
+
+    #[test]
+    fn the_hud_redraws_on_a_burst_of_frames_and_otherwise_on_its_deadline() {
+        // Regression: the sampler ticked on its own 1 s timer while PresentMon
+        // delivered a second of frames at once, so the FPS row repeated a value for
+        // two ticks and then skipped one.
+        let mut clock = TickClock::default();
+        clock.ran(4_000, false, 1_000);
+        // A config/game change always runs, even right after the last body, and
+        // even while inactive.
+        assert!(clock.due(true, false, true, 4_010, 1_000));
+        assert!(clock.due(true, false, false, 4_010, 1_000));
+        // Nothing happened before the deadline: wait on.
+        assert!(!clock.due(false, false, true, 4_500, 1_000));
+        // The deadline itself, but never while inactive.
+        assert!(clock.due(false, false, true, 5_000, 1_000));
+        assert!(!clock.due(false, false, false, 5_000, 1_000));
+        // A burst runs the body at once, even right after a timer body (X-K2).
+        assert!(clock.due(false, true, true, 4_050, 1_000));
+        // Two bursts in quick succession fold into one redraw.
+        clock.ran(4_050, true, 1_000);
+        assert!(!clock.due(false, true, true, 4_300, 1_000));
+        assert!(clock.due(false, true, true, 4_800, 1_000));
+        // After a burst body the timer waits past the next expected flush.
+        assert_eq!(clock.remaining_ms(4_050), 1_500);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn an_idle_sampler_holding_backends_wakes_to_release_them() {
+        // Regression (X-I3): after the game exited the sampler waited without a
+        // timeout, so the 60 s release never came and the HUD's D3D11/DComp stack
+        // and nvml.dll stayed loaded while Astrail sat in the tray.
+        let secs = Duration::from_secs;
+        // Nothing held (never drew, or already released): wait for a real event.
+        assert_eq!(idle_wait(false, None), None);
+        assert_eq!(idle_wait(false, Some(secs(5))), None);
+        // Held since the game left the foreground: wake when the release is due.
+        assert_eq!(idle_wait(true, Some(Duration::ZERO)), Some(secs(BACKEND_IDLE_SECS)));
+        assert_eq!(idle_wait(true, Some(secs(45))), Some(secs(BACKEND_IDLE_SECS - 45)));
+        assert_eq!(idle_wait(true, Some(secs(90))), Some(Duration::ZERO));
+        // And that wake is a body that releases them.
+        assert!(!release_due(true, Some(secs(BACKEND_IDLE_SECS - 1))));
+        assert!(release_due(true, Some(secs(BACKEND_IDLE_SECS))));
+        assert!(!release_due(false, Some(secs(BACKEND_IDLE_SECS * 2))));
+        assert!(!release_due(true, None));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn presentmon_rows_are_not_reserved_while_the_sidecar_owns_the_fps() {
+        // Regression (X-K12): elevated (or Performance Log Users) AMD machine, game
+        // in exclusive fullscreen. The sidecar owns the FPS and blanks frametime,
+        // the lows and GPU busy, yet their rows were reserved from `can_trace()`
+        // alone and sat on "—" for the whole session.
+        let cfg = crate::models::OverlaySettings {
+            show_gpu_busy: true,
+            ..crate::models::OverlaySettings::default()
+        };
+        let mut m = empty_sample();
+        apply_sidecar_fps(&mut m, 144.0);
+        let (_, rows) = overlay::build_rows(&cfg, &m, row_sources(true, true, true, false));
+        let labels: Vec<&str> = rows.iter().map(|r| r.label).collect();
+        for gone in ["1% low", "0.1% low", "Frame", "GPU busy"] {
+            assert!(!labels.contains(&gone), "{labels:?}");
+        }
+        assert_eq!((rows[0].label, rows[0].value.as_str()), ("FPS", "144"));
+        // PresentMon's rows keep their place whenever it is the FPS source.
+        assert!(row_sources(true, false, true, false).presentmon);
+        assert!(!row_sources(false, false, true, false).presentmon);
+    }
+
+    /// Drive a `TickClock` the way the sampler loop does: wake at the earlier of the
+    /// timer deadline and the next PresentMon flush. Returns every body as
+    /// (time, drawn on a flush, age of the newest flush at that moment).
+    fn simulate_ticks(interval_ms: u64, flush_gaps: &[u64]) -> Vec<(u64, bool, Option<u64>)> {
+        let mut flushes = Vec::new();
+        let mut t = 1_000;
+        for gap in flush_gaps {
+            t += gap;
+            flushes.push(t);
+        }
+        let end = t + 3 * interval_ms;
+        let mut clock = TickClock::default();
+        let (mut now, mut next, mut newest) = (0, 0, None);
+        let mut bodies = Vec::new();
+        loop {
+            let timer_at = now + clock.remaining_ms(now);
+            let (at, frames) = match flushes.get(next) {
+                Some(&flush) if flush <= timer_at => (flush, true),
+                _ => (timer_at, false),
+            };
+            if at > end {
+                return bodies;
+            }
+            now = at;
+            if frames {
+                newest = Some(at);
+                next += 1;
+            }
+            if clock.due(false, frames, true, now, interval_ms) {
+                clock.ran(now, frames, interval_ms);
+                bodies.push((now, frames, newest.map(|f| now - f)));
+            }
+        }
+    }
+
+    /// Flush gaps as measured from PresentMon 2.4.1 on 2026-09-27: about a second,
+    /// sometimes a little early, up to 1096 ms late.
+    const MEASURED_FLUSH_GAPS: &[u64] = &[
+        1_000, 1_004, 1_096, 998, 1_050, 1_012, 1_088, 997, 1_040, 1_003, 1_096, 999, 1_020,
+        1_060, 1_000, 1_090, 1_005, 1_030, 1_070, 1_001,
+    ];
+
+    #[test]
+    fn at_one_second_every_flush_is_drawn_the_moment_it_lands() {
+        // Regression (X-K2): the V2 scheduler dropped almost every flush that landed
+        // just after a timer body, so the HUD drew FPS about 0.9 s old.
+        let bodies = simulate_ticks(1_000, MEASURED_FLUSH_GAPS);
+        let drawn = bodies.iter().filter(|b| b.1).count();
+        assert_eq!(drawn, MEASURED_FLUSH_GAPS.len(), "{bodies:?}");
+        // Once frames flow, no timer body redraws a stale second in between.
+        let first_flush = bodies.iter().position(|b| b.1).expect("a flush body");
+        let last_flush = bodies.iter().rposition(|b| b.1).expect("a flush body");
+        assert!(bodies[first_flush..=last_flush].iter().all(|b| b.1), "{bodies:?}");
+    }
+
+    #[test]
+    fn at_two_seconds_every_other_flush_is_drawn() {
+        let bodies = simulate_ticks(2_000, MEASURED_FLUSH_GAPS);
+        let flush_bodies: Vec<u64> = bodies.iter().filter(|b| b.1).map(|b| b.0).collect();
+        assert_eq!(flush_bodies.len(), MEASURED_FLUSH_GAPS.len() / 2, "{bodies:?}");
+        for pair in flush_bodies.windows(2) {
+            let gap = pair[1] - pair[0];
+            assert!((1_750..=2_300).contains(&gap), "{bodies:?}");
+        }
+        let first_flush = bodies.iter().position(|b| b.1).expect("a flush body");
+        let last_flush = bodies.iter().rposition(|b| b.1).expect("a flush body");
+        assert!(bodies[first_flush..=last_flush].iter().all(|b| b.1), "{bodies:?}");
+    }
+
+    #[test]
+    fn at_half_a_second_every_flush_is_drawn_and_the_timer_fills_in() {
+        let bodies = simulate_ticks(500, MEASURED_FLUSH_GAPS);
+        assert_eq!(bodies.iter().filter(|b| b.1).count(), MEASURED_FLUSH_GAPS.len());
+        // A timer body refreshes the other rows between flushes; it may land just
+        // before a flush, which still draws. The FPS on screen is never older than
+        // the one and a half intervals the timer waits after a flush.
+        let first_flush = bodies.iter().position(|b| b.1).expect("a flush body");
+        let last_flush = bodies.iter().rposition(|b| b.1).expect("a flush body");
+        let streaming = &bodies[first_flush..=last_flush];
+        for body in streaming {
+            assert!(body.2.is_some_and(|age| age <= 750), "{bodies:?}");
+        }
+        for pair in streaming.windows(2) {
+            assert!(pair[1].0 - pair[0].0 <= 800, "{bodies:?}");
+        }
+    }
+
+    #[test]
+    fn when_frames_stop_the_timer_takes_over_at_its_own_cadence() {
+        // A loading screen: no flush for five seconds, then frames again.
+        let bodies = simulate_ticks(1_000, &[1_000, 1_000, 5_000, 1_000, 1_000]);
+        for pair in bodies.windows(2) {
+            assert!(pair[1].0 - pair[0].0 <= 1_500, "{bodies:?}");
+        }
+        assert_eq!(bodies.iter().filter(|b| b.1).count(), 5, "{bodies:?}");
     }
 
     fn empty_sample() -> MetricsSample {

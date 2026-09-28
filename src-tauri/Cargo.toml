@@ -87,6 +87,9 @@ windows = { version = "0.61", features = [
     # a kernel object that outlives the process that created it, so terminating
     # PresentMon is not enough to release it — see presentmon.rs.
     "Win32_System_Diagnostics_Etw",
+    # PeekNamedPipe on PresentMon's stdout: the reader tells the sampler when a
+    # whole ETW flush has been parsed, so the HUD redraws on the data.
+    "Win32_System_Pipes",
     # Cheap global CPU%/RAM for the metrics sampler (GetSystemTimes /
     # GlobalMemoryStatusEx) plus the CPU/RAM description for the system panel.
     "Win32_System_SystemInformation",
