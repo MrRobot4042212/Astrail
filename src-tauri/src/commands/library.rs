@@ -356,7 +356,6 @@ pub(crate) async fn add_manual_app(
     }
 
     blocking(move || {
-        let mut manual = storage::load_manual(&app)?;
         let id = format!(
             "manual:{}",
             SystemTime::now()
@@ -384,8 +383,8 @@ pub(crate) async fn add_manual_app(
             categories: Vec::new(),
         };
 
-        manual.push(game.clone());
-        storage::save_manual(&app, &manual)?;
+        // The cover is downloaded above, outside the store's lock.
+        storage::update_manual(&app, |manual| manual.push(game.clone()))?;
         Ok(game)
     })
     .await
@@ -394,12 +393,7 @@ pub(crate) async fn add_manual_app(
 /// Remove a manually-added app. Store-managed entries are ignored.
 #[tauri::command(async)]
 pub(crate) fn remove_game(app: AppHandle, id: String) -> CmdResult<()> {
-    let mut manual = storage::load_manual(&app)?;
-    let before = manual.len();
-    manual.retain(|g| g.id != id);
-    if manual.len() != before {
-        storage::save_manual(&app, &manual)?;
-    }
+    storage::update_manual(&app, |manual| manual.retain(|g| g.id != id))?;
     Ok(())
 }
 

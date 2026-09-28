@@ -42,9 +42,10 @@ pub fn load_manual(app: &AppHandle) -> Result<Vec<Game>, String> {
     }
 }
 
-/// Persist the full list of manually-added apps.
-pub fn save_manual(app: &AppHandle, games: &[Game]) -> Result<(), String> {
-    jsonstore::save(app, STORE_FILE, &games)
+/// Change the list of manually-added apps as one step (see `jsonstore::update`).
+/// Do nothing slow inside `change`: other writers of the list wait for it.
+pub fn update_manual<R>(app: &AppHandle, change: impl FnOnce(&mut Vec<Game>) -> R) -> Result<R, String> {
+    jsonstore::update(app, STORE_FILE, change)
 }
 
 /// The Discord application client id for Rich Presence (empty = disabled).
@@ -108,16 +109,16 @@ pub fn load_cover_overrides(app: &AppHandle) -> HashMap<String, String> {
 
 /// Set (or, with an empty url, clear) the cover override for a game id.
 pub fn set_cover_override(app: &AppHandle, id: &str, url: Option<&str>) -> Result<(), String> {
-    let mut map = load_cover_overrides(app);
-    match url.map(str::trim).filter(|u| !u.is_empty()) {
-        Some(u) => {
-            map.insert(id.to_string(), u.to_string());
+    jsonstore::update(app, OVERRIDES_FILE, |map: &mut HashMap<String, String>| {
+        match url.map(str::trim).filter(|u| !u.is_empty()) {
+            Some(u) => {
+                map.insert(id.to_string(), u.to_string());
+            }
+            None => {
+                map.remove(id);
+            }
         }
-        None => {
-            map.remove(id);
-        }
-    }
-    jsonstore::save(app, OVERRIDES_FILE, &map)
+    })
 }
 
 /// Ids of games the user has hidden from the library (mostly false positives
@@ -128,15 +129,18 @@ pub fn load_hidden(app: &AppHandle) -> Vec<String> {
 
 /// Hide or unhide a game id.
 pub fn set_hidden(app: &AppHandle, id: &str, hidden: bool) -> Result<(), String> {
-    let mut ids = load_hidden(app);
-    if hidden {
+    jsonstore::update(app, HIDDEN_FILE, |ids: &mut Vec<String>| set_member(ids, id, hidden))
+}
+
+/// Add `id` to (or remove it from) a list store's content, keeping it unique.
+fn set_member(ids: &mut Vec<String>, id: &str, member: bool) {
+    if member {
         if !ids.iter().any(|x| x == id) {
             ids.push(id.to_string());
         }
     } else {
         ids.retain(|x| x != id);
     }
-    jsonstore::save(app, HIDDEN_FILE, &ids)
 }
 
 /// Unhide everything.
@@ -166,15 +170,7 @@ pub fn load_favorites(app: &AppHandle) -> Vec<String> {
 
 /// Mark or unmark a game id as favorite.
 pub fn set_favorite(app: &AppHandle, id: &str, favorite: bool) -> Result<(), String> {
-    let mut ids = load_favorites(app);
-    if favorite {
-        if !ids.iter().any(|x| x == id) {
-            ids.push(id.to_string());
-        }
-    } else {
-        ids.retain(|x| x != id);
-    }
-    jsonstore::save(app, FAVORITES_FILE, &ids)
+    jsonstore::update(app, FAVORITES_FILE, |ids: &mut Vec<String>| set_member(ids, id, favorite))
 }
 
 /// User overrides for an entry's kind (id → "app" | "game"), applied as an
@@ -186,8 +182,7 @@ pub fn load_type_overrides(app: &AppHandle) -> HashMap<String, String> {
 /// Set (or clear, with `None`/`""`) the kind override for a game id. Accepts only
 /// "app" or "game"; anything else clears the override (back to auto-detection).
 pub fn set_type_override(app: &AppHandle, id: &str, kind: Option<&str>) -> Result<(), String> {
-    let mut map = load_type_overrides(app);
-    match kind {
+    jsonstore::update(app, TYPE_OVERRIDES_FILE, |map: &mut HashMap<String, String>| match kind {
         Some("app") => {
             map.insert(id.to_string(), "app".to_string());
         }
@@ -197,8 +192,7 @@ pub fn set_type_override(app: &AppHandle, id: &str, kind: Option<&str>) -> Resul
         _ => {
             map.remove(id);
         }
-    }
-    jsonstore::save(app, TYPE_OVERRIDES_FILE, &map)
+    })
 }
 
 /// Global settings, falling back to defaults on a first run.
@@ -248,13 +242,13 @@ pub fn set_categories(app: &AppHandle, id: &str, categories: &[String]) -> Resul
             clean.push(name.to_string());
         }
     }
-    let mut map = load_categories(app);
-    if clean.is_empty() {
-        map.remove(id);
-    } else {
-        map.insert(id.to_string(), clean);
-    }
-    jsonstore::save(app, CATEGORIES_FILE, &map)
+    jsonstore::update(app, CATEGORIES_FILE, |map: &mut HashMap<String, Vec<String>>| {
+        if clean.is_empty() {
+            map.remove(id);
+        } else {
+            map.insert(id.to_string(), clean);
+        }
+    })
 }
 
 /// Explicitly-created category names. These persist even with zero games, so a
@@ -274,16 +268,16 @@ pub fn set_category_icon(app: &AppHandle, name: &str, icon: Option<&str>) -> Res
     if name.is_empty() {
         return Err("The name cannot be empty".into());
     }
-    let mut map = load_category_icons(app);
-    match icon.map(str::trim).filter(|i| !i.is_empty()) {
-        Some(i) => {
-            map.insert(name.to_string(), i.to_string());
+    jsonstore::update(app, CATEGORY_ICONS_FILE, |map: &mut HashMap<String, String>| {
+        match icon.map(str::trim).filter(|i| !i.is_empty()) {
+            Some(i) => {
+                map.insert(name.to_string(), i.to_string());
+            }
+            None => {
+                map.remove(name);
+            }
         }
-        None => {
-            map.remove(name);
-        }
-    }
-    jsonstore::save(app, CATEGORY_ICONS_FILE, &map)
+    })
 }
 
 /// Every explicitly-created category with its icon (zips names + icon map).
@@ -305,11 +299,11 @@ pub fn add_category_name(app: &AppHandle, name: &str, icon: Option<&str>) -> Res
     if name.is_empty() {
         return Err("The name cannot be empty".into());
     }
-    let mut names = load_category_names(app);
-    if !names.iter().any(|n| n.eq_ignore_ascii_case(name)) {
-        names.push(name.to_string());
-    }
-    jsonstore::save(app, CATEGORY_NAMES_FILE, &names)?;
+    jsonstore::update(app, CATEGORY_NAMES_FILE, |names: &mut Vec<String>| {
+        if !names.iter().any(|n| n.eq_ignore_ascii_case(name)) {
+            names.push(name.to_string());
+        }
+    })?;
     if icon.map(str::trim).is_some_and(|i| !i.is_empty()) {
         set_category_icon(app, name, icon)?;
     }
@@ -339,73 +333,74 @@ pub fn rename_category_name(app: &AppHandle, old: &str, new: &str) -> Result<(),
     }
 
     // 1. Names list — replace old with new in place, normalizing/merging.
-    let names = load_category_names(app);
-    let new_preexists = names
-        .iter()
-        .any(|n| n.eq_ignore_ascii_case(new) && !n.eq_ignore_ascii_case(old));
-    let mut out: Vec<String> = Vec::new();
-    let mut placed = false;
-    for n in names {
-        if n.eq_ignore_ascii_case(old) {
-            if !new_preexists && !placed {
-                out.push(new.to_string());
-                placed = true;
+    jsonstore::update(app, CATEGORY_NAMES_FILE, |names: &mut Vec<String>| {
+        let new_preexists = names
+            .iter()
+            .any(|n| n.eq_ignore_ascii_case(new) && !n.eq_ignore_ascii_case(old));
+        let mut out: Vec<String> = Vec::new();
+        let mut placed = false;
+        for n in names.drain(..) {
+            if n.eq_ignore_ascii_case(old) {
+                if !new_preexists && !placed {
+                    out.push(new.to_string());
+                    placed = true;
+                }
+                // merging into an existing target → drop the old entry
+            } else if n.eq_ignore_ascii_case(new) {
+                if !placed {
+                    out.push(new.to_string());
+                    placed = true;
+                }
+            } else {
+                out.push(n);
             }
-            // merging into an existing target → drop the old entry
-        } else if n.eq_ignore_ascii_case(new) {
-            if !placed {
-                out.push(new.to_string());
-                placed = true;
-            }
-        } else {
-            out.push(n);
         }
-    }
-    if !placed {
-        out.push(new.to_string()); // old was in-use only → make it explicit
-    }
-    jsonstore::save(app, CATEGORY_NAMES_FILE, &out)?;
+        if !placed {
+            out.push(new.to_string()); // old was in-use only → make it explicit
+        }
+        *names = out;
+    })?;
 
     // 2. Icon — carry old's icon over to new if new doesn't have one already.
-    let mut icons = load_category_icons(app);
-    if let Some(icon) = icons.remove(old) {
-        icons.entry(new.to_string()).or_insert(icon);
-    }
-    jsonstore::save(app, CATEGORY_ICONS_FILE, &icons)?;
+    jsonstore::update(app, CATEGORY_ICONS_FILE, |icons: &mut HashMap<String, String>| {
+        if let Some(icon) = icons.remove(old) {
+            icons.entry(new.to_string()).or_insert(icon);
+        }
+    })?;
 
     // 3. Every game's list — old → new, de-duplicated case-insensitively.
-    let mut map = load_categories(app);
-    for cats in map.values_mut() {
-        let mut nc: Vec<String> = Vec::new();
-        for c in cats.drain(..) {
-            let name = if c.eq_ignore_ascii_case(old) {
-                new.to_string()
-            } else {
-                c
-            };
-            if !nc.iter().any(|x| x.eq_ignore_ascii_case(&name)) {
-                nc.push(name);
+    jsonstore::update(app, CATEGORIES_FILE, |map: &mut HashMap<String, Vec<String>>| {
+        for cats in map.values_mut() {
+            let mut nc: Vec<String> = Vec::new();
+            for c in cats.drain(..) {
+                let name = if c.eq_ignore_ascii_case(old) {
+                    new.to_string()
+                } else {
+                    c
+                };
+                if !nc.iter().any(|x| x.eq_ignore_ascii_case(&name)) {
+                    nc.push(name);
+                }
             }
+            *cats = nc;
         }
-        *cats = nc;
-    }
-    jsonstore::save(app, CATEGORIES_FILE, &map)
+    })
 }
 
 /// Delete a category: remove the name, its icon, and strip it from every game.
 pub fn remove_category_name(app: &AppHandle, name: &str) -> Result<(), String> {
-    let mut names = load_category_names(app);
-    names.retain(|n| !n.eq_ignore_ascii_case(name));
-    jsonstore::save(app, CATEGORY_NAMES_FILE, &names)?;
+    jsonstore::update(app, CATEGORY_NAMES_FILE, |names: &mut Vec<String>| {
+        names.retain(|n| !n.eq_ignore_ascii_case(name));
+    })?;
 
     set_category_icon(app, name, None)?;
 
-    let mut map = load_categories(app);
-    for cats in map.values_mut() {
-        cats.retain(|c| !c.eq_ignore_ascii_case(name));
-    }
-    map.retain(|_, v| !v.is_empty());
-    jsonstore::save(app, CATEGORIES_FILE, &map)
+    jsonstore::update(app, CATEGORIES_FILE, |map: &mut HashMap<String, Vec<String>>| {
+        for cats in map.values_mut() {
+            cats.retain(|c| !c.eq_ignore_ascii_case(name));
+        }
+        map.retain(|_, v| !v.is_empty());
+    })
 }
 
 /// One-time rename of `user_covers/<DefaultHasher>.<ext>` to the FNV-1a key.

@@ -31,15 +31,20 @@
 //! migrations in order, and a *newer* version makes this build refuse every store
 //! write for the rest of the session, so it cannot overwrite data it does not
 //! understand.
+//!
+//! **Concurrency.** Commands run on several tokio workers at once, so two writes
+//! to one store can overlap. Every write to a store holds that store's lock, and a
+//! change that depends on the current content goes through [`update`], which holds
+//! it across the read too (2026-09-27 audit, X-K1).
 
 use serde::de::DeserializeOwned;
 use serde::Serialize;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 use tauri::{AppHandle, Manager};
 
 /// Outcome of reading a store.
@@ -79,6 +84,22 @@ pub(crate) fn is_poisoned(file: &str) -> bool {
         .lock()
         .unwrap_or_else(|e| e.into_inner())
         .contains(file)
+}
+
+/// One lock per store file (a small, fixed set of names).
+static STORE_LOCKS: OnceLock<Mutex<HashMap<String, Arc<Mutex<()>>>>> = OnceLock::new();
+
+/// Run `f` holding the lock of store `file`. Never nest two of these.
+fn with_store_lock<R>(file: &str, f: impl FnOnce() -> R) -> R {
+    let lock = STORE_LOCKS
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .entry(file.to_string())
+        .or_default()
+        .clone();
+    let _held = lock.lock().unwrap_or_else(PoisonError::into_inner);
+    f()
 }
 
 /// Layout version of the data dir that this build reads and writes. Bump it
@@ -238,11 +259,14 @@ fn quarantine(path: &Path, file: &str, err: &str) {
 
 /// Read and parse a store file.
 pub fn load<T: DeserializeOwned>(app: &AppHandle, file: &str) -> Loaded<T> {
-    let path = match path(app, file) {
-        Ok(p) => p,
-        Err(e) => return Loaded::Corrupt(e),
-    };
-    let data = match fs::read_to_string(&path) {
+    match path(app, file) {
+        Ok(path) => load_at(&path, file),
+        Err(e) => Loaded::Corrupt(e),
+    }
+}
+
+fn load_at<T: DeserializeOwned>(path: &Path, file: &str) -> Loaded<T> {
+    let data = match fs::read_to_string(path) {
         Ok(d) => d,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Loaded::Missing,
         Err(e) => return Loaded::Corrupt(e.to_string()),
@@ -255,7 +279,7 @@ pub fn load<T: DeserializeOwned>(app: &AppHandle, file: &str) -> Loaded<T> {
     match serde_json::from_str(&data) {
         Ok(value) => Loaded::Present(value),
         Err(e) => {
-            quarantine(&path, file, &e.to_string());
+            quarantine(path, file, &e.to_string());
             Loaded::Corrupt(e.to_string())
         }
     }
@@ -268,14 +292,63 @@ pub fn load_or_default<T: DeserializeOwned + Default>(app: &AppHandle, file: &st
 }
 
 /// Serialize and write atomically: temp file → flush → rename over the target.
+/// Replaces the whole store; a change that depends on the current content is an
+/// [`update`].
 pub fn save<T: Serialize>(app: &AppHandle, file: &str, value: &T) -> Result<(), String> {
+    let path = path(app, file)?;
+    with_store_lock(file, || save_at(&path, file, value))
+}
+
+/// `save` for a caller that already holds the store's lock.
+fn save_at<T: Serialize>(path: &Path, file: &str, value: &T) -> Result<(), String> {
     writable(file)?;
     if is_poisoned(file) {
         return Err(format!("{file} holds corrupt data that could not be set aside; not overwriting it"));
     }
-    let path = path(app, file)?;
     let data = serde_json::to_string_pretty(value).map_err(|e| e.to_string())?;
-    write_atomic(&path, data.as_bytes())
+    write_atomic(path, data.as_bytes())
+}
+
+/// Read, change and write a store as one step under its lock, so concurrent
+/// changes cannot lose one another. The library's bulk actions (favorite, hide or
+/// categorize N games) send one command per game, all at once, each on its own
+/// tokio worker: with a plain `load` + `save` every call read the same old list,
+/// the last rename won, and most of the change was lost while every call reported
+/// success (2026-09-27 audit, X-K1).
+///
+/// A missing store starts from `T::default()`, and so does a corrupt one, since
+/// `load` has already moved it aside. A store that could not be *read* (an I/O
+/// error, e.g. a file saved as UTF-16) is still in place, so the change is refused
+/// instead of replacing it with defaults. A change that leaves the content as it
+/// was writes nothing.
+pub fn update<T, R>(app: &AppHandle, file: &str, change: impl FnOnce(&mut T) -> R) -> Result<R, String>
+where
+    T: DeserializeOwned + Serialize + Default,
+{
+    let path = path(app, file)?;
+    update_at(&path, file, change)
+}
+
+fn update_at<T, R>(path: &Path, file: &str, change: impl FnOnce(&mut T) -> R) -> Result<R, String>
+where
+    T: DeserializeOwned + Serialize + Default,
+{
+    with_store_lock(file, || {
+        let mut value = match load_at::<T>(path, file) {
+            Loaded::Present(value) => value,
+            Loaded::Missing => T::default(),
+            Loaded::Corrupt(e) if path.exists() => {
+                return Err(format!("{file} could not be read ({e}); not overwriting it"));
+            }
+            Loaded::Corrupt(_) => T::default(),
+        };
+        let before = serde_json::to_string(&value).map_err(|e| e.to_string())?;
+        let out = change(&mut value);
+        if serde_json::to_string(&value).map_err(|e| e.to_string())? != before {
+            save_at(path, file, &value)?;
+        }
+        Ok(out)
+    })
 }
 
 /// Like `save`, but skips the write when the file already has these exact bytes.
@@ -294,29 +367,44 @@ pub fn save_if_changed<T: Serialize>(
     }
     let path = path(app, file)?;
     let data = serde_json::to_string_pretty(value).map_err(|e| e.to_string())?;
-    if let Ok(existing) = fs::read(&path) {
-        if existing == data.as_bytes() {
-            return Ok(false);
+    with_store_lock(file, || {
+        if let Ok(existing) = fs::read(&path) {
+            if existing == data.as_bytes() {
+                return Ok(false);
+            }
         }
-    }
-    write_atomic(&path, data.as_bytes())?;
-    Ok(true)
+        write_atomic(&path, data.as_bytes())?;
+        Ok(true)
+    })
 }
 
 /// Delete a store file (no-op if absent).
 pub fn remove(app: &AppHandle, file: &str) -> Result<(), String> {
     writable(file)?;
     let path = path(app, file)?;
-    match fs::remove_file(&path) {
+    with_store_lock(file, || match fs::remove_file(&path) {
         Ok(()) => Ok(()),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
         Err(e) => Err(e.to_string()),
-    }
+    })
 }
 
 /// Write bytes so that readers only ever see the old or the new content.
+///
+/// The temp file has a name of its own per write: two writers of one file (the
+/// same cover twice in a batch, overlapping scans) used to share `<file>.tmp` and
+/// could interleave their bytes in it (X-K1).
 pub fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
-    let tmp = path.with_extension("tmp");
+    static SEQ: AtomicU32 = AtomicU32::new(0);
+    let name = path
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let tmp = path.with_file_name(format!(
+        "{name}.{}-{}.tmp",
+        std::process::id(),
+        SEQ.fetch_add(1, Ordering::Relaxed)
+    ));
     {
         let mut file = fs::File::create(&tmp).map_err(|e| e.to_string())?;
         file.write_all(bytes).map_err(|e| e.to_string())?;
@@ -379,6 +467,20 @@ mod tests {
         dir.join(name)
     }
 
+    /// Files next to `path` whose name starts with its own and ends in `.tmp`.
+    fn temps_of(path: &Path) -> Vec<PathBuf> {
+        let name = path.file_name().unwrap().to_string_lossy().into_owned();
+        fs::read_dir(path.parent().unwrap())
+            .unwrap()
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| {
+                let n = p.file_name().unwrap().to_string_lossy();
+                n.starts_with(&name) && n.ends_with(".tmp")
+            })
+            .collect()
+    }
+
     #[test]
     fn atomic_write_replaces_content_and_leaves_no_temp() {
         let path = temp("atomic.json");
@@ -386,7 +488,76 @@ mod tests {
         assert_eq!(fs::read_to_string(&path).unwrap(), "[1,2,3]");
         write_atomic(&path, b"[4]").unwrap();
         assert_eq!(fs::read_to_string(&path).unwrap(), "[4]");
-        assert!(!path.with_extension("tmp").exists());
+        assert!(temps_of(&path).is_empty());
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn concurrent_updates_of_one_store_all_land() {
+        // Regression (X-K1): a bulk favorite sends one command per game at once;
+        // each did load → change → save on its own worker, the last rename won and
+        // most of the change was lost while every call reported success.
+        let file = "bulk-favorites.json";
+        let path = temp(file);
+        let _ = fs::remove_file(&path);
+        let workers: Vec<_> = (0..16)
+            .map(|i| {
+                let path = path.clone();
+                std::thread::spawn(move || {
+                    update_at(&path, file, |ids: &mut Vec<String>| ids.push(format!("steam:{i}")))
+                })
+            })
+            .collect();
+        for worker in workers {
+            worker.join().expect("worker").expect("update");
+        }
+        let Loaded::Present(mut ids) = load_at::<Vec<String>>(&path, file) else {
+            panic!("the store must be readable");
+        };
+        ids.sort();
+        let mut expected: Vec<String> = (0..16).map(|i| format!("steam:{i}")).collect();
+        expected.sort();
+        assert_eq!(ids, expected);
+        assert!(temps_of(&path).is_empty());
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn an_update_that_changes_nothing_writes_nothing() {
+        let file = "untouched-hidden.json";
+        let path = temp(file);
+        let _ = fs::remove_file(&path);
+        update_at(&path, file, |ids: &mut Vec<String>| ids.retain(|id| id != "steam:1")).unwrap();
+        assert!(!path.exists());
+    }
+
+    #[test]
+    fn an_unreadable_store_is_never_replaced_by_defaults() {
+        // A store saved as UTF-16 (Notepad) fails to *read*, so `load` cannot move
+        // it aside; a change must not overwrite it with `[new entry]`.
+        let file = "utf16-favorites.json";
+        let path = temp(file);
+        let bytes = b"\xff\xfe[\x00\"\x00a\x00\"\x00]\x00";
+        fs::write(&path, bytes).unwrap();
+        let result = update_at(&path, file, |ids: &mut Vec<String>| ids.push("steam:1".into()));
+        assert!(result.is_err(), "{result:?}");
+        assert_eq!(fs::read(&path).unwrap(), bytes);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn an_update_over_a_corrupt_store_starts_from_defaults_after_setting_it_aside() {
+        let file = "corrupt-favorites.json";
+        let path = temp(file);
+        fs::write(&path, b"[\"steam:1\",").unwrap();
+        update_at(&path, file, |ids: &mut Vec<String>| ids.push("steam:2".into())).unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), "[\n  \"steam:2\"\n]");
+        for entry in fs::read_dir(path.parent().unwrap()).unwrap().flatten() {
+            if entry.file_name().to_string_lossy().starts_with("corrupt-favorites.json.corrupt-") {
+                assert_eq!(fs::read(entry.path()).unwrap(), b"[\"steam:1\",");
+                let _ = fs::remove_file(entry.path());
+            }
+        }
         let _ = fs::remove_file(&path);
     }
 

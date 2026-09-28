@@ -446,22 +446,34 @@ pub fn migrate_remote_user_covers(app: &AppHandle) {
         }
     }
 
-    let Ok(mut manual) = crate::storage::load_manual(app) else { return };
-    let mut changed = false;
-    for game in &mut manual {
-        let Some(url) = game.cover_url.as_deref().filter(|u| is_remote(u)) else {
-            continue;
-        };
-        match fetch_user_cover(app, &game.id, url) {
-            Ok(path) => {
-                game.cover_url = Some(path);
-                changed = true;
+    let Ok(manual) = crate::storage::load_manual(app) else { return };
+    // Download first, then apply in one step: the store's lock is never held
+    // across the network, and an app added meanwhile is not lost (X-K1).
+    let fetched: Vec<(String, String)> = manual
+        .iter()
+        .filter_map(|game| {
+            let url = game.cover_url.as_deref().filter(|u| is_remote(u))?;
+            match fetch_user_cover(app, &game.id, url) {
+                Ok(path) => Some((game.id.clone(), path)),
+                Err(e) => {
+                    log::warn!("could not migrate the cover of {}: {e}", game.id);
+                    None
+                }
             }
-            Err(e) => log::warn!("could not migrate the cover of {}: {e}", game.id),
-        }
+        })
+        .collect();
+    if fetched.is_empty() {
+        return;
     }
-    if changed {
-        let _ = crate::storage::save_manual(app, &manual);
+    let applied = crate::storage::update_manual(app, |manual| {
+        for game in manual.iter_mut() {
+            if let Some((_, path)) = fetched.iter().find(|(id, _)| *id == game.id) {
+                game.cover_url = Some(path.clone());
+            }
+        }
+    });
+    if let Err(e) = applied {
+        log::warn!("migrated manual app covers could not be saved: {e}");
     }
 }
 

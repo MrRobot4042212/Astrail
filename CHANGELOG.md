@@ -30,6 +30,12 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
 - **Al terminar una partida, el HUD libera la GPU.** Su dispositivo gráfico y la
   biblioteca de NVIDIA se quedaban cargados hasta cerrar Astrail; ahora se
   liberan un minuto después de dejar de jugar o de apagar el overlay.
+- **Las acciones en bloque se guardan enteras.** Marcar como favoritos, ocultar
+  o categorizar varios juegos a la vez podía guardar solo algunos aunque la
+  biblioteca mostrara todos cambiados; al reiniciar, el resto había vuelto atrás.
+  Lo mismo al añadir una aplicación manual mientras se descargaban carátulas.
+- Un archivo de datos que no se puede leer (por ejemplo, guardado en UTF-16) ya
+  no se sustituye por uno vacío al cambiar algo en la biblioteca.
 - **Cerrar o actualizar Astrail con el HUD activo ya no deja nada a medias.**
   PresentMon y el sidecar de temperaturas terminan de pararse antes de que
   Astrail salga; antes podían quedar la sesión ETW de PresentMon abierta o el
