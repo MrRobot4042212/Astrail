@@ -30,6 +30,10 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
   driver de sensores cargado hasta reiniciar. El sidecar tampoco queda
   registrado como «terminado por su cuenta».
 
+### Añadido
+- **Frecuencia de actualización del HUD** (0,5 s / 1 s / 2 s) en Ajustes →
+  Métricas, para GPU, CPU y memoria; los FPS siguen el ritmo de PresentMon.
+
 ## [1.1.0] — 2026-09-25
 
 El número salta de 0.3.0 a 1.1.0 a propósito: hubo compilaciones 1.0.x en junio

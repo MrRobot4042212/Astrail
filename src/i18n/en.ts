@@ -322,6 +322,8 @@ export const en = {
     mOverlayBody: 'Shows FPS, GPU/CPU, temperatures and memory over the game while you play. It appears only with a game running. Toggle it any time with <0>{{key}}</0>.',
     mOverlayWarn: '⚠ The overlay requires <0>borderless windowed</0> mode. Exclusive fullscreen (D3D flip) bypasses the Windows compositor and cannot be overlaid by any native window.',
     mPosition: 'Position',
+    mRefresh: 'Refresh rate',
+    mRefreshNote: 'How often GPU, CPU and memory are read. FPS follow PresentMon\'s own cadence (once a second) whatever this value.',
     mGpuCard: 'Graphics card for the metrics',
     mGpuAuto: 'Automatic (recommended)',
     mMetricsShow: 'Metrics to show',

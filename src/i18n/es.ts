@@ -321,6 +321,8 @@ export const es = {
     mOverlayBody: 'Muestra FPS, GPU/CPU, temperaturas y memoria sobre el juego mientras juegas. Aparece solo con un juego en marcha. Actívalo/desactívalo en cualquier momento con <0>{{key}}</0>.',
     mOverlayWarn: '⚠ El overlay requiere modo <0>borderless windowed</0>. El fullscreen exclusivo (D3D flip) bypassa el compositor de Windows y no puede ser superpuesto por ninguna ventana nativa.',
     mPosition: 'Posición',
+    mRefresh: 'Frecuencia de actualización',
+    mRefreshNote: 'Cada cuánto se leen GPU, CPU y memoria. Los FPS siguen el ritmo de PresentMon (una vez por segundo) sea cual sea este valor.',
     mGpuCard: 'Tarjeta gráfica para las métricas',
     mGpuAuto: 'Automática (recomendada)',
     mMetricsShow: 'Métricas a mostrar',

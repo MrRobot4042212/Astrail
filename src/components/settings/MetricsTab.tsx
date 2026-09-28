@@ -86,6 +86,19 @@ export function MetricsTab({ model }: { model: SettingsModel }) {
                 </div>
               </Card>
 
+              <Card title={t('settings.mRefresh')}>
+                <p className="mb-3 text-xs leading-relaxed text-muted">{t('settings.mRefreshNote')}</p>
+                <SegmentedControl
+                  options={[
+                    { label: '0.5 s', value: 500 },
+                    { label: '1 s', value: 1000 },
+                    { label: '2 s', value: 2000 },
+                  ]}
+                  value={overlay.interval_ms}
+                  onChange={(v) => updateOverlay({ interval_ms: v as number })}
+                />
+              </Card>
+
               <OverlayMpoPanel
                 mpoMode={overlay.mpo_mode}
                 onModeChange={(m) => updateOverlay({ mpo_mode: m })}
