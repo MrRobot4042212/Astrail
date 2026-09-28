@@ -17,6 +17,7 @@ import {
   setDiscordClientId,
   getAutostart,
   setAutostart,
+  clearRunAsAdmin,
   getAppSettings,
   patchAppSettings,
   systemInfo,
@@ -41,6 +42,8 @@ export interface SettingsModel {
   autostart: boolean | null;
   /** False when this copy is not installed: autostart cannot point at it. */
   autostartAvailable: boolean;
+  /** The executable is marked "Run as administrator": Windows skips it at sign-in. */
+  autostartBlocked: boolean;
   tray: boolean | null;
   overlay: OverlaySettings | null;
   shortcuts: ShortcutsSettings | null;
@@ -53,6 +56,8 @@ export interface SettingsModel {
   updateShortcuts: (patch: Partial<ShortcutsSettings>) => void;
   saveLanguage: (lang: string) => void;
   toggleAutostart: () => void;
+  /** Remove the "Run as administrator" flag so the Run entry works again. */
+  unblockAutostart: () => void;
   toggleTray: () => void;
   toggleDiscord: () => void;
   saveDiscord: () => void;
@@ -77,6 +82,7 @@ export function useSettingsModel({
   const [discordEnabled, setDiscordEnabled] = useState<boolean | null>(null);
   const [autostart, setAutostartState] = useState<boolean | null>(null);
   const [autostartAvailable, setAutostartAvailable] = useState(false);
+  const [autostartBlocked, setAutostartBlocked] = useState(false);
   const [tray, setTray] = useState<boolean | null>(null);
   const [overlay, setOverlay] = useState<OverlaySettings | null>(null);
   const [shortcuts, setShortcuts] = useState<ShortcutsSettings | null>(null);
@@ -102,6 +108,7 @@ export function useSettingsModel({
       .then((s) => {
         setAutostartState(s.enabled);
         setAutostartAvailable(s.available);
+        setAutostartBlocked(s.blocked_by_run_as_admin);
       })
       .catch(() => setAutostartState(null));
     getAppSettings()
@@ -144,6 +151,18 @@ export function useSettingsModel({
       await setAutostart(next);
     } catch (e) {
       setAutostartState(!next); // revert
+      setError(failureText(e));
+    }
+  }
+
+  async function unblockAutostart() {
+    setError(null);
+    try {
+      const s = await clearRunAsAdmin();
+      setAutostartState(s.enabled);
+      setAutostartAvailable(s.available);
+      setAutostartBlocked(s.blocked_by_run_as_admin);
+    } catch (e) {
       setError(failureText(e));
     }
   }
@@ -223,6 +242,7 @@ export function useSettingsModel({
     discordEnabled,
     autostart,
     autostartAvailable,
+    autostartBlocked,
     tray,
     overlay,
     shortcuts,
@@ -234,6 +254,7 @@ export function useSettingsModel({
     updateShortcuts,
     saveLanguage,
     toggleAutostart,
+    unblockAutostart,
     toggleTray,
     toggleDiscord,
     saveDiscord,

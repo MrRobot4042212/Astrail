@@ -11,6 +11,12 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
 ## [No publicado] — Trabajo en curso
 
 ### Corregido
+- **«Iniciar con Windows» avisa cuando Windows lo bloquea.** Si el ejecutable
+  está marcado «Ejecutar como administrador» (Propiedades → Compatibilidad),
+  Windows no lo inicia al iniciar sesión aunque el ajuste esté activado, y
+  Astrail no lo decía. Ajustes lo indica ahora, explica que sin esa marca la
+  temperatura de CPU necesita «Reiniciar como administrador» en cada sesión, y
+  ofrece quitar la marca con un botón. El registro también lo avisa al arrancar.
 - **El HUD sigue el ritmo real de los FPS.** PresentMon entrega los frames en
   tandas de un segundo; el HUD se redibuja al llegar cada tanda en lugar de con
   su propio temporizador, así que el valor de FPS ya no se repite un tick y se

@@ -311,6 +311,7 @@ pub fn run() {
             set_discord_client_id,
             get_autostart,
             set_autostart,
+            clear_run_as_admin,
             get_app_settings,
             patch_app_settings,
             system_info,

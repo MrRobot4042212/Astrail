@@ -19,6 +19,8 @@ export function AppTab({ model, onStartTour }: { model: SettingsModel; onStartTo
     hidden,
     autostart,
     autostartAvailable,
+    autostartBlocked,
+    unblockAutostart,
     tray,
     shortcuts,
     updateShortcuts,
@@ -129,6 +131,14 @@ export function AppTab({ model, onStartTour }: { model: SettingsModel; onStartTo
             <p className="text-xs leading-relaxed text-muted">{t('settings.aAutostartBody')}</p>
             {!autostartAvailable && (
               <p className="mt-2 text-xs leading-relaxed text-muted">{t('settings.aAutostartUnavailable')}</p>
+            )}
+            {autostartBlocked && (
+              <div className="mt-3 border border-accent/40 bg-elevated p-3">
+                <p className="text-xs leading-relaxed text-ink">{t('settings.aAutostartBlocked')}</p>
+                <Button onClick={unblockAutostart} className="mt-3">
+                  {t('settings.aAutostartUnblock')}
+                </Button>
+              </div>
             )}
           </Card>
         )}

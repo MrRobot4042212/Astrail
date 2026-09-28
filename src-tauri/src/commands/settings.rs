@@ -11,10 +11,31 @@ use crate::*;
 /// and whether this copy may turn it on (only an installed one may).
 #[tauri::command(async)]
 pub(crate) fn get_autostart() -> CmdResult<autostart::AutostartState> {
+    autostart_state()
+}
+
+fn autostart_state() -> CmdResult<autostart::AutostartState> {
     Ok(autostart::AutostartState {
         enabled: autostart::is_enabled().map_err(|e| format!("Failed to read autostart: {e}"))?,
         available: autostart::available(),
+        blocked_by_run_as_admin: autostart::run_as_admin_flagged(),
     })
+}
+
+/// Remove the "Run as administrator" compatibility flag from this executable, the
+/// one thing that makes Windows skip the Run entry at logon (see
+/// `autostart::run_as_admin_flagged`). Per-user registry only: no elevation.
+#[tauri::command(async)]
+pub(crate) fn clear_run_as_admin() -> CmdResult<autostart::AutostartState> {
+    autostart::clear_run_as_admin().map_err(|e| {
+        let code = if e.kind() == std::io::ErrorKind::Unsupported {
+            ErrorCode::AutostartUnavailable
+        } else {
+            ErrorCode::Io
+        };
+        AppError::new(code, format!("Failed to clear the run-as-administrator flag: {e}"))
+    })?;
+    autostart_state()
 }
 
 /// Autostart is the `Run` key only, elevated or not: Astrail never starts itself

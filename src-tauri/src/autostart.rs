@@ -25,6 +25,14 @@ const RUN_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
 /// shell at logon, so a stale "disabled" entry silently overrides our Run value.
 #[cfg(windows)]
 const APPROVED_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run";
+/// Where "Run this program as an administrator" (Properties → Compatibility) is
+/// stored: one value per executable path, holding space-separated layer names.
+/// Explorer skips every `Run` entry whose program needs elevation, silently, so
+/// this flag turns autostart off without touching the Run value.
+#[cfg(windows)]
+const LAYERS_KEY: &str = r"Software\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Layers";
+/// The layer name that requests elevation.
+const RUN_AS_ADMIN_LAYER: &str = "RUNASADMIN";
 
 /// The NSIS installer puts its uninstaller next to the executable. Its presence
 /// is what tells an installed copy apart from a build run out of `target\` or a
@@ -38,6 +46,27 @@ const UNINSTALLER: &str = "uninstall.exe";
 pub struct AutostartState {
     pub enabled: bool,
     pub available: bool,
+    /// The executable carries the "Run as administrator" compatibility flag, so
+    /// Windows will not start it at logon whatever the Run value says.
+    pub blocked_by_run_as_admin: bool,
+}
+
+/// Whether an AppCompat layer value asks Windows to elevate the program. The
+/// Properties dialog writes `~ RUNASADMIN` (the `~` marks a user choice); other
+/// layers may sit next to it (`~ HIGHDPIAWARE RUNASADMIN`).
+pub(crate) fn layer_requests_elevation(value: &str) -> bool {
+    value.split_whitespace().any(|w| w.eq_ignore_ascii_case(RUN_AS_ADMIN_LAYER))
+}
+
+/// The layer value with the elevation request removed: `None` when nothing is
+/// left to keep (the value should be deleted).
+pub(crate) fn layer_without_elevation(value: &str) -> Option<String> {
+    let kept: Vec<&str> = value
+        .split_whitespace()
+        .filter(|w| !w.eq_ignore_ascii_case(RUN_AS_ADMIN_LAYER))
+        .collect();
+    // A lone `~` is the marker with nothing left to mark.
+    (!kept.is_empty() && kept != ["~"]).then(|| kept.join(" "))
 }
 
 /// Whether the Run key may point at `exe`: only an installed copy.
@@ -90,8 +119,8 @@ pub(crate) fn run_target(value: &str) -> Option<std::path::PathBuf> {
 #[cfg(windows)]
 mod imp {
     use super::{
-        approved_enabled, is_installed_copy, run_target, run_value, APPROVED_KEY,
-        LEGACY_VALUE_NAME, RUN_KEY, VALUE_NAME,
+        approved_enabled, is_installed_copy, layer_requests_elevation, layer_without_elevation,
+        run_target, run_value, APPROVED_KEY, LAYERS_KEY, LEGACY_VALUE_NAME, RUN_KEY, VALUE_NAME,
     };
     use std::io;
     use winreg::enums::{HKEY_CURRENT_USER, KEY_READ};
@@ -123,6 +152,49 @@ mod imp {
     /// Whether this copy may turn autostart on.
     pub fn available() -> bool {
         matches!(expected(), Ok(Some(_)))
+    }
+
+    /// The AppCompat layer value stored for this executable under `root`, if any.
+    fn layer_value(root: winreg::HKEY, exe: &str) -> Option<String> {
+        RegKey::predef(root)
+            .open_subkey_with_flags(LAYERS_KEY, KEY_READ)
+            .ok()?
+            .get_value::<String, _>(exe)
+            .ok()
+    }
+
+    /// Whether this executable is marked "Run as administrator" (per user or per
+    /// machine). Such a program is never started from the Run key at logon.
+    pub fn run_as_admin_flagged() -> bool {
+        let Ok(exe) = std::env::current_exe() else { return false };
+        let exe = exe.to_string_lossy();
+        [HKEY_CURRENT_USER, winreg::enums::HKEY_LOCAL_MACHINE]
+            .into_iter()
+            .filter_map(|root| layer_value(root, &exe))
+            .any(|v| layer_requests_elevation(&v))
+    }
+
+    /// Remove the per-user "Run as administrator" flag from this executable,
+    /// keeping any other compatibility layer next to it. A per-machine flag needs
+    /// an elevated writer and is reported as unsupported instead of failing later.
+    pub fn clear_run_as_admin() -> io::Result<()> {
+        let exe = std::env::current_exe()?;
+        let exe = exe.to_string_lossy().into_owned();
+        if layer_value(winreg::enums::HKEY_LOCAL_MACHINE, &exe).is_some_and(|v| layer_requests_elevation(&v)) {
+            return Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "the \"Run as administrator\" flag is set for all users; remove it from an elevated session",
+            ));
+        }
+        let Some(current) = layer_value(HKEY_CURRENT_USER, &exe) else { return Ok(()) };
+        if !layer_requests_elevation(&current) {
+            return Ok(());
+        }
+        let layers = open(LAYERS_KEY, true)?;
+        match layer_without_elevation(&current) {
+            Some(rest) => layers.set_value(&exe, &rest),
+            None => ignore_missing(layers.delete_value(&exe)),
+        }
     }
 
     /// Enabled = a Run value exists and Task Manager has not disabled it.
@@ -226,12 +298,17 @@ mod imp {
             open(RUN_KEY, true)?.set_value(VALUE_NAME, &value)?;
             log::info!("autostart pointed back at this installed copy");
         }
+        if run_as_admin_flagged() {
+            log::warn!(
+                "autostart is registered but Windows will not run it at logon: the executable is marked \"Run as administrator\" (AppCompat RUNASADMIN)"
+            );
+        }
         Ok(())
     }
 }
 
 #[cfg(windows)]
-pub use imp::{available, disable, enable, is_enabled, repair};
+pub use imp::{available, clear_run_as_admin, disable, enable, is_enabled, repair, run_as_admin_flagged};
 
 #[cfg(not(windows))]
 mod imp {
@@ -254,10 +331,16 @@ mod imp {
     pub fn available() -> bool {
         false
     }
+    pub fn run_as_admin_flagged() -> bool {
+        false
+    }
+    pub fn clear_run_as_admin() -> io::Result<()> {
+        Err(unsupported())
+    }
 }
 
 #[cfg(not(windows))]
-pub use imp::{available, disable, enable, is_enabled, repair};
+pub use imp::{available, clear_run_as_admin, disable, enable, is_enabled, repair, run_as_admin_flagged};
 
 #[cfg(test)]
 mod tests {
@@ -321,6 +404,26 @@ mod tests {
         assert!(!is_installed_copy(Path::new("astrail.exe")));
 
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn the_run_as_admin_layer_is_recognised_and_removed_alone() {
+        // Regression: the installed copy carried `~ RUNASADMIN` (Properties →
+        // Compatibility), Explorer skipped the Run entry at every logon, and
+        // `repair` saw a matching Run value and said nothing.
+        assert!(layer_requests_elevation("~ RUNASADMIN"));
+        assert!(layer_requests_elevation("~ HIGHDPIAWARE RunAsAdmin"));
+        assert!(layer_requests_elevation("RUNASADMIN"));
+        assert!(!layer_requests_elevation("~ HIGHDPIAWARE"));
+        assert!(!layer_requests_elevation(""));
+        assert!(!layer_requests_elevation("RUNASADMINX"));
+        assert_eq!(layer_without_elevation("~ RUNASADMIN"), None);
+        assert_eq!(layer_without_elevation("RUNASADMIN"), None);
+        assert_eq!(
+            layer_without_elevation("~ HIGHDPIAWARE RUNASADMIN").as_deref(),
+            Some("~ HIGHDPIAWARE")
+        );
+        assert_eq!(layer_without_elevation("~ HIGHDPIAWARE").as_deref(), Some("~ HIGHDPIAWARE"));
     }
 
     #[test]

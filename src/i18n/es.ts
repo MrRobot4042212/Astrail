@@ -421,6 +421,9 @@ export const es = {
     aOverlaySettingsDesc: 'Abre el panel rápido para configurar qué métricas se muestran en pantalla.',
     aAutostart: 'Iniciar con Windows',
     aAutostartUnavailable: 'Solo disponible en una copia instalada de Astrail: esta se está ejecutando desde otra carpeta.',
+    aAutostartBlocked:
+      'Este ejecutable está marcado «Ejecutar como administrador» y Windows nunca inicia al iniciar sesión un programa que exige elevación: Astrail no arrancará solo hasta quitar esa marca (Propiedades → Compatibilidad). Sin ella, la temperatura de CPU necesitará «Reiniciar como administrador» en cada sesión; los FPS no lo necesitan.',
+    aAutostartUnblock: 'Quitar la marca «Ejecutar como administrador»',
     aAutostartBody: 'Astrail arranca al iniciar sesión y se queda en la bandeja del sistema. Así el tiempo de juego y Discord se registran aunque no abras la ventana. Cerrar la ventana minimiza a la bandeja; sal del todo desde su menú.',
     aTray: 'Minimizar a la bandeja al cerrar',
     aTrayBody: 'Si está activo, al cerrar Astrail la aplicación seguirá en segundo plano para registrar tu tiempo de juego.',

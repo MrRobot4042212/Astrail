@@ -140,6 +140,9 @@ export const getAutostart = () => invoke<AutostartState>('get_autostart');
 /** Enable/disable launching Astrail on Windows login. */
 export const setAutostart = (enabled: boolean) =>
   invoke<void>('set_autostart', { enabled });
+/** Drops the "Run as administrator" compatibility flag that keeps Windows from
+ *  starting Astrail at sign-in; answers with the resulting autostart state. */
+export const clearRunAsAdmin = () => invoke<AutostartState>('clear_run_as_admin');
 
 /** Open an allowlisted community link in the user's browser (validated in Rust,
  *  so it never navigates the app's own webview away). */

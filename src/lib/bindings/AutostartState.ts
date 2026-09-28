@@ -4,4 +4,9 @@
  * What the settings screen needs: whether autostart is on, and whether this
  * copy may turn it on at all (see `is_installed_copy`).
  */
-export type AutostartState = { enabled: boolean, available: boolean, };
+export type AutostartState = { enabled: boolean, available: boolean, 
+/**
+ * The executable carries the "Run as administrator" compatibility flag, so
+ * Windows will not start it at logon whatever the Run value says.
+ */
+blocked_by_run_as_admin: boolean, };

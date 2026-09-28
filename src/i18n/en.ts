@@ -422,6 +422,9 @@ export const en = {
     aOverlaySettingsDesc: 'Opens the quick panel to configure which metrics show on screen.',
     aAutostart: 'Start with Windows',
     aAutostartUnavailable: 'Only available in an installed copy of Astrail: this one is running from another folder.',
+    aAutostartBlocked:
+      'This executable is marked "Run as administrator", and Windows never starts a program that requires elevation at sign-in: Astrail will not start by itself until that flag is removed (Properties → Compatibility). Without it, CPU temperature will need "Restart as administrator" once per session; FPS do not.',
+    aAutostartUnblock: 'Remove the "Run as administrator" flag',
     aAutostartBody: 'Astrail starts at login and stays in the system tray. That way playtime and Discord are tracked even if you do not open the window. Closing the window minimizes to tray; quit fully from its menu.',
     aTray: 'Minimize to tray on close',
     aTrayBody: 'If enabled, closing Astrail keeps the app running in the background to track your playtime.',
