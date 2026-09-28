@@ -30,6 +30,9 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
 - **Al terminar una partida, el HUD libera la GPU.** Su dispositivo gráfico y la
   biblioteca de NVIDIA se quedaban cargados hasta cerrar Astrail; ahora se
   liberan un minuto después de dejar de jugar o de apagar el overlay.
+- **Cambiar un ajuste ya no redibuja toda la biblioteca.** Cada cambio en Ajustes
+  y cada pulsación del atajo del overlay volvían a aplicar el idioma y redibujaban
+  todas las carátulas, también en plena partida.
 - El atajo del overlay guarda el ajuste fuera del hilo de la ventana: pulsarlo ya
   no puede detener Astrail un instante mientras escribe en disco.
 - **Astrail en la bandeja gasta menos.** Con la ventana cerrada a la bandeja, la

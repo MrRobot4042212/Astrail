@@ -8,6 +8,7 @@ import { useEffect } from 'react';
 import { I18nextProvider } from 'react-i18next';
 import { onEvent } from '@/lib/events';
 import { getAppSettings } from '@/lib/tauri';
+import { applyLanguage } from './applyLanguage';
 import i18n, { resolveLanguage } from './config';
 
 /**
@@ -29,13 +30,18 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
       document.documentElement.lang = lng;
     };
     i18n.on('languageChanged', syncLang);
+    // The switch below is skipped when the language is already active, so the
+    // listener alone would leave the exported layout's `lang` in place.
+    syncLang(i18n.language);
 
-    // Immediate best guess, then the saved preference when it arrives.
-    i18n.changeLanguage(resolveLanguage('system'));
+    // Immediate best guess, then the saved preference when it arrives. Only a
+    // real change switches (see `applyLanguage`): this runs on every
+    // `settings-updated`, including each press of the overlay hotkey.
+    applyLanguage(i18n, resolveLanguage('system'));
 
     const apply = () =>
       getAppSettings()
-        .then((s) => i18n.changeLanguage(resolveLanguage(s.language)))
+        .then((s) => applyLanguage(i18n, resolveLanguage(s.language)))
         .catch(() => {
           // Keep the OS-derived language.
         });
