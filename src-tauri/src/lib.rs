@@ -47,6 +47,7 @@ mod screenshots;
 mod sessionperf;
 mod sidecar_integrity;
 mod sidecar_log;
+mod sidecar_slot;
 mod steam;
 mod steam_playtime;
 mod storage;

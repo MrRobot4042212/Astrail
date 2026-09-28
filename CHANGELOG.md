@@ -10,6 +10,13 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
 
 ## [No publicado] — Trabajo en curso
 
+### Corregido
+- **Cerrar o actualizar Astrail con el HUD activo ya no deja nada a medias.**
+  PresentMon y el sidecar de temperaturas terminan de pararse antes de que
+  Astrail salga; antes podían quedar la sesión ETW de PresentMon abierta o el
+  driver de sensores cargado hasta reiniciar. El sidecar tampoco queda
+  registrado como «terminado por su cuenta».
+
 ## [1.1.0] — 2026-09-25
 
 El número salta de 0.3.0 a 1.1.0 a propósito: hubo compilaciones 1.0.x en junio

@@ -30,6 +30,8 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Manager};
 
+use crate::sidecar_slot::Slot;
+
 /// One line of sidecar output. Every field is optional: the sidecar leaves out
 /// what it cannot read, and values outside a plausible range are dropped here.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -68,7 +70,9 @@ const RESPAWN_BACKOFF: Duration = Duration::from_secs(30);
 
 /// The running sidecar, shared with `shutdown()` so a clean app exit can release
 /// the kernel driver before the Job Object resorts to terminating the process.
-static CHILD: Mutex<Option<Child>> = Mutex::new(None);
+/// Every controller step that stops, spawns or reaps it runs under `CHILD.step()`
+/// (see `sidecar_slot`).
+static CHILD: Slot<Child> = Slot::new();
 
 /// How long to wait for the sidecar to release its driver and exit before killing
 /// it. It wakes on stdin EOF, so the normal case is milliseconds; this is only the
@@ -76,7 +80,7 @@ static CHILD: Mutex<Option<Child>> = Mutex::new(None);
 const GRACEFUL_STOP: Duration = Duration::from_millis(1500);
 
 fn child_lock() -> MutexGuard<'static, Option<Child>> {
-    CHILD.lock().unwrap_or_else(PoisonError::into_inner)
+    CHILD.child()
 }
 
 fn latest_lock() -> MutexGuard<'static, Latest> {
@@ -144,6 +148,13 @@ fn wanted_mode(cpu_temp_readable: bool) -> Mode {
         sidecar_gpu_pending(),
         sidecar_gpu(),
     )
+}
+
+/// Whether a sidecar exit found in the reap step is a failure that arms
+/// `RESPAWN_BACKOFF`. While the sidecars are suspended (update install, app exit)
+/// the exit is the shutdown itself, so it is not a failure and not a warning.
+fn backoff_after_exit(suspended: bool) -> bool {
+    !suspended
 }
 
 /// The mode for these wants. Nothing starts while the sampler has yet to pick the GPU
@@ -306,11 +317,11 @@ fn stop(mut child: Child) {
 }
 
 /// Stop the sidecar on application exit. Called from `RunEvent::Exit`, where the
-/// Job Object would otherwise terminate it and strand the driver.
+/// Job Object would otherwise terminate it and strand the driver. Waits for a stop
+/// the controller already has in flight; the callers suspend the sidecars first, so
+/// the controller cannot start another.
 pub fn shutdown() {
-    let child = child_lock().take();
-    if let Some(child) = child {
-        stop(child);
+    if CHILD.shutdown(stop) {
         reset();
     }
 }
@@ -352,11 +363,14 @@ pub fn start(app: AppHandle) {
                 last_want = want.clone();
             }
 
+            // Stop, spawn and reap below are one step, so `shutdown` waits for it.
+            let _step = CHILD.step();
+
             // No longer wanted, or wanted with other arguments: stop it. A changed mode
             // is respawned just below.
             if running.as_ref().is_some_and(|mode| *mode != want) {
                 // Take the child out before stopping it: `stop` waits up to
-                // GRACEFUL_STOP and must not hold the lock while it does.
+                // GRACEFUL_STOP and must not hold the child lock while it does.
                 let child = child_lock().take();
                 if let Some(child) = child {
                     stop(child);
@@ -365,9 +379,12 @@ pub fn start(app: AppHandle) {
                 reset();
             }
 
+            // `want` was read before the step lock: an exit that began since then has
+            // suspended the sidecars, and nothing may start behind it.
             if !want.is_idle()
                 && running.is_none()
                 && respawn_allowed(last_unexpected_exit, Instant::now())
+                && !crate::metrics::sidecars_suspended()
             {
                 match find_binary(&app) {
                     Some(bin) => match spawn(&bin, &want) {
@@ -398,10 +415,15 @@ pub fn start(app: AppHandle) {
                     None => Some(false),
                     Some(c) => match c.try_wait() {
                         Ok(Some(status)) => {
-                            log::warn!(
-                                "cputemp exited on its own ({status}); next attempt in {RESPAWN_BACKOFF:?}"
-                            );
-                            Some(true)
+                            let unexpected = backoff_after_exit(crate::metrics::sidecars_suspended());
+                            if unexpected {
+                                log::warn!(
+                                    "cputemp exited on its own ({status}); next attempt in {RESPAWN_BACKOFF:?}"
+                                );
+                            } else {
+                                log::info!("cputemp exited while the sidecars were shutting down ({status})");
+                            }
+                            Some(unexpected)
                         }
                         _ => None,
                     },
@@ -523,6 +545,15 @@ mod tests {
         assert!(!respawn_allowed(Some(t0), t0 + Duration::from_millis(500)));
         assert!(!respawn_allowed(Some(t0), t0 + RESPAWN_BACKOFF - Duration::from_millis(1)));
         assert!(respawn_allowed(Some(t0), t0 + RESPAWN_BACKOFF));
+    }
+
+    #[test]
+    fn an_exit_during_shutdown_is_not_a_failure() {
+        // Regression: the reap step logged `cputemp exited on its own` and armed the
+        // respawn backoff 15 ms before `Astrail exiting`, for an exit the shutdown
+        // itself had caused.
+        assert!(backoff_after_exit(false));
+        assert!(!backoff_after_exit(true));
     }
 
     #[test]

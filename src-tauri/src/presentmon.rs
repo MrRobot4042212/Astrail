@@ -31,6 +31,8 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Manager};
 
+use crate::sidecar_slot::Slot;
+
 /// What PresentMon prints on every start when Astrail is not elevated (the
 /// Performance Log Users path): expected, and FPS still works for the game's own
 /// account. Logged once per run instead of as four warnings per game.
@@ -59,6 +61,14 @@ static LAST_UPDATE_MS: AtomicU64 = AtomicU64::new(0);
 /// Latest frametime graph. Written by the reader thread once per finished slice,
 /// copied out by the sampler once per tick.
 static GRAPH: Mutex<FrameGraph> = Mutex::new(FrameGraph::EMPTY);
+/// Whether this process may open PresentMon's ETW session at all (set once by the
+/// controller; the HUD reserves the FPS rows only when it may).
+static CAN_TRACE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// See `CAN_TRACE`.
+pub fn can_trace() -> bool {
+    CAN_TRACE.load(Ordering::Relaxed)
+}
 
 /// Our own ETW session name. PresentMon defaults to a fixed well-known name, which
 /// is why `--stop_existing_session` used to be needed — and why it could tear down
@@ -67,15 +77,17 @@ static GRAPH: Mutex<FrameGraph> = Mutex::new(FrameGraph::EMPTY);
 const SESSION_NAME: &str = "Astrail-PresentMon";
 
 /// The running child, shared with `shutdown()` so a clean app exit can stop the
-/// ETW session instead of leaving the Job Object to terminate the process.
-static CHILD: Mutex<Option<Child>> = Mutex::new(None);
+/// ETW session instead of leaving the Job Object to terminate the process. Every
+/// controller step that stops, spawns or reaps it runs under `CHILD.step()` (see
+/// `sidecar_slot`).
+static CHILD: Slot<Child> = Slot::new();
 
 /// Ceiling for a graceful stop before we terminate and fall back to stopping the
 /// ETW session ourselves.
 const GRACEFUL_STOP: Duration = Duration::from_millis(1500);
 
 fn child_lock() -> MutexGuard<'static, Option<Child>> {
-    CHILD.lock().unwrap_or_else(PoisonError::into_inner)
+    CHILD.child()
 }
 
 /// What PresentMon measured for the running game. Every field is `None` until there
@@ -779,12 +791,15 @@ fn stop(mut child: Child) {
 }
 
 /// Stop PresentMon on application exit, before the Job Object terminates it and
-/// strands its ETW session.
+/// strands its ETW session. Waits for a stop the controller already has in flight.
+/// The callers suspend the sidecars first, so the controller cannot start another.
 pub fn shutdown() {
-    let child = child_lock().take();
-    if let Some(child) = child {
-        stop(child);
+    if CHILD.shutdown(stop) {
         reset();
+    } else if can_trace() {
+        // No child left, but a crashed or killed PresentMon may still have left the
+        // session behind. Stopping an absent session is a cheap no-op (4201).
+        stop_etw_session();
     }
 }
 
@@ -807,6 +822,7 @@ pub fn start(app: AppHandle) {
                 false
             }
         };
+        CAN_TRACE.store(can_trace, Ordering::Relaxed);
         if !can_trace {
             log::info!("PresentMon disabled: not elevated and not in Performance Log Users");
             return;
@@ -845,8 +861,10 @@ pub fn start(app: AppHandle) {
             // Target changed (new game / stopped): tear down the old instance. Skip
             // re-attempting a PID we already failed on (failed_pid) to avoid respawning.
             if want_pid != child_pid && want_pid != failed_pid {
+                // The whole retarget is one step, so `shutdown` waits for it.
+                let _step = CHILD.step();
                 // Take the child out before stopping it: `stop` waits up to
-                // GRACEFUL_STOP and must not hold the lock while it does.
+                // GRACEFUL_STOP and must not hold the child lock while it does.
                 let old = child_lock().take();
                 if let Some(old) = old {
                     stop(old);
@@ -854,7 +872,9 @@ pub fn start(app: AppHandle) {
                 reset();
                 child_pid = 0;
 
-                if want_pid != 0 {
+                // `want_pid` was read before the step lock: an exit that began since
+                // then has suspended the sidecars, and nothing may start behind it.
+                if want_pid != 0 && !crate::metrics::sidecars_suspended() {
                     match find_binary(&app) {
                         Some(bin) => match spawn(&bin, want_pid) {
                             Ok(c) => {
@@ -884,6 +904,7 @@ pub fn start(app: AppHandle) {
             }
 
             // Reap a child that exited on its own (game closed, ETW denied, …).
+            let _step = CHILD.step();
             let exit_status = match child_lock().as_mut().map(|c| c.try_wait()) {
                 Some(Ok(Some(status))) => Some(status),
                 _ => None,

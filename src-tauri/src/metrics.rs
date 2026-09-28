@@ -417,6 +417,11 @@ fn sidecar_wanted(overlay_enabled: bool, metric_wanted: bool, suspended: bool) -
     overlay_enabled && metric_wanted && !suspended
 }
 
+/// Whether the sidecars are suspended (see `set_sidecars_suspended`).
+pub fn sidecars_suspended() -> bool {
+    SIDECARS_SUSPENDED.load(Ordering::Relaxed)
+}
+
 /// Suspend (or resume) both sidecars and wake their controllers so they act on it.
 pub fn set_sidecars_suspended(suspended: bool) {
     SIDECARS_SUSPENDED.store(suspended, Ordering::Relaxed);

@@ -14,6 +14,9 @@ use crate::*;
 /// kill-on-close job (`jobobj.rs`) stays as the crash backstop, which is all it can
 /// be — TerminateProcess cannot be intercepted.
 pub(crate) fn shutdown_for_exit(app: &AppHandle) {
+    // Stand the controllers down first: a sidecar exit they reap from here on is
+    // this shutdown, not a crash to back off from and warn about.
+    crate::metrics::set_sidecars_suspended(true);
     // The URL cache is written at most every 2 s during a cover pass; make sure the
     // last entries are not lost.
     crate::art::flush(app);
