@@ -32,6 +32,9 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
   liberan un minuto después de dejar de jugar o de apagar el overlay.
 - El atajo del overlay guarda el ajuste fuera del hilo de la ventana: pulsarlo ya
   no puede detener Astrail un instante mientras escribe en disco.
+- **Astrail en la bandeja gasta menos.** Con la ventana cerrada a la bandeja, la
+  vista web deja de dibujar y espacia sus temporizadores; antes seguía como si
+  estuviera en pantalla.
 - **Las acciones en bloque se guardan enteras.** Marcar como favoritos, ocultar
   o categorizar varios juegos a la vez podía guardar solo algunos aunque la
   biblioteca mostrara todos cambiados; al reiniciar, el resto había vuelto atrás.

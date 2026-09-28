@@ -13,14 +13,21 @@ use crate::*;
 #[cfg(windows)]
 pub(crate) const WEBVIEW_TRIM_DELAY_SECS: u64 = 10;
 
-/// Ask WebView2 to drop what it can (`LOW`) or go back to normal.
+/// Put the main webview at rest while it sits in the tray (`idle`), or wake it.
 ///
 /// Closing the window only hides it — the whole Chromium process tree stays
-/// resident so the playtime/Discord watchers keep running. `LOW` lets the engine
-/// release caches and decoded images while nobody is looking, and unlike
-/// `TrySuspend` it has no lifecycle semantics that could break the page state.
+/// resident so the playtime/Discord watchers keep running. At rest:
+/// - `SetIsVisible(false)` tells WebView2 the page is hidden, so it stops
+///   rendering and throttles the page's timers. Hiding only the HWND did not:
+///   WebView2 kept treating the page as on screen (2026-09-27 audit, I4).
+/// - `MemoryUsageTargetLevel` `LOW` lets the engine release caches and decoded
+///   images. Unlike `TrySuspend`, neither has lifecycle semantics that could
+///   break the page state.
+///
+/// Wake it *before* the window shows (`show_main`), or it comes up blank. Main
+/// thread only (the controller belongs to it).
 #[cfg(windows)]
-pub(crate) fn set_webview_memory_low(app: &AppHandle, low: bool) {
+pub(crate) fn set_webview_idle(app: &AppHandle, idle: bool) {
     use webview2_com::Microsoft::Web::WebView2::Win32::{
         ICoreWebView2_19, COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW,
         COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_NORMAL,
@@ -35,14 +42,18 @@ pub(crate) fn set_webview_memory_low(app: &AppHandle, low: bool) {
         // SAFETY: runs on the UI thread that owns the controller (Tauri
         // guarantees this for `with_webview`), and only reads/sets a setting.
         unsafe {
-            let Ok(core) = webview.controller().CoreWebView2() else {
+            let controller = webview.controller();
+            if let Err(e) = controller.SetIsVisible(!idle) {
+                log::warn!("could not set the main webview visibility to {}: {e}", !idle);
+            }
+            let Ok(core) = controller.CoreWebView2() else {
                 return;
             };
             // ICoreWebView2_19 needs a recent runtime; older ones just skip it.
             let Ok(api) = core.cast::<ICoreWebView2_19>() else {
                 return;
             };
-            let _ = api.SetMemoryUsageTargetLevel(if low {
+            let _ = api.SetMemoryUsageTargetLevel(if idle {
                 COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW
             } else {
                 COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_NORMAL
@@ -113,34 +124,37 @@ pub(crate) fn main_window_visible(app: AppHandle) -> bool {
         .unwrap_or(true)
 }
 
-/// Trim WebView2's memory once the main window has been hidden for a while,
-/// and only if it is still hidden by then.
+/// Put the main webview at rest (`set_webview_idle`) once the window has been
+/// hidden for a while, and only if it is still hidden by then.
 #[cfg(windows)]
 pub(crate) fn schedule_webview_trim(app: AppHandle) {
     std::thread::spawn(move || {
         std::thread::sleep(std::time::Duration::from_secs(WEBVIEW_TRIM_DELAY_SECS));
-        let hidden = app
-            .get_webview_window("main")
-            .and_then(|w| w.is_visible().ok())
-            .map(|visible| !visible)
-            .unwrap_or(false);
-        if hidden {
-            let handle = app.clone();
-            let _ = app.run_on_main_thread(move || {
-                set_webview_memory_low(&handle, true);
-            });
-        }
+        let handle = app.clone();
+        // Checked on the main thread, where `show_main` also runs: a check made
+        // here could see the window hidden just before it is shown, and a webview
+        // put at rest behind a visible window stays blank.
+        let _ = app.run_on_main_thread(move || {
+            let hidden = handle
+                .get_webview_window("main")
+                .and_then(|w| w.is_visible().ok())
+                .is_some_and(|visible| !visible);
+            if hidden {
+                set_webview_idle(&handle, true);
+            }
+        });
     });
 }
 
 /// Bring the main window to the front (used by the tray and Spotlight).
 pub(crate) fn show_main(app: &AppHandle) {
     if let Some(w) = app.get_webview_window("main") {
+        // Wake the webview first: shown at rest, the window would come up blank.
+        #[cfg(windows)]
+        set_webview_idle(app, false);
         let _ = w.unminimize();
         let _ = w.show();
         let _ = w.set_focus();
-        #[cfg(windows)]
-        set_webview_memory_low(app, false);
         emit_visibility(app, true);
     }
 }
