@@ -150,9 +150,10 @@ pub(crate) fn restore_settings(app: &AppHandle, settings: Option<AppSettings>) -
         // A backup made before the first-run setup was finished must not bring
         // the setup back on a machine that already went through it.
         next.setup_completed |= current.setup_completed;
-        // Not `storage::save_settings`, which logs a failed write and carries on:
-        // here the user is told whether their settings were restored.
-        jsonstore::save_if_changed(app, storage::SETTINGS_FILE, &next)?;
+        // Written before the swap and under the lock (a restore is rare and never
+        // on the main thread), so the user is told whether it worked; numbered like
+        // every other settings write so none that is still running lands after it.
+        storage::persist_settings(app, &next, storage::settings_seq())?;
         std::mem::replace(&mut *current, next.clone())
     };
     settings_changed(app, &previous, &next);

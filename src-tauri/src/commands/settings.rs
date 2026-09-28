@@ -96,14 +96,31 @@ pub(crate) fn patch_app_settings(
     patch: serde_json::Value,
 ) -> CmdResult<()> {
     log::debug!("settings patch: {patch}");
-    let (previous, next) = {
+    let (previous, next, seq) = {
         let mut current = state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         let next = apply_settings_patch(&current, patch).map_err(AppError::with(ErrorCode::InvalidInput))?;
-        storage::save_settings(&app, &next);
-        (std::mem::replace(&mut *current, next.clone()), next)
+        let previous = std::mem::replace(&mut *current, next.clone());
+        (previous, next, storage::settings_seq())
     };
+    // Written outside the lock (see `storage::persist_settings`).
+    if let Err(e) = storage::persist_settings(&app, &next, seq) {
+        log::warn!("could not save the settings: {e}");
+    }
     settings_changed(&app, &previous, &next);
     Ok(())
+}
+
+/// Write the settings in memory, if the disk does not have them yet. Called on
+/// exit, so a change whose write was still running off the main thread is kept.
+pub(crate) fn flush_settings(app: &AppHandle) {
+    let Some(state) = app.try_state::<std::sync::Mutex<AppSettings>>() else { return };
+    let (settings, seq) = {
+        let current = lock_settings(&state);
+        (current.clone(), storage::settings_seq())
+    };
+    if let Err(e) = storage::persist_settings(app, &settings, seq) {
+        log::warn!("could not save the settings on exit: {e}");
+    }
 }
 
 /// Merge a partial settings object into `current`. Nested objects merge key by

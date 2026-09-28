@@ -30,6 +30,8 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
 - **Al terminar una partida, el HUD libera la GPU.** Su dispositivo gráfico y la
   biblioteca de NVIDIA se quedaban cargados hasta cerrar Astrail; ahora se
   liberan un minuto después de dejar de jugar o de apagar el overlay.
+- El atajo del overlay guarda el ajuste fuera del hilo de la ventana: pulsarlo ya
+  no puede detener Astrail un instante mientras escribe en disco.
 - **Las acciones en bloque se guardan enteras.** Marcar como favoritos, ocultar
   o categorizar varios juegos a la vez podía guardar solo algunos aunque la
   biblioteca mostrara todos cambiados; al reiniciar, el resto había vuelto atrás.

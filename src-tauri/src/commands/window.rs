@@ -171,14 +171,20 @@ pub(crate) fn apply_overlay_settings(_app: &AppHandle, settings: &AppSettings) {
 /// Toggle the overlay on/off (the global hotkey). Persists and applies live.
 pub(crate) fn toggle_overlay(app: &AppHandle) {
     if let Some(state) = app.try_state::<std::sync::Mutex<AppSettings>>() {
-        // One lock for the whole read-modify-write, so a settings save landing
-        // between the read and the write is not overwritten.
-        let s = {
+        // The change and its snapshot number under one lock, so a concurrent patch
+        // cannot interleave; the write happens off this (main) thread and outside
+        // the lock (see `storage::persist_settings`).
+        let (s, seq) = {
             let mut current = state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
             current.overlay.enabled = !current.overlay.enabled;
-            storage::save_settings(app, &current);
-            current.clone()
+            (current.clone(), storage::settings_seq())
         };
+        let (handle, snapshot) = (app.clone(), s.clone());
+        tauri::async_runtime::spawn_blocking(move || {
+            if let Err(e) = storage::persist_settings(&handle, &snapshot, seq) {
+                log::warn!("could not save the overlay toggle: {e}");
+            }
+        });
         apply_overlay_settings(app, &s);
         // An open settings screen shows the toggle too.
         events::settings_updated(app);

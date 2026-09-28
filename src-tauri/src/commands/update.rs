@@ -20,6 +20,8 @@ pub(crate) fn shutdown_for_exit(app: &AppHandle) {
     // The URL cache is written at most every 2 s during a cover pass; make sure the
     // last entries are not lost.
     crate::art::flush(app);
+    // So is an overlay toggle whose write was still running off the main thread.
+    flush_settings(app);
     #[cfg(windows)]
     {
         crate::presentmon::shutdown();

@@ -13,6 +13,8 @@ use crate::jsonstore::{self, Loaded};
 use crate::models::{AppSettings, Category, Game};
 use std::collections::HashMap;
 use std::fs;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Mutex, PoisonError};
 
 pub(crate) const STORE_FILE: &str = "manual_apps.json";
 pub(crate) const OVERRIDES_FILE: &str = "cover_overrides.json";
@@ -218,12 +220,45 @@ pub fn load_settings(app: &AppHandle) -> AppSettings {
     }
 }
 
-/// Persist settings. Skips the write when nothing changed — the overlay hotkey
-/// goes through here on every press.
-pub fn save_settings(app: &AppHandle, settings: &AppSettings) {
-    if let Err(e) = jsonstore::save_if_changed(app, SETTINGS_FILE, settings) {
-        log::warn!("could not save {SETTINGS_FILE}: {e}");
+/// Settings snapshots taken so far, numbered in the order they were taken.
+static SETTINGS_SEQ: AtomicU64 = AtomicU64::new(0);
+/// Number of the snapshot on disk. Held across the write, which it orders.
+static SETTINGS_ON_DISK: Mutex<u64> = Mutex::new(0);
+
+/// Number a settings snapshot. Call it under the settings lock, together with the
+/// change the snapshot carries, so the numbers follow the order of the changes.
+pub fn settings_seq() -> u64 {
+    SETTINGS_SEQ.fetch_add(1, Ordering::Relaxed) + 1
+}
+
+/// Persist a settings snapshot numbered by `settings_seq`, **outside** the
+/// settings lock. Skips the write when nothing changed, and drops a snapshot older
+/// than the one already on disk. Returns whether this snapshot is now on disk.
+///
+/// The writers used to hold the settings lock across the write (read, pretty-print,
+/// temp file, fsync, rename), and the overlay hotkey does its toggle on the main
+/// thread, so every press put an fsync there and every reader of the settings on
+/// the main thread (the close handler, the hotkey handler) waited for it
+/// (2026-09-27 audit, X-K4). Outside the lock, two writes can finish in either
+/// order; the number keeps an older state from landing last.
+pub fn persist_settings(app: &AppHandle, settings: &AppSettings, seq: u64) -> Result<bool, String> {
+    persist_in_order(&SETTINGS_ON_DISK, seq, || {
+        jsonstore::save_if_changed(app, SETTINGS_FILE, settings).map(|_| ())
+    })
+}
+
+fn persist_in_order(
+    on_disk: &Mutex<u64>,
+    seq: u64,
+    write: impl FnOnce() -> Result<(), String>,
+) -> Result<bool, String> {
+    let mut newest = on_disk.lock().unwrap_or_else(PoisonError::into_inner);
+    if seq <= *newest {
+        return Ok(false);
     }
+    write()?;
+    *newest = seq;
+    Ok(true)
 }
 
 /// User-assigned categories keyed by game id. Applied as an overlay in
@@ -444,5 +479,30 @@ pub fn migrate_user_cover_filenames(app: &AppHandle) {
         if let Err(e) = jsonstore::save(app, OVERRIDES_FILE, &overrides) {
             log::warn!("user cover migration could not be saved: {e}");
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_older_settings_snapshot_never_lands_after_a_newer_one() {
+        // Regression guard for X-K4: settings are now written outside their lock,
+        // so two writes can finish in either order.
+        let on_disk = Mutex::new(0);
+        let mut written = Vec::new();
+        assert_eq!(persist_in_order(&on_disk, 2, || { written.push(2); Ok(()) }), Ok(true));
+        assert_eq!(persist_in_order(&on_disk, 1, || { written.push(1); Ok(()) }), Ok(false));
+        assert_eq!(persist_in_order(&on_disk, 3, || { written.push(3); Ok(()) }), Ok(true));
+        assert_eq!(written, [2, 3]);
+    }
+
+    #[test]
+    fn a_failed_settings_write_does_not_count_as_on_disk() {
+        let on_disk = Mutex::new(0);
+        assert!(persist_in_order(&on_disk, 1, || Err("disk full".into())).is_err());
+        // The same snapshot can be written again.
+        assert_eq!(persist_in_order(&on_disk, 1, || Ok(())), Ok(true));
     }
 }
