@@ -121,6 +121,34 @@ Copyright (C) 2026 Diego Alfonso Chicoma Ibañez (Dalfon.dev).
 Cómo se decide qué entra y quién publica: [GOVERNANCE.md](GOVERNANCE.md). Cómo
 contribuir (sin CLA): [CONTRIBUTING.md](CONTRIBUTING.md).
 
+## Política de firma de código (Code signing policy)
+
+Free code signing provided by [SignPath.io](https://about.signpath.io), certificate
+by [SignPath Foundation](https://signpath.org).
+
+> La firma con SignPath Foundation se está preparando. Hasta que salga la primera
+> versión firmada, el instalador no lleva firma y SmartScreen puede avisar al abrirlo.
+
+- **Qué se firma:** solo las versiones oficiales, es decir, el instalador y los
+  programas que instala. Las compila [release.yml](.github/workflows/release.yml)
+  en GitHub Actions a partir de este repositorio; no se firma nada compilado en
+  local. Los componentes de otros proyectos que ya firman sus autores conservan su
+  firma original.
+- **Roles** (detalle en [GOVERNANCE.md](GOVERNANCE.md)):
+  - Committers and reviewers: [Diego Alfonso Chicoma Ibañez (Dalfon.dev)](https://github.com/MrRobot4042212)
+  - Approvers: [Diego Alfonso Chicoma Ibañez (Dalfon.dev)](https://github.com/MrRobot4042212)
+- **Aprobación:** el mantenedor aprueba a mano cada petición de firma en SignPath.
+- **Cuentas:** quien puede escribir en el repositorio o aprobar firmas usa
+  autenticación en dos pasos en GitHub y en SignPath.
+- **Privacidad:** Astrail no envía datos personales a su autor. Se conecta a IGDB
+  (Twitch) para las carátulas, a GitHub para buscar actualizaciones y a Discord solo
+  si se activa en Ajustes. Todo lo que envía está en la
+  [política de privacidad](https://astrail-web.vercel.app/es/privacy).
+
+Política completa: [astrail-web.vercel.app/es/code-signing](https://astrail-web.vercel.app/es/code-signing).
+Para informar de un archivo firmado que no venga de una versión oficial, abre un
+[aviso de seguridad privado](https://github.com/MrRobot4042212/Astrail/security/advisories/new).
+
 ## Créditos
 
 Astrail incluye código de otras personas, cada uno con su licencia. La lista
