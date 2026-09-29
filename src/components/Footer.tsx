@@ -4,10 +4,8 @@
 
 'use client';
 
-import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { onEvent } from '@/lib/events';
-import { getAppSettings } from '@/lib/tauri';
+import { useAppSettings } from '@/hooks/useAppSettings';
 import { DEFAULT_SHORTCUTS, formatShortcut } from '@/lib/shortcuts';
 
 /** A small key/badge chip. */
@@ -35,26 +33,8 @@ function Shortcut({ keys, label }: { keys: React.ReactNode[]; label: string }) {
 /** Footer toolbar listing the app's keyboard/interaction shortcuts. */
 export function Footer() {
   const { t } = useTranslation();
-  const [spotlightShortcut, setSpotlightShortcut] = useState(DEFAULT_SHORTCUTS.spotlight);
-
-  useEffect(() => {
-    const fetchSettings = async () => {
-      try {
-        const settings = await getAppSettings();
-        if (settings.shortcuts?.spotlight) {
-          setSpotlightShortcut(settings.shortcuts.spotlight);
-        }
-      } catch {
-        // ignore
-      }
-    };
-
-    fetchSettings();
-    const un = onEvent('settings-updated', fetchSettings);
-    return () => {
-      un.then((f) => f()).catch(() => {});
-    };
-  }, []);
+  const { settings } = useAppSettings();
+  const spotlightShortcut = settings?.shortcuts?.spotlight || DEFAULT_SHORTCUTS.spotlight;
 
   return (
     // One row, most useful first: hints that do not fit wrap onto a second row

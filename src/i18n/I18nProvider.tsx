@@ -6,15 +6,14 @@
 
 import { useEffect } from 'react';
 import { I18nextProvider } from 'react-i18next';
-import { onEvent } from '@/lib/events';
-import { getAppSettings } from '@/lib/tauri';
+import { useAppSettings } from '@/hooks/useAppSettings';
 import { applyLanguage } from './applyLanguage';
 import i18n, { resolveLanguage } from './config';
 
 /**
- * Applies the saved UI language to i18next and keeps it in sync. Re-applies on
- * the `settings-updated` event so changing the language in Ajustes (or from
- * another window) updates the whole app live.
+ * Applies the saved UI language to i18next and keeps it in sync, through the
+ * window's settings store, so changing the language in Ajustes (or from another
+ * window) updates the whole app live.
  *
  * It starts from the OS language rather than blocking on the settings IPC: this
  * component wraps the entire app, and returning `null` until the round trip
@@ -34,27 +33,33 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
     // listener alone would leave the exported layout's `lang` in place.
     syncLang(i18n.language);
 
-    // Immediate best guess, then the saved preference when it arrives. Only a
-    // real change switches (see `applyLanguage`): this runs on every
-    // `settings-updated`, including each press of the overlay hotkey.
+    // Immediate best guess; `SavedLanguage` applies the saved preference when it
+    // arrives (and keeps the OS language if the settings cannot be read).
     applyLanguage(i18n, resolveLanguage('system'));
-
-    const apply = () =>
-      getAppSettings()
-        .then((s) => applyLanguage(i18n, resolveLanguage(s.language)))
-        .catch(() => {
-          // Keep the OS-derived language.
-        });
-
-    apply();
-    const un = onEvent('settings-updated', apply);
-    un.catch(() => {});
 
     return () => {
       i18n.off('languageChanged', syncLang);
-      un.then((f) => f()).catch(() => {});
     };
   }, []);
 
-  return <I18nextProvider i18n={i18n}>{children}</I18nextProvider>;
+  return (
+    <I18nextProvider i18n={i18n}>
+      <SavedLanguage />
+      {children}
+    </I18nextProvider>
+  );
+}
+
+/**
+ * Follows the saved language. A component of its own, rendering nothing, so a
+ * settings change re-renders only this and never the tree under the provider;
+ * and it switches only when the language itself changes, not on every other
+ * setting (see `applyLanguage`).
+ */
+function SavedLanguage() {
+  const language = useAppSettings().settings?.language;
+  useEffect(() => {
+    if (language !== undefined) applyLanguage(i18n, resolveLanguage(language));
+  }, [language]);
+  return null;
 }

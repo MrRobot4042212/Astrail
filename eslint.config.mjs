@@ -44,6 +44,32 @@ const astrail = {
   },
 };
 
+// Imports that bypass the typed IPC wrappers (see the rule below).
+const IPC_IMPORTS = [
+  {
+    name: '@tauri-apps/api/core',
+    importNames: ['invoke'],
+    message: 'Call commands through the typed wrappers in src/lib/tauri.ts.',
+  },
+  {
+    name: '@tauri-apps/api/event',
+    message: 'Listen through onEvent from src/lib/events.ts.',
+  },
+  {
+    name: '@tauri-apps/api',
+    importNames: ['core', 'event'],
+    message: 'Use src/lib/tauri.ts (commands) and src/lib/events.ts (events).',
+  },
+];
+
+// Settings read or patched outside the window's store: a second copy that goes
+// stale (see src/lib/settingsStore.ts).
+const SETTINGS_IMPORT = {
+  name: '@/lib/tauri',
+  importNames: ['getAppSettings', 'patchAppSettings'],
+  message: 'Use useAppSettings / patchSettings from src/hooks/useAppSettings.ts: one copy of the settings per window.',
+};
+
 export default tseslint.config(
   {
     ignores: [
@@ -111,34 +137,20 @@ export default tseslint.config(
 
       // The IPC contract lives in two files: commands in `src/lib/tauri.ts`,
       // events in `src/lib/events.ts` (whose names a Rust test checks). A call
-      // made anywhere else escapes both the types and that check.
-      'no-restricted-imports': [
-        'error',
-        {
-          paths: [
-            {
-              name: '@tauri-apps/api/core',
-              importNames: ['invoke'],
-              message: 'Call commands through the typed wrappers in src/lib/tauri.ts.',
-            },
-            {
-              name: '@tauri-apps/api/event',
-              message: 'Listen through onEvent from src/lib/events.ts.',
-            },
-            {
-              name: '@tauri-apps/api',
-              importNames: ['core', 'event'],
-              message: 'Use src/lib/tauri.ts (commands) and src/lib/events.ts (events).',
-            },
-          ],
-        },
-      ],
+      // made anywhere else escapes both the types and that check. The settings
+      // go through the window's single store (2026-09-27 audit, G8).
+      'no-restricted-imports': ['error', { paths: [...IPC_IMPORTS, SETTINGS_IMPORT] }],
     },
   },
   {
     // The two files that own the IPC boundary.
     files: ['src/lib/tauri.ts', 'src/lib/events.ts'],
     rules: { 'no-restricted-imports': 'off' },
+  },
+  {
+    // The settings store is the one place that reads and patches the settings.
+    files: ['src/hooks/useAppSettings.ts'],
+    rules: { 'no-restricted-imports': ['error', { paths: IPC_IMPORTS }] },
   },
   {
     // Node-side tooling and config files.

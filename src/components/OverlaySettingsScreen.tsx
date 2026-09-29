@@ -4,10 +4,8 @@
 
 'use client';
 
-import { useEffect, useState } from 'react';
 import { useTranslation, Trans } from 'react-i18next';
-import { onEvent } from '@/lib/events';
-import { getAppSettings, patchAppSettings } from '@/lib/tauri';
+import { patchSettings, useAppSettings } from '@/hooks/useAppSettings';
 import type { HudFontSize, OverlaySettings, OverlayPosition } from '@/lib/types';
 import { DEFAULT_SHORTCUTS, formatShortcut } from '@/lib/shortcuts';
 import { OVERLAY_METRICS } from '@/lib/overlayMetrics';
@@ -24,33 +22,15 @@ const OVERLAY_POSITIONS: { value: OverlayPosition; tKey: string }[] = [
 
 export function OverlaySettingsScreen({ onClose }: { onClose: () => void }) {
   const { t } = useTranslation();
-  const [overlay, setOverlay] = useState<OverlaySettings | null>(null);
+  // The store follows every settings change, so a change made in the launcher
+  // (or with the overlay hotkey) while this screen is open is shown, not reverted.
+  const { settings } = useAppSettings();
+  const overlay = settings?.overlay ?? null;
   // Shortcut that returns to the game (overlay settings toggle); custom or default.
-  const [settingsShortcut, setSettingsShortcut] = useState(DEFAULT_SHORTCUTS.overlay_settings);
-
-  // Re-read on every settings change, so a change made in the launcher (or with
-  // the overlay hotkey) while this screen is open is shown instead of reverted.
-  useEffect(() => {
-    const load = () =>
-      getAppSettings()
-        .then((s) => {
-          setOverlay(s.overlay);
-          if (s.shortcuts?.overlay_settings) {
-            setSettingsShortcut(s.shortcuts.overlay_settings);
-          }
-        })
-        .catch(() => {});
-    load();
-    const un = onEvent('settings-updated', load);
-    un.catch(() => {});
-    return () => {
-      un.then((f) => f()).catch(() => {});
-    };
-  }, []);
+  const settingsShortcut = settings?.shortcuts?.overlay_settings || DEFAULT_SHORTCUTS.overlay_settings;
 
   function updateOverlay(patch: Partial<OverlaySettings>) {
-    setOverlay((prev) => (prev ? { ...prev, ...patch } : prev));
-    patchAppSettings({ overlay: patch }).catch(console.error);
+    patchSettings({ overlay: patch }).catch(console.error);
   }
 
   useEscape(onClose);

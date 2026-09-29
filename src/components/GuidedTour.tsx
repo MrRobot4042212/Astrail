@@ -6,7 +6,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation, Trans } from 'react-i18next';
-import { getAppSettings } from '@/lib/tauri';
+import { useAppSettings } from '@/hooks/useAppSettings';
 import { DEFAULT_SHORTCUTS, formatShortcut } from '@/lib/shortcuts';
 import type { ShortcutsSettings } from '@/lib/types';
 import {
@@ -177,14 +177,11 @@ export function GuidedTour({
   // Keybindings shown in the tour must reflect the user's custom shortcuts (or
   // our default), so load them and format for display. Falls back to the current
   // defaults until settings arrive.
-  const [sc, setSc] = useState<ShortcutsSettings>(DEFAULT_SHORTCUTS);
-  useEffect(() => {
-    getAppSettings()
-      .then((s) => s.shortcuts && setSc(s.shortcuts))
-      .catch(() => {});
-  }, []);
-  // Rebuilt only when the shortcuts load. The enter() closures don't depend on
-  // them, and the step effect keys on `idx`, so this never re-drives a step.
+  const { settings } = useAppSettings();
+  const sc: ShortcutsSettings = settings?.shortcuts ?? DEFAULT_SHORTCUTS;
+  // Rebuilt when the settings are read again (the shortcuts may have changed).
+  // The enter() closures don't depend on them, and the step effect keys on
+  // `idx`, so this never re-drives a step.
   const steps = useMemo<Step[]>(() => {
     const space = t('common.keySpace');
     const spotKeys = formatShortcut(sc.spotlight, space);

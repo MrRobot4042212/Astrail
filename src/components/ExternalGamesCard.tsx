@@ -8,42 +8,27 @@
 // and get the HUD. Self-contained on purpose: it reads and patches its own setting,
 // so the settings dialog only has to mount it. Rust starts or stops the foreground
 // hook when the value changes.
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { getAppSettings, patchAppSettings } from '@/lib/tauri';
+import { patchSettings, useAppSettings } from '@/hooks/useAppSettings';
 import { Card, Toggle } from './settings/primitives';
 import { failureText } from '@/i18n/failureText';
 
 export function ExternalGamesCard() {
   const { t } = useTranslation();
-  const [on, setOn] = useState<boolean | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    getAppSettings()
-      .then((s) => {
-        if (!cancelled) setOn(s.track_external_games ?? true);
-      })
-      .catch((e) => {
-        if (!cancelled) setError(failureText(e));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const { settings, error: loadError } = useAppSettings();
+  const [saveError, setSaveError] = useState<unknown>(null);
+  const on = settings ? (settings.track_external_games ?? true) : null;
+  const failure = saveError ?? loadError;
+  const error = failure ? failureText(failure) : null;
 
   if (on === null && !error) return null;
 
+  // Shown at once; the store puts back the saved value if the core refuses.
   const toggle = () => {
     if (on === null) return;
-    const next = !on;
-    setOn(next); // optimistic
-    setError(null);
-    patchAppSettings({ track_external_games: next }).catch((e) => {
-      setOn(on); // revert
-      setError(failureText(e));
-    });
+    setSaveError(null);
+    patchSettings({ track_external_games: !on }).catch(setSaveError);
   };
 
   return (

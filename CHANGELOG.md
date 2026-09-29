@@ -10,6 +10,13 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
 
 ## [No publicado] — Trabajo en curso
 
+### Corregido
+- **Ajustes muestra los cambios hechos fuera mientras está abierto.** Si el
+  atajo del overlay encendía o apagaba el HUD (o se cambiaba algo desde otra
+  ventana) con Ajustes abierto, el diálogo seguía mostrando el valor anterior
+  hasta cerrarlo. Lo mismo en el canal de actualizaciones, los juegos
+  externos y los atajos que muestran la guía y el panel de ayuda.
+
 ## [1.2.0] — 2026-09-29
 
 ### Añadido

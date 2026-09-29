@@ -18,14 +18,13 @@ import {
   getAutostart,
   setAutostart,
   clearRunAsAdmin,
-  getAppSettings,
-  patchAppSettings,
   systemInfo,
   metricsAccess,
   restartAsAdmin,
 } from '@/lib/tauri';
-import type { MetricsAccess, OverlaySettings, ShortcutsSettings, SystemInfo } from '@/lib/types';
+import type { AppSettingsPatch, MetricsAccess, OverlaySettings, ShortcutsSettings, SystemInfo } from '@/lib/types';
 import { failureText } from '@/i18n/failureText';
+import { patchSettings, useAppSettings } from '@/hooks/useAppSettings';
 
 /** How long the "saved" confirmation stays next to the Discord field. */
 const SAVED_FLASH_MS = 2000;
@@ -79,16 +78,19 @@ export function useSettingsModel({
   const [hidden, setHidden] = useState<number | null>(null);
   const [discordId, setDiscordId] = useState('');
   const [discordSaved, setDiscordSaved] = useState(false);
-  const [discordEnabled, setDiscordEnabled] = useState<boolean | null>(null);
   const [autostart, setAutostartState] = useState<boolean | null>(null);
   const [autostartAvailable, setAutostartAvailable] = useState(false);
   const [autostartBlocked, setAutostartBlocked] = useState(false);
-  const [tray, setTray] = useState<boolean | null>(null);
-  const [overlay, setOverlay] = useState<OverlaySettings | null>(null);
-  const [shortcuts, setShortcuts] = useState<ShortcutsSettings | null>(null);
   const [sys, setSys] = useState<SystemInfo | null>(null);
   const [access, setAccess] = useState<MetricsAccess | null>(null);
-  const [language, setLanguageState] = useState<string>('system');
+  // The window's shared settings, not a copy: a change made elsewhere while the
+  // dialog is open (the overlay hotkey, another window) shows here too (G8).
+  const { settings } = useAppSettings();
+  const tray = settings?.minimize_to_tray ?? null;
+  const overlay = settings?.overlay ?? null;
+  const shortcuts = settings?.shortcuts ?? null;
+  const language = settings?.language ?? 'system';
+  const discordEnabled = settings ? (settings.discord_enabled ?? false) : null;
   const savedFlash = useRef<number | null>(null);
 
   useEffect(() => {
@@ -111,37 +113,25 @@ export function useSettingsModel({
         setAutostartBlocked(s.blocked_by_run_as_admin);
       })
       .catch(() => setAutostartState(null));
-    getAppSettings()
-      .then((s) => {
-        setTray(s.minimize_to_tray);
-        setOverlay(s.overlay);
-        setShortcuts(s.shortcuts);
-        setLanguageState(s.language ?? 'system');
-        setDiscordEnabled(s.discord_enabled ?? false);
-      })
-      .catch(() => setTray(null));
     return () => {
       if (savedFlash.current !== null) window.clearTimeout(savedFlash.current);
     };
   }, []);
 
-  // Optimistic local update, then send only the changed fields; Rust merges them.
-  const updateOverlay = useCallback((patch: Partial<OverlaySettings>) => {
-    setOverlay((prev) => (prev ? { ...prev, ...patch } : prev));
-    patchAppSettings({ overlay: patch }).catch((e) => setError(failureText(e)));
+  // Only the changed fields; Rust merges them. The store shows the change at
+  // once and puts back the saved value if the core refuses.
+  const save = useCallback((patch: AppSettingsPatch) => {
+    setError(null);
+    patchSettings(patch).catch((e) => setError(failureText(e)));
   }, []);
 
-  const updateShortcuts = useCallback((patch: Partial<ShortcutsSettings>) => {
-    setShortcuts((prev) => (prev ? { ...prev, ...patch } : prev));
-    patchAppSettings({ shortcuts: patch }).catch((e) => setError(failureText(e)));
-  }, []);
+  const updateOverlay = useCallback((patch: Partial<OverlaySettings>) => save({ overlay: patch }), [save]);
 
-  const saveLanguage = useCallback((lang: string) => {
-    setLanguageState(lang); // optimistic
-    // patch_app_settings emits "settings-updated", which the I18nProvider listens
-    // to and applies the new language across every window.
-    patchAppSettings({ language: lang }).catch((e) => setError(failureText(e)));
-  }, []);
+  const updateShortcuts = useCallback((patch: Partial<ShortcutsSettings>) => save({ shortcuts: patch }), [save]);
+
+  // The I18nProvider follows the store, so the language switches at once here
+  // and, through `settings-updated`, in every other window.
+  const saveLanguage = useCallback((lang: string) => save({ language: lang }), [save]);
 
   async function toggleAutostart() {
     if (autostart === null || !autostartAvailable) return;
@@ -167,28 +157,12 @@ export function useSettingsModel({
     }
   }
 
-  async function toggleTray() {
-    if (tray === null) return;
-    const next = !tray;
-    setTray(next); // optimistic
-    try {
-      await patchAppSettings({ minimize_to_tray: next });
-    } catch (e) {
-      setTray(!next); // revert
-      setError(failureText(e));
-    }
+  function toggleTray() {
+    if (tray !== null) save({ minimize_to_tray: !tray });
   }
 
-  async function toggleDiscord() {
-    if (discordEnabled === null) return;
-    const next = !discordEnabled;
-    setDiscordEnabled(next); // optimistic
-    try {
-      await patchAppSettings({ discord_enabled: next });
-    } catch (e) {
-      setDiscordEnabled(!next); // revert
-      setError(failureText(e));
-    }
+  function toggleDiscord() {
+    if (discordEnabled !== null) save({ discord_enabled: !discordEnabled });
   }
 
   async function saveDiscord() {

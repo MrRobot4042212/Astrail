@@ -6,7 +6,8 @@
 
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { getAutostart, setAutostart, getAppSettings, patchAppSettings } from '@/lib/tauri';
+import { patchSettings, useAppSettings } from '@/hooks/useAppSettings';
+import { getAutostart, setAutostart } from '@/lib/tauri';
 import { AstrailIcon } from './icons';
 import { failureText } from '@/i18n/failureText';
 
@@ -30,16 +31,19 @@ export function Onboarding({
   // Only an installed copy can start with Windows; a build run from elsewhere
   // hides the switch instead of failing the whole setup on it.
   const [autoAvailable, setAutoAvailable] = useState(false);
-  const [tray, setTray] = useState<boolean>(true);
-  const [metrics, setMetrics] = useState<boolean>(false);
+  // Drafts, saved on the last slide: they follow the saved settings until the
+  // user flips them (null = not touched yet).
+  const { settings } = useAppSettings();
+  const [trayChoice, setTray] = useState<boolean | null>(null);
+  const [metricsChoice, setMetrics] = useState<boolean | null>(null);
+  const tray = trayChoice ?? settings?.minimize_to_tray ?? true;
+  const metrics = metricsChoice ?? settings?.overlay.enabled ?? false;
 
   useEffect(() => {
-    Promise.all([getAutostart(), getAppSettings()])
-      .then(([autostartRes, settingsRes]) => {
+    getAutostart()
+      .then((autostartRes) => {
         setAuto(autostartRes.enabled);
         setAutoAvailable(autostartRes.available);
-        setTray(settingsRes.minimize_to_tray);
-        setMetrics(settingsRes.overlay.enabled);
       })
       .catch((e) => console.error(e));
   }, []);
@@ -57,7 +61,7 @@ export function Onboarding({
     setError(null);
     try {
       if (autoAvailable) await setAutostart(auto);
-      await patchAppSettings({
+      await patchSettings({
         setup_completed: true,
         minimize_to_tray: tray,
         overlay: { enabled: metrics },

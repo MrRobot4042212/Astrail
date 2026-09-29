@@ -4,11 +4,11 @@
 
 'use client';
 
-import { useEffect, useState, useId } from 'react';
+import { useState, useId } from 'react';
 import { useTranslation } from 'react-i18next';
+import { patchSettings, useAppSettings } from '@/hooks/useAppSettings';
 import { useDialog } from '@/hooks/useDialog';
 import { CloseIcon, BookIcon } from './icons';
-import { getAppSettings, patchAppSettings } from '@/lib/tauri';
 import { DEFAULT_SHORTCUTS, formatShortcut } from '@/lib/shortcuts';
 import { failureText } from '@/i18n/failureText';
 interface Tutorial {
@@ -23,12 +23,8 @@ export function NotificationsPanel({ onClose }: { onClose: () => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Reflect the user's real Spotlight binding (custom or our default).
-  const [spotlight, setSpotlight] = useState(DEFAULT_SHORTCUTS.spotlight);
-  useEffect(() => {
-    getAppSettings()
-      .then((s) => s.shortcuts?.spotlight && setSpotlight(s.shortcuts.spotlight))
-      .catch(() => {});
-  }, []);
+  const { settings } = useAppSettings();
+  const spotlight = settings?.shortcuts?.spotlight || DEFAULT_SHORTCUTS.spotlight;
 
   const tutorials: Tutorial[] = [
     { title: t('notifications.welcomeTitle'), description: t('notifications.welcomeBody') },
@@ -41,7 +37,7 @@ export function NotificationsPanel({ onClose }: { onClose: () => void }) {
     setBusy(true);
     setError(null);
     try {
-      await patchAppSettings({ setup_completed: false });
+      await patchSettings({ setup_completed: false });
       window.location.reload();
     } catch (e) {
       setError(failureText(e));

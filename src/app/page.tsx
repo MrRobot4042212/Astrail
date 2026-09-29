@@ -18,7 +18,8 @@ import { useLibraryView } from '@/hooks/useLibraryView';
 import { useSelection } from '@/hooks/useSelection';
 import { useSplashGate } from '@/hooks/useSplashGate';
 import { useToast } from '@/hooks/useToast';
-import { showMainWindow, getAppSettings } from '@/lib/tauri';
+import { showMainWindow } from '@/lib/tauri';
+import { useAppSettings } from '@/hooks/useAppSettings';
 import type { Game, Category } from '@/lib/types';
 import { Sidebar } from '@/components/Sidebar';
 import { LibraryGrid } from '@/components/LibraryGrid';
@@ -84,6 +85,13 @@ function MainApp() {
   const [onboardingState, setOnboardingState] = useState<'unknown' | 'needed' | 'done'>(
     'unknown',
   );
+  // Decided once, from the first read of the settings (a later change to
+  // `setup_completed` takes effect on the next start). Fail open: if the settings
+  // can't load, don't trap the user in onboarding; the library still scans.
+  const { settings, error: settingsError } = useAppSettings();
+  if (onboardingState === 'unknown' && (settings || settingsError)) {
+    setOnboardingState(settings && !settings.setup_completed ? 'needed' : 'done');
+  }
   const needsOnboarding = onboardingState === 'needed';
   const autoScan = onboardingState === 'done';
 
@@ -142,14 +150,6 @@ function MainApp() {
     setSelectedId,
   });
   const { launch, openFolder, toggleFavorite, toggleType, remove, hide } = actions;
-
-  useEffect(() => {
-    getAppSettings()
-      // Fail open: if settings can't load, don't trap the user in onboarding —
-      // treat it as done so the library still scans.
-      .then((s) => setOnboardingState(s.setup_completed ? 'done' : 'needed'))
-      .catch(() => setOnboardingState('done'));
-  }, []);
 
   // Fire the guided tour after the first scan finishes: wait until the splash is
   // gone and the library has settled, so the steps can anchor to a real card.
