@@ -30,6 +30,7 @@ mod jsonstore;
 mod jobobj;
 mod launcher;
 mod library;
+mod library_cache;
 mod metrics;
 mod models;
 mod perf;

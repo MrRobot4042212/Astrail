@@ -40,8 +40,6 @@ pub(crate) const STORE_FILE: &str = "playtime.json";
 static STORE_LOCK: Mutex<()> = Mutex::new(());
 /// In-flight sessions, persisted so an Astrail crash/close doesn't lose time.
 const ACTIVE_FILE: &str = "active_sessions.json";
-/// Snapshot of the library the watcher matches processes against.
-const LIBRARY_CACHE: &str = "library_cache.json";
 /// Poll interval for the global process watcher.
 const POLL_SECS: u64 = 5;
 /// While a game is confirmed running, do the expensive full process enumeration only
@@ -116,7 +114,9 @@ struct ActiveSession {
     last_seen: u64,
 }
 
-/// Minimal view of a library entry, read from the on-disk library cache.
+/// The watcher's view of a library entry (`library_cache::read_as`): only what it
+/// matches processes against. `the_watcher_reads_what_get_library_writes` pins
+/// that it reads every entry `get_library` writes.
 #[derive(Debug, Clone, Deserialize)]
 struct IndexEntry {
     id: String,
@@ -361,10 +361,10 @@ fn wait_for_work(seen: &mut u64, timeout: Option<Duration>) {
 
 // --- Global process watcher ------------------------------------------------
 
-/// Library entries to watch, read from the on-disk cache written by
-/// `get_library`. Empty until the first scan completes.
+/// Library entries to watch, read from the snapshot `get_library` writes. Empty
+/// until the first scan completes.
 fn library_index(app: &AppHandle) -> Vec<IndexEntry> {
-    let entries: Vec<IndexEntry> = jsonstore::load_or_default(app, LIBRARY_CACHE);
+    let entries: Vec<IndexEntry> = crate::library_cache::read_as(app);
     // Keep only entries we can actually match a process against.
     entries
         .into_iter()
@@ -375,11 +375,10 @@ fn library_index(app: &AppHandle) -> Vec<IndexEntry> {
         .collect()
 }
 
-/// Last-modified time of the library cache, so the index is re-read when
+/// Last-modified time of the library snapshot, so the index is re-read when
 /// `get_library` rewrites it instead of on a fixed 60 s timer.
 fn library_cache_mtime(app: &AppHandle) -> Option<SystemTime> {
-    let path = jsonstore::path(app, LIBRARY_CACHE).ok()?;
-    std::fs::metadata(path).ok()?.modified().ok()
+    crate::library_cache::modified(app)
 }
 
 /// Every running process as `(pid, lowercased exe path)`.
@@ -1048,6 +1047,41 @@ mod tests {
     /// `(pid, lowercased full executable path)`.
     fn procs(entries: &[(u32, &str)]) -> Vec<(u32, String)> {
         entries.iter().map(|(pid, path)| (*pid, path.to_lowercase())).collect()
+    }
+
+    #[test]
+    fn the_watcher_reads_what_get_library_writes() {
+        // Contract (K18): `get_library` writes whole `Game`s and the watcher reads
+        // its own `IndexEntry` view of the same file. A renamed or retyped field on
+        // either side must fail here, not leave the watcher matching nothing.
+        use crate::models::{Game, GameSource};
+        let entry = |id: &str, source, install_dir: Option<&str>, executable: Option<&str>| Game {
+            id: id.to_string(),
+            name: format!("Name of {id}"),
+            source,
+            app_id: Some(440),
+            executable: executable.map(str::to_string),
+            install_dir: install_dir.map(str::to_string),
+            cover_url: Some("https://example.invalid/c.jpg".into()),
+            launch_uri: Some("steam://rungameid/440".into()),
+            favorite: true,
+            categories: vec!["Shooters".into()],
+        };
+        let written = vec![
+            entry("steam:440", GameSource::Steam, Some(r"C:\Games\TF2"), None),
+            entry("manual:1", GameSource::Manual, None, Some(r"D:\Apps	ool.exe")),
+            entry("windows:x", GameSource::Windows, None, None),
+        ];
+        let json = serde_json::to_string_pretty(&written).expect("write");
+        let read: Vec<IndexEntry> = serde_json::from_str(&json).expect("the watcher reads it");
+        assert_eq!(read.len(), written.len());
+        for (w, r) in written.iter().zip(&read) {
+            assert_eq!(r.id, w.id);
+            assert_eq!(r.name, w.name);
+            assert_eq!(r.install_dir, w.install_dir);
+            assert_eq!(r.executable, w.executable);
+            assert_eq!(r.source, w.source);
+        }
     }
 
     #[test]

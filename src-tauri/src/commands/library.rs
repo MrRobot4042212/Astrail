@@ -144,7 +144,7 @@ pub(crate) fn get_library_inner(app: AppHandle) -> Result<Vec<Game>, String> {
     let games: Vec<Game> = keyed.into_iter().map(|(_, g)| g).collect();
 
     // Persist for instant startup next time and for the playtime watcher's index.
-    write_library_cache(&app, &games);
+    library_cache::write(&app, &games);
     // Remember what the stores looked like, so `library_changed` can answer
     // without redoing any of this.
     let _ = jsonstore::save(&app, FINGERPRINT_FILE, &fingerprint);
@@ -155,23 +155,8 @@ pub(crate) fn get_library_inner(app: AppHandle) -> Result<Vec<Game>, String> {
     Ok(games)
 }
 
-/// Name of the on-disk snapshot of the last computed library. It is a contract,
-/// not a cache: the playtime watcher reads it to know what to match processes
-/// against, and `resolve_game` resolves command ids through it.
-pub(crate) const LIBRARY_CACHE_FILE: &str = "library_cache.json";
 /// Fingerprint of the installed-games sources at the last successful scan.
 pub(crate) const FINGERPRINT_FILE: &str = "library_fingerprint.json";
-
-pub(crate) fn write_library_cache(app: &AppHandle, games: &[Game]) {
-    if let Err(e) = jsonstore::save(app, LIBRARY_CACHE_FILE, &games) {
-        log::warn!("could not write {LIBRARY_CACHE_FILE}: {e}");
-    }
-}
-
-/// The last computed library from disk (empty if never scanned or unreadable).
-pub(crate) fn read_library_cache(app: &AppHandle) -> Vec<Game> {
-    jsonstore::load_or_default(app, LIBRARY_CACHE_FILE)
-}
 
 /// Resolve a library entry **in Rust** from an id the frontend sent.
 ///
@@ -185,7 +170,7 @@ pub(crate) fn resolve_game(app: &AppHandle, id: &str) -> Option<Game> {
             return Some(game);
         }
     }
-    read_library_cache(app).into_iter().find(|g| g.id == id)
+    library_cache::read(app).into_iter().find(|g| g.id == id)
 }
 
 /// Folder to reveal for an entry: its install dir, or the executable parent.
@@ -203,7 +188,7 @@ pub(crate) fn game_folder(game: &Game) -> Option<String> {
 /// paints this instantly, then calls `get_library` to refresh in the background.
 #[tauri::command(async)]
 pub(crate) fn cached_library(app: AppHandle) -> CmdResult<Vec<Game>> {
-    Ok(read_library_cache(&app))
+    Ok(library_cache::read(&app))
 }
 
 /// Set a manual cover URL for a game id (empty/None clears it). Overrides always
@@ -544,7 +529,7 @@ pub(crate) async fn app_icons(app: AppHandle, ids: Vec<String>) -> CmdResult<Vec
             log::warn!("manual apps unreadable while resolving icons: {e}");
             Vec::new()
         });
-        let sources = icon_sources(&ids, &manual, &read_library_cache(&app));
+        let sources = icon_sources(&ids, &manual, &library_cache::read(&app));
         let icons = batch::map_ordered(&sources, ICON_WORKERS, |source| {
             source.as_deref().and_then(|exe| appicons::extract(&app, exe))
         });
