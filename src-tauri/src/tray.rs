@@ -82,7 +82,7 @@ pub fn build(app: &AppHandle, language: &str) -> tauri::Result<()> {
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id.as_ref() {
-            "show" => crate::show_main(app),
+            "show" => crate::commands::window::show_main(app),
             "quit" => app.exit(0),
             _ => {}
         })
@@ -93,7 +93,7 @@ pub fn build(app: &AppHandle, language: &str) -> tauri::Result<()> {
                 ..
             } = event
             {
-                crate::show_main(tray.app_handle());
+                crate::commands::window::show_main(tray.app_handle());
             }
         })
         .build(app)?;

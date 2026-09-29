@@ -5,7 +5,11 @@
 //! Settings: reading, the strict patch the webview sends, what a change
 //! re-applies (overlay, shortcuts, Discord, autostart), and the global shortcuts.
 
-use crate::*;
+use super::window::apply_overlay_settings;
+use crate::error::{AppError, CmdResult, ErrorCode};
+use crate::models::AppSettings;
+use crate::{autostart, discord, events, playtime, storage, tray};
+use tauri::{AppHandle, Manager};
 
 /// Whether Astrail is set to launch on Windows login (the autostart `Run` key),
 /// and whether this copy may turn it on (only an installed one may).

@@ -5,7 +5,12 @@
 //! Leaving the process: installing an update, restarting elevated, and the
 //! shutdown shared with a normal exit.
 
-use crate::*;
+use super::settings::flush_settings;
+use crate::blocking;
+use crate::error::CmdResult;
+#[cfg(windows)]
+use crate::elevation;
+use tauri::AppHandle;
 
 /// Flush pending state and stop both sidecars properly. Termination is not a
 /// shutdown for either of them: cputemp would leave the LibreHardwareMonitor kernel

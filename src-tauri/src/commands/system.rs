@@ -6,7 +6,14 @@
 //! and legal texts, diagnostics export, frontend error reports and the access
 //! the privileged metrics have.
 
-use crate::*;
+use super::settings::current_settings;
+use crate::error::{AppError, CmdResult, ErrorCode};
+use crate::models::AppSettings;
+use crate::{about, applog, blocking, cputemp, files, system};
+#[cfg(windows)]
+use crate::elevation;
+use std::time::{SystemTime, UNIX_EPOCH};
+use tauri::AppHandle;
 
 #[tauri::command(async)]
 pub(crate) fn system_info() -> CmdResult<system::SystemInfo> {

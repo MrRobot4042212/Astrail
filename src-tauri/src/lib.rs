@@ -61,12 +61,17 @@ mod updates;
 mod windows_apps;
 mod xbox;
 
-use models::{Category, Game, GameSource, AppSettings};
-use std::time::{SystemTime, UNIX_EPOCH};
+use commands::backup::PendingImport;
+use commands::settings::{current_settings, lock_settings, parse_shortcut, register_shortcuts};
+use commands::system::is_elevated;
+use commands::update::shutdown_for_exit;
+use commands::window::{
+    apply_overlay_settings, emit_visibility, schedule_webview_trim, show_main, toggle_overlay,
+    toggle_overlay_settings, START_HIDDEN,
+};
 use error::{AppError, CmdResult, ErrorCode};
-use tauri::{AppHandle, Manager};
-
-use commands::{backup::*, library::*, settings::*, system::*, update::*, window::*};
+use models::AppSettings;
+use tauri::Manager;
 
 /// Run a blocking command body on the runtime's **blocking** pool.
 ///
@@ -288,64 +293,64 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            get_library,
-            resolve_covers,
-            resolve_cover_hires,
-            library_changed,
-            set_cover,
-            set_cover_image,
-            clear_cover_cache,
-            hide_game,
-            unhide_game,
-            get_hidden_library,
-            hidden_count,
-            restore_hidden,
-            set_game_type,
-            add_manual_app,
-            remove_game,
-            set_favorite,
-            set_categories,
-            list_categories,
-            add_category,
-            set_category_icon,
-            remove_category,
-            rename_category,
-            set_category_order,
-            get_playtime,
-            all_playtime,
-            cached_library,
-            game_dir_size,
-            steam_playtime,
-            app_icons,
-            get_discord_client_id,
-            set_discord_client_id,
-            get_autostart,
-            set_autostart,
-            clear_run_as_admin,
-            get_app_settings,
-            patch_app_settings,
-            system_info,
-            about_info,
-            legal_document,
-            overlay_mpo_diagnostics,
-            username,
-            metrics_access,
-            restart_as_admin,
-            prepare_for_update,
-            abort_update,
-            open_game_folder,
-            open_external,
-            user_screenshots,
-            launch_game,
-            set_overlay_interactive,
-            show_main_window,
-            main_window_visible,
-            export_diagnostics,
-            export_user_data,
-            pick_user_data_backup,
-            apply_user_data_backup,
-            discard_user_data_backup,
-            report_frontend_error,
+            commands::library::get_library,
+            commands::library::resolve_covers,
+            commands::library::resolve_cover_hires,
+            commands::library::library_changed,
+            commands::library::set_cover,
+            commands::library::set_cover_image,
+            commands::library::clear_cover_cache,
+            commands::library::hide_game,
+            commands::library::unhide_game,
+            commands::library::get_hidden_library,
+            commands::library::hidden_count,
+            commands::library::restore_hidden,
+            commands::library::set_game_type,
+            commands::library::add_manual_app,
+            commands::library::remove_game,
+            commands::library::set_favorite,
+            commands::library::set_categories,
+            commands::library::list_categories,
+            commands::library::add_category,
+            commands::library::set_category_icon,
+            commands::library::remove_category,
+            commands::library::rename_category,
+            commands::library::set_category_order,
+            commands::library::get_playtime,
+            commands::library::all_playtime,
+            commands::library::cached_library,
+            commands::library::game_dir_size,
+            commands::library::steam_playtime,
+            commands::library::app_icons,
+            commands::settings::get_discord_client_id,
+            commands::settings::set_discord_client_id,
+            commands::settings::get_autostart,
+            commands::settings::set_autostart,
+            commands::settings::clear_run_as_admin,
+            commands::settings::get_app_settings,
+            commands::settings::patch_app_settings,
+            commands::system::system_info,
+            commands::system::about_info,
+            commands::system::legal_document,
+            commands::system::overlay_mpo_diagnostics,
+            commands::system::username,
+            commands::system::metrics_access,
+            commands::update::restart_as_admin,
+            commands::update::prepare_for_update,
+            commands::update::abort_update,
+            commands::library::open_game_folder,
+            commands::library::open_external,
+            commands::library::user_screenshots,
+            commands::library::launch_game,
+            commands::window::set_overlay_interactive,
+            commands::window::show_main_window,
+            commands::window::main_window_visible,
+            commands::system::export_diagnostics,
+            commands::backup::export_user_data,
+            commands::backup::pick_user_data_backup,
+            commands::backup::apply_user_data_backup,
+            commands::backup::discard_user_data_backup,
+            commands::system::report_frontend_error,
             updates::check_update
         ])
         .build(context)
@@ -361,6 +366,10 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::commands::library::{icon_sources, require_name};
+    use crate::commands::settings::apply_settings_patch;
+    use crate::commands::window::stays_in_tray;
+    use crate::models::{Game, GameSource};
 
     fn settings() -> AppSettings {
         serde_json::from_str("{}").expect("every settings field has a default")

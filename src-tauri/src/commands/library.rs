@@ -6,7 +6,15 @@
 //! (favorites, categories, hidden entries, types), play time, launching and
 //! opening a game's folder.
 
-use crate::*;
+use crate::error::{AppError, CmdResult, ErrorCode};
+use crate::models::{Category, Game, GameSource};
+use crate::{
+    appicons, art, batch, battlenet, blocking, ea, epic, events, files, fingerprint, gog, jsonstore,
+    launcher, library, library_cache, perf, playtime, screenshots, steam, storage,
+    ubisoft, windows_apps, xbox,
+};
+use std::time::{SystemTime, UNIX_EPOCH};
+use tauri::AppHandle;
 
 /// Return the unified library across every supported source, sorted by name.
 ///
@@ -486,7 +494,7 @@ pub(crate) async fn game_dir_size(app: AppHandle, id: String) -> CmdResult<Optio
 pub(crate) async fn steam_playtime(
     app: AppHandle,
     id: String,
-) -> CmdResult<Option<steam_playtime::SteamPlaytime>> {
+) -> CmdResult<Option<crate::steam_playtime::SteamPlaytime>> {
     blocking(move || {
         let Some(game) = resolve_game(&app, &id) else {
             return Err(format!("Unknown entry: {id}"));
@@ -494,7 +502,7 @@ pub(crate) async fn steam_playtime(
         if game.source != GameSource::Steam {
             return Ok(None);
         }
-        Ok(game.app_id.and_then(steam_playtime::for_app))
+        Ok(game.app_id.and_then(crate::steam_playtime::for_app))
     })
     .await
 }

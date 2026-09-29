@@ -5,7 +5,13 @@
 //! The main window and the in-game overlay window: showing, hiding to the
 //! tray, the idle webview trim, and the on-demand overlay settings screen.
 
-use crate::*;
+use super::settings::lock_settings;
+use crate::error::CmdResult;
+use crate::models::AppSettings;
+use crate::{events, metrics, storage};
+#[cfg(windows)]
+use crate::overlay;
+use tauri::{AppHandle, Manager};
 
 /// Seconds the main window must stay hidden before we ask WebView2 to trim its
 /// memory. Short enough to matter when Astrail lives in the tray, long enough not
