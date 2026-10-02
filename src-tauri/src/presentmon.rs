@@ -841,6 +841,20 @@ fn stop(mut child: Child) {
     stop_etw_session();
 }
 
+/// Whether the controller replaces its child this pass: the wanted target is not
+/// the one PresentMon follows, and it is not a pid that already failed.
+///
+/// "No target" (0) is always acted on. `failed_pid` uses 0 for "nothing failed",
+/// and the two used to be compared without that exception: when the game ended
+/// (or the overlay was switched off) the teardown was skipped, and PresentMon
+/// was left to notice the exit by itself (`--terminate_on_proc_exit`), which it
+/// did not do. PresentMon.exe and its ETW session then stayed up until the next
+/// game or until Astrail exited (seen 2026-10-01: alive 1 h 55 min after the
+/// session ended), with this thread polling it twice a second.
+fn retarget_due(want_pid: u32, child_pid: u32, failed_pid: u32) -> bool {
+    want_pid != child_pid && (want_pid == 0 || want_pid != failed_pid)
+}
+
 /// Stop PresentMon on application exit, before the Job Object terminates it and
 /// strands its ETW session. Waits for a stop the controller already has in flight.
 /// The callers suspend the sidecars first, so the controller cannot start another.
@@ -911,7 +925,7 @@ pub fn start(app: AppHandle) {
 
             // Target changed (new game / stopped): tear down the old instance. Skip
             // re-attempting a PID we already failed on (failed_pid) to avoid respawning.
-            if want_pid != child_pid && want_pid != failed_pid {
+            if retarget_due(want_pid, child_pid, failed_pid) {
                 // The whole retarget is one step, so `shutdown` waits for it.
                 let _step = CHILD.step();
                 // Take the child out before stopping it: `stop` waits up to
@@ -1154,6 +1168,22 @@ mod tests {
         }
         let (fps, _) = last.expect("value");
         assert!((fps - 10.0).abs() < 0.5, "fps {fps} past the TTL");
+    }
+
+    #[test]
+    fn presentmon_is_torn_down_when_the_game_ends() {
+        // Regression: with no target (0) and nothing failed (also 0) the teardown
+        // was skipped, so PresentMon and its ETW session outlived the game.
+        assert!(retarget_due(0, 12904, 0), "game ended: stop the child");
+        assert!(retarget_due(0, 12904, 777), "game ended after another pid had failed");
+        // Nothing to do while idle, or while the child follows the wanted pid.
+        assert!(!retarget_due(0, 0, 0));
+        assert!(!retarget_due(12904, 12904, 0));
+        // A new game, or the game moving to another process, replaces the child.
+        assert!(retarget_due(12904, 0, 0));
+        assert!(retarget_due(488, 12904, 0));
+        // A pid that already failed is not retried on every pass.
+        assert!(!retarget_due(12904, 0, 12904));
     }
 
     #[test]

@@ -16,6 +16,9 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
   ventana) con Ajustes abierto, el diálogo seguía mostrando el valor anterior
   hasta cerrarlo. Lo mismo en el canal de actualizaciones, los juegos
   externos y los atajos que muestran la guía y el panel de ayuda.
+- **PresentMon se cierra al terminar la partida.** Al cerrar el juego (o apagar
+  el overlay), PresentMon y su sesión de medición seguían abiertos, sin hacer
+  nada, hasta abrir otro juego o salir de Astrail.
 
 ## [1.2.0] — 2026-09-29
 
