@@ -143,9 +143,9 @@ by [SignPath Foundation](https://signpath.org).
 - **Privacidad:** Astrail no envía datos personales a su autor. Se conecta a IGDB
   (Twitch) para las carátulas, a GitHub para buscar actualizaciones y a Discord solo
   si se activa en Ajustes. Todo lo que envía está en la
-  [política de privacidad](https://astrail-web.vercel.app/es/privacy).
+  [política de privacidad](https://astrail.es/es/privacy).
 
-Política completa: [astrail-web.vercel.app/es/code-signing](https://astrail-web.vercel.app/es/code-signing).
+Política completa: [astrail.es/es/code-signing](https://astrail.es/es/code-signing).
 Para informar de un archivo firmado que no venga de una versión oficial, abre un
 [aviso de seguridad privado](https://github.com/MrRobot4042212/Astrail/security/advisories/new).
 
