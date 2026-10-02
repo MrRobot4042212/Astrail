@@ -10,6 +10,8 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
 
 ## [No publicado] — Trabajo en curso
 
+## [1.2.1] — 2026-10-02
+
 ### Corregido
 - **Ajustes muestra los cambios hechos fuera mientras está abierto.** Si el
   atajo del overlay encendía o apagaba el HUD (o se cambiaba algo desde otra
