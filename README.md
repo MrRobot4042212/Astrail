@@ -82,6 +82,12 @@ que a partir de ahí cargan al instante, sin red y sin volver a llamar a la API
 (la URL también se cachea en `cover_cache.json`). Los fallos se reintentan pasado
 un tiempo, así que las carátulas que falten no se quedan vacías para siempre.
 
+La búsqueda se puede apagar con **Buscar carátulas en internet**: en la
+configuración inicial, antes del primer escaneo (así no llega a enviarse ningún
+nombre), o después en *Ajustes → Preferencias de aplicación*. Apagada, Astrail no
+contacta con IGDB: muestra las carátulas que ya tiene guardadas y las que se ponen
+a mano, y los demás juegos se quedan sin carátula.
+
 
 ## Estructura
 
@@ -141,9 +147,10 @@ by [SignPath Foundation](https://signpath.org).
 - **Cuentas:** quien puede escribir en el repositorio o aprobar firmas usa
   autenticación en dos pasos en GitHub y en SignPath.
 - **Privacidad:** Astrail no envía datos personales a su autor. Se conecta a IGDB
-  (Twitch) para las carátulas, a GitHub para buscar actualizaciones y a Discord solo
-  si se activa en Ajustes. Todo lo que envía está en la
-  [política de privacidad](https://astrail.es/es/privacy).
+  (Twitch) para las carátulas, salvo que se apague en Ajustes; a GitHub para buscar
+  actualizaciones, y a Discord solo si se activa en Ajustes. Todo lo que envía está
+  en la [política de privacidad](https://astrail.es/es/privacy), que el instalador
+  resume antes de instalar.
 
 Política completa: [astrail.es/es/code-signing](https://astrail.es/es/code-signing).
 Para informar de un archivo firmado que no venga de una versión oficial, abre un
