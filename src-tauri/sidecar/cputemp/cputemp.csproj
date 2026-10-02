@@ -21,6 +21,18 @@
     <Copyright>Copyright (C) 2026 Diego Alfonso Chicoma Ibañez (Dalfon.dev). GPL-3.0-only.</Copyright>
   </PropertyGroup>
 
+  <!-- cputemp ships inside Astrail and carries Astrail's version, read from
+       tauri.conf.json so there is no sixth file to bump. Every binary of a release
+       must report the same product name and version (a code signing requirement:
+       the signing service checks that metadata), and without this the sidecar
+       reported 1.0.0 whatever the release. No source revision suffix either: the
+       product version must be exactly the release version. -->
+  <PropertyGroup>
+    <AstrailConfig>$([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)../../tauri.conf.json'))</AstrailConfig>
+    <Version>$([System.Text.RegularExpressions.Regex]::Match($(AstrailConfig), '"version"\s*:\s*"(\d+\.\d+\.\d+)"').Groups[1].Value)</Version>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+  </PropertyGroup>
+
   <!-- Publish shape lives here, not on the CI command line, so `dotnet publish`
        from a dev machine (scripts/fetch-binaries.ps1) and from the release
        workflow produce the same single self-contained cputemp.exe. -->
