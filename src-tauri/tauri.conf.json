@@ -46,6 +46,7 @@
     "copyright": "Copyright (C) 2026 Diego Alfonso Chicoma Ibañez (Dalfon.dev). GPL-3.0-only with additional terms.",
     "homepage": "https://github.com/MrRobot4042212/Astrail",
     "shortDescription": "Unified game and app library for Windows",
+    "licenseFile": "installer-notice.txt",
     "longDescription": "Astrail gathers the games you own on Steam, Epic, GOG, EA, Ubisoft, Xbox/Game Pass and Battle.net, plus your Windows apps, into one library — with cover art, playtime tracking and an in-game metrics overlay.",
     "resources": [
       "binaries/PresentMon.exe",

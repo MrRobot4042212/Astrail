@@ -1,0 +1,37 @@
+ASTRAIL: LICENSE AND PRIVACY NOTICE
+(Texto en español más abajo)
+
+LICENSE
+
+Astrail is free software. You may use, study, share and modify it under the GNU General Public License, version 3, with the additional terms that its section 7 allows. It comes with no warranty. The full texts are in Settings > About once Astrail is installed, and at https://github.com/MrRobot4042212/Astrail
+
+WHAT ASTRAIL SENDS OVER THE INTERNET
+
+Astrail has no accounts, no ads and no telemetry, and it sends nothing to its author. It does connect to these services:
+
+- Covers, from IGDB (part of Twitch): the name of each game in your library that has no cover yet. You can switch this off in the first-run setup, before anything is sent, and later in Settings > Application preferences.
+
+- Updates, from GitHub: a request for the file that describes the latest version. Nothing about you or your library.
+
+- Discord Rich Presence: only if you turn it on in Settings. Discord then shows the game you are playing on your profile.
+
+Each of these services sees your IP address, like any site you connect to. The full privacy policy is at https://astrail.es/privacy
+
+
+ASTRAIL: LICENCIA Y AVISO DE PRIVACIDAD
+
+LICENCIA
+
+Astrail es software libre. Puedes usarlo, estudiarlo, compartirlo y modificarlo según la Licencia Pública General de GNU, versión 3, con los términos adicionales que permite su sección 7. No tiene garantía. Los textos completos están en Ajustes > Acerca de una vez instalado Astrail, y en https://github.com/MrRobot4042212/Astrail
+
+QUÉ ENVÍA ASTRAIL POR INTERNET
+
+Astrail no tiene cuentas, ni anuncios, ni telemetría, y no envía nada a su autor. Sí se conecta a estos servicios:
+
+- Carátulas, desde IGDB (parte de Twitch): el nombre de cada juego de tu biblioteca que todavía no tiene carátula. Puedes desactivarlo en la configuración inicial, antes de que se envíe nada, y después en Ajustes > Preferencias de aplicación.
+
+- Actualizaciones, desde GitHub: una petición del archivo que describe la última versión. Nada sobre ti ni sobre tu biblioteca.
+
+- Discord Rich Presence: solo si lo activas en Ajustes. Discord muestra entonces en tu perfil el juego al que estás jugando.
+
+Cada uno de estos servicios ve tu dirección IP, como cualquier sitio al que te conectas. La política de privacidad completa está en https://astrail.es/es/privacy

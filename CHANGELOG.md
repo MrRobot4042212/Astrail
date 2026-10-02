@@ -16,6 +16,8 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
   la configuración inicial y en Ajustes → Preferencias de aplicación, lo apaga:
   no sale ningún nombre del equipo y no se descarga nada. Las carátulas ya
   guardadas y las que pongas a mano siguen funcionando.
+- **El instalador muestra la licencia y un aviso de privacidad**: qué envía
+  Astrail por internet y a quién, antes de instalar.
 
 ## [1.2.1] — 2026-10-02
 
