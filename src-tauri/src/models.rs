@@ -62,8 +62,9 @@ pub struct Game {
     #[serde(default)]
     pub install_dir: Option<String>,
 
-    /// Remote cover image URL. For Steam this is the vertical capsule; for other
-    /// stores it is resolved lazily via `art.rs` (SteamGridDB / Steam CDN).
+    /// Cover image: the one the user set (`cover_overrides.json`) or the IGDB cover
+    /// `art.rs` saved on disk, for every store alike. `None` until there is one; the
+    /// frontend then asks `resolve_covers` for it.
     #[serde(default)]
     pub cover_url: Option<String>,
 

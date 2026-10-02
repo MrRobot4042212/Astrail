@@ -21,8 +21,9 @@ use tauri::AppHandle;
 /// Each scanner runs independently: a failure in one source (store not
 /// installed, corrupt manifest…) degrades to an empty list for that source
 /// instead of failing the whole call. Sources are merged in priority order and
-/// deduplicated by name, so a game owned on several stores shows up once with
-/// the best available metadata (Steam first, since it ships CDN cover art).
+/// deduplicated by name, so a game owned on several stores shows up once, as the
+/// copy from the first source in that order: Steam, Epic, GOG, Xbox, EA, Ubisoft,
+/// Battle.net, then the generic registry scan.
 #[tauri::command(async)]
 pub(crate) async fn get_library(app: AppHandle) -> CmdResult<Vec<Game>> {
     blocking(move || get_library_inner(app)).await
