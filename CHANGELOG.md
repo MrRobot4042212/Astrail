@@ -10,6 +10,13 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
 
 ## [No publicado] — Trabajo en curso
 
+### Añadido
+- **La búsqueda de carátulas en internet se puede desactivar.** Para encontrar
+  cada carátula, Astrail envía el nombre del juego a IGDB. Un ajuste nuevo, en
+  la configuración inicial y en Ajustes → Preferencias de aplicación, lo apaga:
+  no sale ningún nombre del equipo y no se descarga nada. Las carátulas ya
+  guardadas y las que pongas a mano siguen funcionando.
+
 ## [1.2.1] — 2026-10-02
 
 ### Corregido

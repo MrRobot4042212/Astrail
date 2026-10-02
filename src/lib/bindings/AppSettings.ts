@@ -46,4 +46,13 @@ update_channel: UpdateChannel,
  * window event, not a process poll (see `fgwatch.rs`). On by default, also for
  * a settings file written before the field existed.
  */
-track_external_games: boolean, };
+track_external_games: boolean, 
+/**
+ * Whether covers may be looked up on the internet. The lookup sends each
+ * game's name to IGDB, which is the one thing Astrail sends about the
+ * library without being asked each time, so it can be switched off: no name
+ * leaves the machine and nothing is downloaded, while covers already on
+ * disk and the ones the user sets by hand keep working. On by default, also
+ * for a settings file written before the field existed.
+ */
+online_covers: boolean, };

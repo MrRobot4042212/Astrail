@@ -218,6 +218,9 @@ pub fn run() {
             // data a newer build laid out differently (see `jsonstore` docs).
             jsonstore::check_schema(&handle);
             let settings = storage::load_settings(&handle);
+            // Before anything can ask for a cover: with the lookup switched off, no
+            // game name may leave the machine, not even on the first pass.
+            art::set_online(settings.online_covers);
             // Apply the saved overlay config to the sampler before it starts.
             apply_overlay_settings(&handle, &settings);
             app.manage(std::sync::Mutex::new(settings.clone()));
@@ -533,6 +536,13 @@ mod tests {
         let off = apply_settings_patch(&current, serde_json::json!({ "track_external_games": false })).unwrap();
         assert!(!off.track_external_games);
         assert!(apply_settings_patch(&current, serde_json::json!({ "track_external_games": "no" })).is_err());
+        // The internet cover lookup: on unless switched off, and a file written
+        // before the setting existed reads as on.
+        assert!(current.online_covers);
+        let offline = apply_settings_patch(&current, serde_json::json!({ "online_covers": false })).unwrap();
+        assert!(!offline.online_covers);
+        let old: AppSettings = serde_json::from_str("{}").unwrap();
+        assert!(old.online_covers);
     }
 
     #[test]

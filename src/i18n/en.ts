@@ -246,8 +246,10 @@ export const en = {
     trayDesc: 'When you close the window with the "X", Astrail keeps running in the notification area.',
     metrics: 'In-game metrics overlay',
     metricsDesc: 'Shows FPS, GPU/CPU, temperatures and memory over the game. Toggle it with the shortcut you can configure in Settings. CPU temperature requires admin.',
-    scanTitle: 'Scanning your library',
-    scanDesc: 'When you press «Scan», Astrail will analyze your PC for games and applications and download their covers. It may take a few seconds.',
+    covers: 'Look up covers on the internet',
+    coversDesc: 'To find the cover of each game, Astrail sends its name to IGDB. Switch this off and nothing is sent; games show without a cover.',
+    scanDesc: 'When you press «Scan», Astrail will analyze your PC for games and applications. It may take a few seconds.',
+    privacy: 'Privacy policy',
     preparing: 'Preparing…',
     scanLibrary: 'Scan my library',
     next: 'Next',
@@ -364,6 +366,10 @@ export const en = {
       'Counts playtime and shows the HUD also when you start a game from your library through its store or a shortcut. Astrail finds out when the game window comes to the front: it does not check processes on a timer and loads nothing into the game.',
     aExternalLimit:
       'Games without a store that Astrail detects from the Windows registry start counting on their own after you have opened them once from here; otherwise any unknown tool would start a session. Applications never count.',
+    aOnlineCovers: 'Look up covers on the internet',
+    aOnlineCoversBody:
+      'To find the cover of each game, Astrail sends its name to IGDB. Switch this off and no name leaves your PC and nothing is downloaded: the covers you already have and the ones you set by hand keep working.',
+    aPrivacyPolicy: 'Privacy policy',
     aBeta: 'Beta versions',
     aBetaBody:
       'Get each version a day or two before everyone else. It is exactly the same build that later moves to the stable channel if nobody finds a serious bug.',

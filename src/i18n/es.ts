@@ -245,8 +245,10 @@ export const es = {
     trayDesc: 'Al cerrar la ventana con la "X", Astrail seguirá funcionando en el área de notificaciones.',
     metrics: 'Overlay de métricas in-game',
     metricsDesc: 'Muestra FPS, GPU/CPU, temperaturas y memoria sobre el juego. Puedes alternarlo con el atajo configurable en Ajustes. La temperatura de CPU requiere admin.',
-    scanTitle: 'Escaneo de tu biblioteca',
-    scanDesc: 'Al pulsar «Escanear», Astrail analizará tu equipo en busca de juegos y aplicaciones y descargará sus carátulas. Puede tardar unos segundos.',
+    covers: 'Buscar carátulas en internet',
+    coversDesc: 'Para encontrar la carátula de cada juego, Astrail envía su nombre a IGDB. Si lo desactivas, no se envía nada y los juegos se muestran sin carátula.',
+    scanDesc: 'Al pulsar «Escanear», Astrail analizará tu equipo en busca de juegos y aplicaciones. Puede tardar unos segundos.',
+    privacy: 'Política de privacidad',
     preparing: 'Preparando…',
     scanLibrary: 'Escanear mi biblioteca',
     next: 'Siguiente',
@@ -363,6 +365,10 @@ export const es = {
       'Cuenta el tiempo de juego y muestra el HUD también cuando abres un juego de tu biblioteca desde su tienda o un acceso directo. Astrail se entera cuando la ventana del juego pasa a primer plano: no revisa los procesos cada cierto tiempo ni carga nada dentro del juego.',
     aExternalLimit:
       'Los juegos sin tienda que Astrail detecta desde el registro de Windows empiezan a contarse solos después de abrirlos una vez desde aquí; si no, cualquier herramienta desconocida abriría una sesión. Las aplicaciones nunca cuentan.',
+    aOnlineCovers: 'Buscar carátulas en internet',
+    aOnlineCoversBody:
+      'Para encontrar la carátula de cada juego, Astrail envía su nombre a IGDB. Si lo desactivas, ningún nombre sale de tu equipo y no se descarga nada: las carátulas que ya tienes y las que pongas a mano siguen funcionando.',
+    aPrivacyPolicy: 'Política de privacidad',
     aBeta: 'Versiones beta',
     aBetaBody:
       'Recibe cada versión uno o dos días antes que el resto. Es exactamente la misma compilación que después pasa al canal estable si nadie encuentra un fallo grave.',

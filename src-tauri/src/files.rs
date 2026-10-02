@@ -161,8 +161,10 @@ pub fn open_folder(dir: &Path) -> Result<(), String> {
 /// `github.com` is here for the project links in Settings → About, which the
 /// additional terms of the license require the app to keep showing.
 /// `pawnio.eu` is the CPU temperature driver's download page (Settings → Metrics):
-/// Astrail never installs a kernel driver itself.
+/// Astrail never installs a kernel driver itself. `astrail.es` is the project's
+/// own site, for the privacy policy the first-run setup and Settings link to.
 const EXTERNAL_HOSTS: &[&str] = &[
+    "astrail.es",
     "github.com",
     "pawnio.eu",
     "pcgamingwiki.com",
@@ -259,6 +261,7 @@ mod tests {
         assert!(is_allowed_external("https://duckduckgo.com/?q=x"));
         assert!(is_allowed_external("https://github.com/MrRobot4042212/Astrail"));
         assert!(is_allowed_external("https://pawnio.eu/"));
+        assert!(is_allowed_external("https://astrail.es/es/privacy"));
         // Not on the list, wrong scheme, credential trick, or a lookalike host.
         assert!(!is_allowed_external("https://evil.example/"));
         assert!(!is_allowed_external("http://www.reddit.com/"));

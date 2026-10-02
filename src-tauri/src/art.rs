@@ -23,9 +23,30 @@ use std::collections::HashMap;
 use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock, RwLock};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::AppHandle;
+
+/// Whether covers may be looked up and downloaded (the `online_covers` setting).
+static ONLINE: AtomicBool = AtomicBool::new(true);
+
+/// Allow or forbid the cover lookup. Forbidden, `resolve` and `resolve_hires`
+/// only ever serve files already on disk.
+pub fn set_online(allowed: bool) {
+    ONLINE.store(allowed, Ordering::Relaxed);
+}
+
+/// Run `lookup` only when the internet lookup is allowed. Otherwise the answer is
+/// `Unavailable`, the one the frontend does not remember, so switching the setting
+/// back on asks again; and nothing is cached as "this game has no cover".
+fn when_online(allowed: bool, lookup: impl FnOnce() -> Cover) -> Cover {
+    if allowed {
+        lookup()
+    } else {
+        Cover::Unavailable
+    }
+}
 
 /// Process-wide HTTP agent for cover downloads. Reuses TCP/TLS connections
 /// across all parallel downloads, cutting per-request handshake overhead.
@@ -233,9 +254,17 @@ fn resolve_variant(app: &AppHandle, name: &str, variant: &str) -> Cover {
         return Cover::Found(file.to_string_lossy().to_string());
     }
 
+    // Everything below talks to IGDB: the search sends the game's name, the
+    // download fetches the image.
+    when_online(ONLINE.load(Ordering::Relaxed), || lookup_cover(app, name, &key, variant, &file))
+}
+
+/// The network half of `resolve_variant`: find the image id (cache, then IGDB)
+/// and download the image.
+fn lookup_cover(app: &AppHandle, name: &str, key: &str, variant: &str, file: &Path) -> Cover {
     // 2. Known image id (cached) avoids re-hitting the IGDB search API.
     let cached = match cache(app).read() {
-        Ok(cache) => cache.get(&key).cloned(),
+        Ok(cache) => cache.get(key).cloned(),
         Err(_) => return Cover::Unavailable,
     };
     let image_id = match cached {
@@ -258,7 +287,7 @@ fn resolve_variant(app: &AppHandle, name: &str, variant: &str) -> Cover {
             };
             if let Ok(mut cache) = cache(app).write() {
                 cache.insert(
-                    key.clone(),
+                    key.to_string(),
                     Entry {
                         image_id: resolved.clone(),
                         url: String::new(),
@@ -276,7 +305,7 @@ fn resolve_variant(app: &AppHandle, name: &str, variant: &str) -> Cover {
 
     let url = image_url(&image_id, variant);
     // Download to disk; serve the local file, or the remote URL if it failed.
-    if download(&url, &file) {
+    if download(&url, file) {
         Cover::Found(file.to_string_lossy().to_string())
     } else {
         Cover::Found(url)
@@ -732,6 +761,15 @@ mod tests {
 
         // Deduplicated: a plain ASCII name yields exactly one variant.
         assert_eq!(name_variants("Portal 2").len(), 1);
+    }
+
+    #[test]
+    fn nothing_is_looked_up_while_the_internet_lookup_is_off() {
+        // The setting exists so that no game name leaves the machine: with it off
+        // the lookup must not even start, and the answer must be the one that is
+        // neither remembered nor cached as "no cover".
+        assert_eq!(when_online(false, || panic!("looked up with the setting off")), Cover::Unavailable);
+        assert_eq!(when_online(true, || Cover::NotFound), Cover::NotFound);
     }
 
     #[test]

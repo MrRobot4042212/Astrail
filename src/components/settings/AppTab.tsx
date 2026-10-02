@@ -9,6 +9,7 @@ import type { SettingsModel } from '@/hooks/useSettingsModel';
 import { DataBackupCard } from '../DataBackupCard';
 import { DiagnosticsCard } from '../DiagnosticsCard';
 import { ExternalGamesCard } from '../ExternalGamesCard';
+import { OnlineCoversCard } from '../OnlineCoversCard';
 import { UpdateChannelCard } from '../UpdateChannelCard';
 import { ShortcutInput } from './ShortcutInput';
 import { Button, Card, TabHeader, Toggle } from './primitives';
@@ -181,6 +182,7 @@ export function AppTab({ model, onStartTour }: { model: SettingsModel; onStartTo
         )}
 
         <ExternalGamesCard />
+        <OnlineCoversCard />
         <UpdateChannelCard />
         <DataBackupCard />
         <DiagnosticsCard />

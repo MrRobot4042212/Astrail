@@ -8,7 +8,7 @@
 use super::window::apply_overlay_settings;
 use crate::error::{AppError, CmdResult, ErrorCode};
 use crate::models::AppSettings;
-use crate::{autostart, discord, events, playtime, storage, tray};
+use crate::{art, autostart, discord, events, playtime, storage, tray};
 use tauri::{AppHandle, Manager};
 
 /// Whether Astrail is set to launch on Windows login (the autostart `Run` key),
@@ -187,6 +187,10 @@ pub(crate) fn settings_changed(app: &AppHandle, previous: &AppSettings, next: &A
     if previous.track_external_games != next.track_external_games {
         log::info!("external game tracking: {}", next.track_external_games);
         playtime::set_external_tracking(next.track_external_games);
+    }
+    if previous.online_covers != next.online_covers {
+        log::info!("online cover lookup: {}", next.online_covers);
+        art::set_online(next.online_covers);
     }
     if previous.update_channel != next.update_channel {
         log::info!("update channel: {:?} -> {:?}", previous.update_channel, next.update_channel);

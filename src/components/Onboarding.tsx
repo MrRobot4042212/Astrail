@@ -7,7 +7,8 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { patchSettings, useAppSettings } from '@/hooks/useAppSettings';
-import { getAutostart, setAutostart } from '@/lib/tauri';
+import { privacyUrl } from '@/lib/privacy';
+import { getAutostart, openExternal, setAutostart } from '@/lib/tauri';
 import { AstrailIcon } from './icons';
 import { failureText } from '@/i18n/failureText';
 
@@ -16,7 +17,7 @@ export function Onboarding({
 }: {
   onComplete: () => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const SLIDES = [
     { title: t('onboarding.welcomeTitle'), description: t('onboarding.welcomeBody') },
     { title: t('onboarding.spotlightTitle'), description: t('onboarding.spotlightBody') },
@@ -36,8 +37,12 @@ export function Onboarding({
   const { settings } = useAppSettings();
   const [trayChoice, setTray] = useState<boolean | null>(null);
   const [metricsChoice, setMetrics] = useState<boolean | null>(null);
+  const [coversChoice, setCovers] = useState<boolean | null>(null);
   const tray = trayChoice ?? settings?.minimize_to_tray ?? true;
   const metrics = metricsChoice ?? settings?.overlay.enabled ?? false;
+  // The cover lookup sends game names to IGDB. The library is not scanned until
+  // this setup is finished, so switching it off here means nothing was ever sent.
+  const covers = coversChoice ?? settings?.online_covers ?? true;
 
   useEffect(() => {
     getAutostart()
@@ -65,6 +70,7 @@ export function Onboarding({
         setup_completed: true,
         minimize_to_tray: tray,
         overlay: { enabled: metrics },
+        online_covers: covers,
       });
       onComplete();
     } catch (e) {
@@ -76,10 +82,14 @@ export function Onboarding({
   const isLast = step === SLIDES.length - 1;
 
   return (
-    <div className="fixed inset-0 z-[100] flex flex-col bg-void text-ink items-center justify-center p-6">
-      <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-accent/5 blur-[120px] rounded-full" />
-      
-      <div className="relative w-full max-w-lg">
+    // Scrolls when the window is too short for the last slide: centred with no
+    // way to scroll, its button ended up below the window (and the header above
+    // it) at the default size once a fourth option was on screen.
+    <div className="fixed inset-0 z-[100] overflow-y-auto bg-void text-ink">
+      <div className="pointer-events-none fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-accent/5 blur-[120px] rounded-full" />
+
+      <div className="flex min-h-full flex-col items-center justify-center p-6">
+      <div className="relative w-full max-w-3xl">
         {/* Header Icon */}
         <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-accent to-accent-soft shadow-[0_0_40px_rgba(223,79,79,0.3)] transition-all duration-500">
           <AstrailIcon className="h-10 w-10 text-white" />
@@ -96,7 +106,8 @@ export function Onboarding({
         </div>
 
         {/* Preferences (only shown on the last slide) */}
-        <div className={`space-y-4 mb-10 transition-opacity duration-300 ${isLast ? 'opacity-100' : 'opacity-0 pointer-events-none absolute w-full'}`}>
+        {/* Two columns, so the four options and the button fit the default window. */}
+        <div className={`grid grid-cols-2 gap-4 mb-10 transition-opacity duration-300 ${isLast ? 'opacity-100' : 'opacity-0 pointer-events-none absolute w-full'}`}>
           {autoAvailable && (
           <label className="flex items-center justify-between cursor-pointer rounded-xl border border-line bg-surface p-5 transition hover:border-accent/40">
             <div>
@@ -183,12 +194,44 @@ export function Onboarding({
             />
           </label>
 
-          <div className="rounded-xl border border-line bg-surface p-5">
-            <p className="text-sm font-semibold text-ink mb-1">{t('onboarding.scanTitle')}</p>
-            <p className="text-xs text-muted">
-              {t('onboarding.scanDesc')}
-            </p>
-          </div>
+          <label className="flex items-center justify-between cursor-pointer rounded-xl border border-line bg-surface p-5 transition hover:border-accent/40">
+            <div>
+              <p className="text-sm font-semibold text-ink mb-1">{t('onboarding.covers')}</p>
+              <p className="text-xs text-muted pr-8">
+                {t('onboarding.coversDesc')}
+              </p>
+            </div>
+            <div
+              role="switch"
+              aria-checked={covers}
+              className={`relative h-6 w-11 shrink-0 border transition-colors ${
+                covers ? 'border-accent bg-accent' : 'border-line bg-elevated'
+              }`}
+            >
+              <span
+                className={`absolute top-1/2 h-4 w-4 -translate-y-1/2 transition-all ${
+                  covers ? 'left-6 bg-white' : 'left-1 bg-muted'
+                }`}
+              />
+            </div>
+            <input
+              type="checkbox"
+              className="hidden"
+              checked={covers}
+              onChange={(e) => setCovers(e.target.checked)}
+            />
+          </label>
+
+          <p className="col-span-2 text-center text-xs text-muted">
+            {t('onboarding.scanDesc')}{' '}
+            <button
+              type="button"
+              onClick={() => void openExternal(privacyUrl(i18n.language)).catch(() => {})}
+              className="text-accent underline hover:text-ink"
+            >
+              {t('onboarding.privacy')}
+            </button>
+          </p>
         </div>
 
         {/* Steps dots */}
@@ -208,10 +251,11 @@ export function Onboarding({
         <button
           onClick={handleNext}
           disabled={busy}
-          className="w-full rounded-xl bg-accent py-4 text-base font-semibold text-primary-foreground transition hover:bg-accent-soft shadow-[0_0_20px_rgba(223,79,79,0.2)] disabled:opacity-50"
+          className="mx-auto block w-full max-w-lg rounded-xl bg-accent py-4 text-base font-semibold text-primary-foreground transition hover:bg-accent-soft shadow-[0_0_20px_rgba(223,79,79,0.2)] disabled:opacity-50"
         >
           {busy ? t('onboarding.preparing') : isLast ? t('onboarding.scanLibrary') : t('onboarding.next')}
         </button>
+      </div>
       </div>
     </div>
   );

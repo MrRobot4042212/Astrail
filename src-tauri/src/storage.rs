@@ -216,6 +216,7 @@ pub fn load_settings(app: &AppHandle) -> AppSettings {
             discord_enabled: false,
             update_channel: Default::default(),
             track_external_games: true,
+            online_covers: true,
         },
     }
 }

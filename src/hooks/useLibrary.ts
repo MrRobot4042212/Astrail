@@ -38,6 +38,7 @@ import {
   type PassToken,
 } from '@/lib/libraryState';
 import { failureText } from '@/i18n/failureText';
+import { useAppSettings } from '@/hooks/useAppSettings';
 
 /** How often to look for newly installed/removed games. */
 const REFRESH_INTERVAL_MS = 15 * 60 * 1000;
@@ -421,6 +422,17 @@ export function useLibrary(autoScan: boolean) {
       cancelled = true;
     };
   }, [refreshCategories, refreshPlaytimes]);
+
+  // Switching the internet cover lookup back on asks for the covers that could
+  // not be asked while it was off (the answer then was "unavailable", which the
+  // ledger does not remember).
+  const onlineCovers = useAppSettings().settings?.online_covers;
+  const wasOnline = useRef(onlineCovers);
+  useEffect(() => {
+    const before = wasOnline.current;
+    wasOnline.current = onlineCovers;
+    if (before === false && onlineCovers === true && started.current) void silentRefresh();
+  }, [onlineCovers, silentRefresh]);
 
   // Fire the initial scan once the cache is painted and scanning is allowed
   // (immediately for returning users, after onboarding for first-run users).

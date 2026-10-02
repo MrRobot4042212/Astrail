@@ -119,9 +119,21 @@ pub struct AppSettings {
     /// a settings file written before the field existed.
     #[serde(default = "default_track_external_games")]
     pub track_external_games: bool,
+    /// Whether covers may be looked up on the internet. The lookup sends each
+    /// game's name to IGDB, which is the one thing Astrail sends about the
+    /// library without being asked each time, so it can be switched off: no name
+    /// leaves the machine and nothing is downloaded, while covers already on
+    /// disk and the ones the user sets by hand keep working. On by default, also
+    /// for a settings file written before the field existed.
+    #[serde(default = "default_online_covers")]
+    pub online_covers: bool,
 }
 
 fn default_track_external_games() -> bool {
+    true
+}
+
+fn default_online_covers() -> bool {
     true
 }
 
