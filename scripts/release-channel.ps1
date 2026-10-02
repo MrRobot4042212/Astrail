@@ -68,6 +68,14 @@ function Get-PromotionProblem($Release, [string]$LatestTag, [string]$Version) {
   return $null
 }
 
+# Arguments of the `gh release view` the promotion check reads. The field list is
+# one quoted string: written bare, PowerShell reads `a,b,c` as an array and hands
+# gh one argument per field, gh refuses them, and the release looked missing. The
+# first promotion ever (1.2.0) failed on exactly that.
+function Get-ReleaseViewArguments([string]$Version, [string]$Repo) {
+  return @('release', 'view', "v$Version", '--repo', $Repo, '--json', 'tagName,isDraft,isPrerelease,assets')
+}
+
 # Why `$Manifest` (a parsed latest.json) must not become the beta pointer, or $null.
 function Get-PointerProblem($Manifest, [string]$CurrentPointerVersion, [string]$Version) {
   $wanted = ConvertTo-PlainVersion $Version
@@ -134,6 +142,12 @@ function Invoke-SelfTest {
   $unsigned = @{ version = '0.3.1'; platforms = @{ 'windows-x86_64' = @{ signature = ' '; url = $url } } }
   Assert 'an empty signature is refused' (Get-PointerProblem $unsigned '0.3.0' '0.3.1') $true
 
+  # Regression: the field list was split into one argument per field.
+  $view = @(Get-ReleaseViewArguments '0.3.1' 'owner/repo')
+  $fieldsIntact = $view.Count -eq 7 -and $view[5] -eq '--json' -and $view[6] -is [string] -and
+    $view[6] -eq 'tagName,isDraft,isPrerelease,assets'
+  Assert 'gh receives the release fields as one argument' $(if ($fieldsIntact) { $null } else { "got: $($view -join ' | ')" }) $false
+
   if ($script:failed) { throw "$script:failed self-test check(s) failed." }
   Write-Host 'release-channel self-test passed.'
 }
@@ -165,7 +179,10 @@ if (-not (Get-Command gh -ErrorAction SilentlyContinue)) { throw 'The GitHub CLI
 $scratch = if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { [IO.Path]::GetTempPath() }
 
 if ($Action -eq 'promote') {
-  $release = Invoke-Gh release view "v$Version" --repo $Repo --json tagName,isDraft,isPrerelease,assets | ConvertFrom-Json
+  $viewArguments = Get-ReleaseViewArguments $Version $Repo
+  $found = Invoke-Gh @viewArguments
+  # No answer means no such release: let the check below say so.
+  $release = if ($found) { $found | ConvertFrom-Json } else { $null }
   $latest = Invoke-Gh api "repos/$Repo/releases/latest" --jq .tag_name
   $problem = Get-PromotionProblem $release "$latest" $Version
   if ($problem) { throw $problem }
