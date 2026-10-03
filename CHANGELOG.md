@@ -10,6 +10,8 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
 
 ## [No publicado] — Trabajo en curso
 
+## [1.3.0] — 2026-10-03
+
 ### Añadido
 - **La búsqueda de carátulas en internet se puede desactivar.** Para encontrar
   cada carátula, Astrail envía el nombre del juego a IGDB. Un ajuste nuevo, en
@@ -18,6 +20,12 @@ y el proyecto usa versionado semántico aproximado. Las fechas son orientativas.
   guardadas y las que pongas a mano siguen funcionando.
 - **El instalador muestra la licencia y un aviso de privacidad**: qué envía
   Astrail por internet y a quién, antes de instalar.
+
+### Corregido
+- **La configuración inicial cabe en la ventana.** Con el tamaño por defecto, el
+  botón «Escanear mi biblioteca» de la última pantalla quedaba en parte por debajo
+  del borde, sin forma de desplazarse. Las opciones van ahora en dos columnas y la
+  pantalla se desplaza si la ventana es más baja.
 
 ## [1.2.1] — 2026-10-02
 
