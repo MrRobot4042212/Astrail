@@ -149,23 +149,23 @@ contribuir (sin CLA): [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Política de firma de código (Code signing policy)
 
-Free code signing provided by [SignPath.io](https://about.signpath.io), certificate
-by [SignPath Foundation](https://signpath.org).
+> El instalador todavía no lleva firma de código de Windows, así que SmartScreen
+> puede avisar la primera vez que se abre.
 
-> La firma con SignPath Foundation se está preparando. Hasta que salga la primera
-> versión firmada, el instalador no lleva firma y SmartScreen puede avisar al abrirlo.
-
-- **Qué se firma:** solo las versiones oficiales, es decir, el instalador y los
-  programas que instala. Las compila [release.yml](.github/workflows/release.yml)
-  en GitHub Actions a partir de este repositorio; no se firma nada compilado en
-  local. Los componentes de otros proyectos que ya firman sus autores conservan su
-  firma original.
+- **Qué se publica:** solo las versiones oficiales. Las compila
+  [release.yml](.github/workflows/release.yml) en GitHub Actions a partir de este
+  repositorio; no se publica nada compilado en local. Los componentes de otros
+  proyectos que ya firman sus autores (PresentMon) conservan su firma original.
+- **Actualizaciones:** Astrail comprueba la firma de cada actualización (clave del
+  actualizador de Tauri, en los secretos del repositorio) antes de instalarla.
+- **Cómo comprobar un instalador:** GitHub publica el SHA-256 de cada archivo de la
+  release, y la sección de descarga de [astrail.es](https://astrail.es) da el
+  comando de PowerShell que lo compara.
 - **Roles** (detalle en [GOVERNANCE.md](GOVERNANCE.md)):
   - Committers and reviewers: [Diego Alfonso Chicoma Ibañez (Dalfon.dev)](https://github.com/MrRobot4042212)
-  - Approvers: [Diego Alfonso Chicoma Ibañez (Dalfon.dev)](https://github.com/MrRobot4042212)
-- **Aprobación:** el mantenedor aprueba a mano cada petición de firma en SignPath.
-- **Cuentas:** quien puede escribir en el repositorio o aprobar firmas usa
-  autenticación en dos pasos en GitHub y en SignPath.
+  - Publica las versiones: [Diego Alfonso Chicoma Ibañez (Dalfon.dev)](https://github.com/MrRobot4042212)
+- **Cuentas:** quien puede escribir en el repositorio o publicar versiones usa
+  autenticación en dos pasos en GitHub.
 - **Privacidad:** Astrail no envía datos personales a su autor. Se conecta a IGDB
   (Twitch) para las carátulas, salvo que se apague en Ajustes; a GitHub para buscar
   actualizaciones, y a Discord solo si se activa en Ajustes. Todo lo que envía está
@@ -173,7 +173,8 @@ by [SignPath Foundation](https://signpath.org).
   resume antes de instalar.
 
 Política completa: [astrail.es/es/code-signing](https://astrail.es/es/code-signing).
-Para informar de un archivo firmado que no venga de una versión oficial, abre un
+Para informar de un instalador que diga ser de Astrail y no venga de una versión
+oficial, abre un
 [aviso de seguridad privado](https://github.com/MrRobot4042212/Astrail/security/advisories/new).
 
 ## Créditos
